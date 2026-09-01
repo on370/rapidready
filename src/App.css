@@ -1,0 +1,252 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", system-ui, sans-serif;
+  
+  --color-app-deepest: #0c0c0e;
+  --color-app-panel: #151518;
+  --color-app-card: #1c1c21;
+  --color-app-hover: #252529;
+  --color-app-border: #2a2a30;
+  --color-app-border-hover: #333339;
+  
+  --color-txt-primary: #e8e8ec;
+  --color-txt-secondary: #8b8b95;
+  --color-txt-tertiary: #5c5c66;
+
+  --color-accent: #06b6d4;
+  --color-accent-hover: #22d3ee;
+  --color-accent-glow: rgba(6, 182, 212, 0.15);
+  --color-accent-subtle: rgba(6, 182, 212, 0.08);
+
+  --color-indigo: #6366f1;
+  --color-indigo-hover: #818cf8;
+
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+}
+
+/* ── Base & Scrollbar ──────────────────────────────────── */
+* { box-sizing: border-box; }
+body { font-family: 'Inter', system-ui, sans-serif; background: var(--color-app-deepest); color: var(--color-txt-primary); overflow: hidden; }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-app-border-hover); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #444; }
+
+/* ── Custom Title Bar (macOS style) ─────────────────── */
+.title-bar { -webkit-app-region: drag; user-select: none; }
+.title-bar button { -webkit-app-region: no-drag; }
+
+/* ── Traffic lights (macOS style) ──────────────────── */
+.traffic-light { width: 12px; height: 12px; border-radius: 50%; display: inline-block; transition: filter 0.15s; }
+.traffic-light:hover { filter: brightness(1.3); }
+.tl-close    { background: #ff5f57; }
+.tl-minimize { background: #ffbd2e; }
+.tl-maximize { background: #28c840; }
+
+/* ── Sidebar tooltip ──────────────────────────────── */
+.nav-btn { position: relative; }
+.nav-btn .tooltip {
+  position: absolute; left: 100%; top: 50%; transform: translateY(-50%);
+  margin-left: 12px; padding: 4px 10px; border-radius: 6px;
+  background: var(--color-app-hover); color: var(--color-txt-primary); font-size: 12px; font-weight: 500;
+  white-space: nowrap; pointer-events: none;
+  opacity: 0; transition: opacity 0.15s;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  z-index: 100;
+}
+.nav-btn:hover .tooltip { opacity: 1; }
+
+/* ── Smooth view transitions ──────────────────────── */
+.view-panel { display: none; opacity: 0; transition: opacity 0.25s ease; }
+.view-panel.active { display: flex; opacity: 1; }
+
+/* ── Step wizard transitions ──────────────────────── */
+.step-content { display: none; opacity: 0; transition: opacity 0.3s ease; }
+.step-content.active { display: flex; opacity: 1; }
+
+/* ── Progress bar animation ───────────────────────── */
+.progress-fill {
+  background: linear-gradient(90deg, var(--color-accent), var(--color-accent-hover), var(--color-accent));
+  background-size: 200% 100%;
+  animation: shimmer 2s linear infinite;
+  transition: width 0.3s ease;
+}
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+/* ── Pulse glow on accent elements ────────────────── */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(6, 182, 212, 0.3); }
+  50%      { box-shadow: 0 0 12px 4px rgba(6, 182, 212, 0.15); }
+}
+.pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
+
+/* ── Spin animation ───────────────────────────────── */
+@keyframes spin { to { transform: rotate(360deg); } }
+.animate-spin { animation: spin 1s linear infinite; }
+
+/* ── Slide-in for log entries ──────────────────────── */
+@keyframes slide-in { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: translateX(0); } }
+.log-entry { animation: slide-in 0.3s ease; }
+
+/* ── Completion bounce ────────────────────────────── */
+@keyframes bounce-in {
+  0%   { transform: scale(0); opacity: 0; }
+  50%  { transform: scale(1.15); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.bounce-in { animation: bounce-in 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55); }
+
+/* ── Toggle switch ────────────────────────────────── */
+.toggle-track {
+  width: 36px; height: 20px; border-radius: 10px; padding: 2px;
+  background: var(--color-app-border-hover); cursor: pointer; transition: background 0.2s;
+  display: flex; align-items: center;
+}
+.toggle-track.on { background: var(--color-accent); }
+.toggle-knob {
+  width: 16px; height: 16px; border-radius: 50%; background: #fff;
+  transition: transform 0.2s;
+}
+.toggle-track.on .toggle-knob { transform: translateX(16px); }
+
+/* ── Tree connector lines ─────────────────────────── */
+.tree-item { position: relative; }
+
+/* ── Thumbnail placeholder ────────────────────────── */
+.thumb-placeholder {
+  background: linear-gradient(135deg, var(--color-app-card), var(--color-app-hover));
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--color-app-border); border-radius: 6px; overflow: hidden;
+}
+
+/* ── Glass card ────────────────────────────────────── */
+.glass-card {
+  background: rgba(28, 28, 33, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(42, 42, 48, 0.8);
+}
+
+/* ── Checkbox ──────────────────────────────────────── */
+.custom-checkbox {
+  width: 16px; height: 16px; border-radius: 4px;
+  border: 1.5px solid var(--color-txt-tertiary); background: transparent;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: all 0.15s; flex-shrink: 0;
+}
+.custom-checkbox.checked {
+  background: var(--color-accent); border-color: var(--color-accent);
+}
+.custom-checkbox svg { display: none; }
+.custom-checkbox.checked svg { display: block; }
+
+/* ── Inherited indicator (profile) ─────────────────── */
+.inherited-field { position: relative; }
+.inherited-field::before {
+  content: '';
+  position: absolute; left: -10px; top: 0; bottom: 0; width: 2px;
+  background: var(--color-accent); border-radius: 1px; opacity: 0.4;
+}
+
+/* ── Library thumbnail grid ────────────────────────── */
+.lib-thumb:hover { transform: scale(1.02); }
+.lib-thumb.selected { box-shadow: 0 0 0 2px var(--color-accent); }
+
+/* ── Collapsible section ──────────────────────────── */
+.section-collapsible .section-body { transition: max-height 0.3s ease, opacity 0.2s ease; overflow: hidden; }
+.section-collapsible.collapsed .section-body { max-height: 0 !important; opacity: 0; }
+.section-collapsible .section-chevron { transition: transform 0.2s; }
+.section-collapsible.collapsed .section-chevron { transform: rotate(-90deg); }
+
+/* ── Filmstrip scrollbar (thin horizontal) ─────────── */
+.filmstrip-scroll::-webkit-scrollbar { height: 4px; }
+.filmstrip-scroll::-webkit-scrollbar-track { background: transparent; }
+.filmstrip-scroll::-webkit-scrollbar-thumb { background: var(--color-app-border-hover); border-radius: 2px; }
+.filmstrip-scroll::-webkit-scrollbar-thumb:hover { background: #444; }
+
+/* ── Quick Preview overlay ─────────────────────────── */
+.quick-preview-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0, 0, 0, 0.80);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+.quick-preview-overlay.active { opacity: 1; pointer-events: auto; }
+
+/* ── Grid/Loupe transition ─────────────────────────── */
+.lib-center-content { transition: opacity 0.2s ease; }
+
+/* ── Filmstrip selected item ───────────────────────── */
+.filmstrip-item { transition: all 0.15s ease; cursor: pointer; flex-shrink: 0; }
+.filmstrip-item:hover { opacity: 0.85; }
+.filmstrip-item.selected { box-shadow: 0 0 0 2px var(--color-accent); border-radius: 4px; }
+
+/* ── Culling Flash Animations ──────────────────────── */
+@keyframes pick-flash {
+  0% { box-shadow: inset 0 0 0 0 rgba(34, 197, 94, 0); }
+  30% { box-shadow: inset 0 0 30px 10px rgba(34, 197, 94, 0.35); }
+  100% { box-shadow: inset 0 0 0 0 rgba(34, 197, 94, 0); }
+}
+@keyframes reject-flash {
+  0% { box-shadow: inset 0 0 0 0 rgba(239, 68, 68, 0); }
+  30% { box-shadow: inset 0 0 30px 10px rgba(239, 68, 68, 0.35); }
+  100% { box-shadow: inset 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+.pick-flash { animation: pick-flash 0.35s ease-out; }
+.reject-flash { animation: reject-flash 0.35s ease-out; }
+
+/* ── Toast Notification ────────────────────────────── */
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes toast-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(12px) scale(0.95); }
+}
+.toast {
+  position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+  z-index: 300; pointer-events: none;
+  animation: toast-in 0.2s ease-out;
+}
+.toast.hiding { animation: toast-out 0.3s ease-in forwards; }
+
+/* ── Star hover effect ─────────────────────────────── */
+.star-btn { cursor: pointer; transition: all 0.1s ease; }
+.star-btn:hover { transform: scale(1.15); }
+
+/* ── Delete Modal ──────────────────────────────────── */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 250;
+  background: rgba(0, 0, 0, 0.70);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+.modal-overlay.active { opacity: 1; pointer-events: auto; }
+
+/* ── Reject dimming on thumbnail ───────────────────── */
+.thumb-rejected { opacity: 0.4; filter: saturate(0.3); }
+.thumb-rejected-overlay {
+  position: absolute; inset: 0; border-radius: 6px;
+  background: rgba(239, 68, 68, 0.12); pointer-events: none;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background-color: var(--color-app-deepest);
+}
