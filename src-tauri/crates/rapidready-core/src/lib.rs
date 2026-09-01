@@ -4,3 +4,4 @@ pub mod scanner;
 pub mod importer;
 pub mod hasher;
 pub mod import_index;
+pub mod thumbnail;

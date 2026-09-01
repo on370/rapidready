@@ -13,12 +13,12 @@
     "windows": [
       {
         "title": "RapidReady",
-        "width": 800,
-        "height": 600
+        "width": 1200,
+        "height": 900
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self' tauri: rr-image: asset: data: blob:; img-src 'self' tauri: rr-image: asset: data: blob:; style-src 'self' 'unsafe-inline';"
     }
   },
   "bundle": {

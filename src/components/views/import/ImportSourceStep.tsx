@@ -1,5 +1,5 @@
-import { HardDrive, File, Database, Calendar, CheckCircle2, EyeOff, Sparkles, FolderPlus, FolderInput, FolderOutput, SlidersHorizontal, ChevronDown, Pencil, Info, Folder, FolderSearch, Save, Plus, X } from "lucide-react";
-import { } from "react";
+import { HardDrive, File, Database, Calendar, CheckCircle2, EyeOff, Sparkles, FolderPlus, FolderInput, FolderOutput, SlidersHorizontal, ChevronDown, Pencil, Info, Folder, FolderSearch, Save, Plus, X, Lock, Unlock } from "lucide-react";
+import { useState } from "react";
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useImportStore, ScannedFile } from '../../../stores/importStore';
@@ -12,6 +12,8 @@ export function ImportSourceStep() {
     directoryTemplate, setDirectoryTemplate,
     hideImported, setHideImported
   } = useImportStore();
+
+  const [isTemplateLocked, setIsTemplateLocked] = useState(true);
 
   const handleSelectDestination = async () => {
     try {
@@ -50,14 +52,62 @@ export function ImportSourceStep() {
       setIsScanning(false);
     }
   };
-
-  
-
   const newFiles = scannedFiles.filter(f => !f.already_imported);
   const alreadyImportedFiles = scannedFiles.filter(f => f.already_imported);
 
+
+  
+
+  // Helper to generate a quick dynamic preview based on template and dates
+  const generatePreview = () => {
+    let datesToUse: Date[] = [];
+    if (newFiles.length > 0) {
+      // Find up to 3 unique days
+      const days = new Set<string>();
+      for (const f of newFiles) {
+        if (f.date) {
+          const dStr = f.date.split('T')[0];
+          if (!days.has(dStr)) {
+            days.add(dStr);
+            datesToUse.push(new Date(f.date));
+            if (datesToUse.length >= 3) break;
+          }
+        }
+      }
+    }
+    
+    if (datesToUse.length === 0) {
+      datesToUse = [new Date()]; // Fallback to today
+    }
+
+    const paths = datesToUse.map(d => {
+      let p = directoryTemplate || '';
+      p = p.replace(/{year}/g, d.getFullYear().toString());
+      p = p.replace(/{month}/g, (d.getMonth() + 1).toString().padStart(2, '0'));
+      p = p.replace(/{day}/g, d.getDate().toString().padStart(2, '0'));
+      p = p.replace(/{camera}/g, "Camera");
+      p = p.replace(/{ext}/g, "RAW");
+      return p.replace(/\\/g, '/');
+    });
+
+
+    return (
+      <div className="bg-app-deepest border border-app-border rounded-lg p-3 font-mono text-xs">
+        {paths.map((path, idx) => (
+          <div key={idx} className="flex items-center gap-1.5 text-txt-secondary mb-1">
+            <Folder className="w-3.5 h-3.5 text-warning/70" />
+            <span>{path.endsWith('/') ? path : path + '/'}</span>
+            <span className="text-txt-tertiary ml-1 opacity-50">~files</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+
   return (
     <div className="flex-1 overflow-hidden p-6 flex gap-6">
+
       
       {/* Left Panel: Source Selection */}
       <div className="flex-1 flex flex-col gap-4 min-w-0 min-h-0 overflow-y-auto pr-1">
@@ -199,7 +249,7 @@ export function ImportSourceStep() {
         {/* Path Input */}
         <div className="inherited-field ml-2.5">
           <label className="block text-xs font-medium text-txt-tertiary mb-1.5 flex items-center gap-1.5">
-            Archive Path
+            Destination Path
           </label>
           <div className="flex gap-2">
             <div className="flex-1 flex items-center bg-app-card border border-app-border rounded-lg px-3 py-2 hover:border-app-border-hover transition-colors overflow-hidden">
@@ -222,14 +272,24 @@ export function ImportSourceStep() {
           <label className="block text-xs font-medium text-txt-tertiary mb-1.5 flex items-center gap-1.5">
             Directory Format
           </label>
-          <div className="flex items-center bg-app-card border border-app-border rounded-lg px-3 py-2 hover:border-app-border-hover transition-colors font-mono focus-within:border-accent">
-            <input 
-              type="text"
-              value={directoryTemplate}
-              onChange={(e) => setDirectoryTemplate(e.target.value)}
-              className="bg-transparent border-none outline-none text-sm text-txt-primary w-full"
-              placeholder="{year}/{year}-{month}-{day}"
-            />
+          <div className="flex gap-2">
+            <div className={`flex-1 flex items-center bg-app-card border border-app-border rounded-lg px-3 py-2 transition-colors font-mono ${isTemplateLocked ? 'opacity-70' : 'focus-within:border-accent hover:border-app-border-hover'}`}>
+              <input 
+                type="text"
+                value={directoryTemplate}
+                onChange={(e) => setDirectoryTemplate(e.target.value)}
+                disabled={isTemplateLocked}
+                className={`bg-transparent border-none outline-none text-sm w-full ${isTemplateLocked ? 'text-txt-tertiary' : 'text-txt-primary'}`}
+                placeholder="{year}/{year}-{month}-{day}"
+              />
+            </div>
+            <button 
+              onClick={() => setIsTemplateLocked(!isTemplateLocked)}
+              className={`px-3 py-2 bg-app-card border border-app-border rounded-lg hover:bg-app-hover hover:border-app-border-hover transition-all duration-150 ${!isTemplateLocked ? 'text-accent border-accent/30 bg-accent/5' : 'text-txt-secondary'}`}
+              title={isTemplateLocked ? "Unlock to edit" : "Lock format"}
+            >
+              {isTemplateLocked ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
+            </button>
           </div>
           <p className="text-[11px] text-txt-tertiary mt-1.5">Tokens: <code className="text-accent/70">{'{year}'}</code> <code className="text-accent/70">{'{month}'}</code> <code className="text-accent/70">{'{day}'}</code> <code className="text-accent/70">{'{camera}'}</code> <code className="text-accent/70">{'{ext}'}</code></p>
         </div>
@@ -266,29 +326,7 @@ export function ImportSourceStep() {
         {/* Live Preview: Directory Structure */}
         <div className="mt-1">
           <label className="block text-xs font-medium text-txt-tertiary mb-2">Preview</label>
-          <div className="bg-app-deepest border border-app-border rounded-lg p-3 font-mono text-xs">
-            <div className="flex items-center gap-1.5 text-txt-secondary mb-1">
-              <Folder className="w-3.5 h-3.5 text-warning" />
-              <span>2025/</span>
-            </div>
-            <div className="ml-5 flex flex-col gap-0.5">
-              <div className="flex items-center gap-1.5 text-txt-secondary">
-                <Folder className="w-3.5 h-3.5 text-warning/70" />
-                <span>2025-07-18/</span>
-                <span className="text-txt-tertiary ml-1">(142 files)</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-txt-secondary">
-                <Folder className="w-3.5 h-3.5 text-warning/70" />
-                <span>2025-07-19/</span>
-                <span className="text-txt-tertiary ml-1">(61 files)</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-txt-secondary">
-                <Folder className="w-3.5 h-3.5 text-warning/70" />
-                <span>2025-07-20/</span>
-                <span className="text-txt-tertiary ml-1">(32 files)</span>
-              </div>
-            </div>
-          </div>
+          {generatePreview()}
         </div>
       </div>
     </div>

@@ -13,8 +13,6 @@ rusqlite = { version = "0.40.2", features = ["bundled"] }
 serde = { version = "1.0.229", features = ["derive"] }
 tokio = { version = "1.53.1", features = ["fs", "sync"] }
 walkdir = "2.5.0"
-
-[[bin]]
-name = "test_serde"
-path = "src/bin.rs"
+thumb-rs = "0.1.1"
+image = "0.25.10"
 

@@ -4,6 +4,7 @@ import { useImportStore, ScannedFile } from '../../../stores/importStore';
 
 export function ImportPreviewStep() {
   const [selectedFile, setSelectedFile] = useState<ScannedFile | null>(null);
+  const [isZoomed, setIsZoomed] = useState(false);
   const { scannedFiles, toggleFileSelection, toggleGroupSelection, hideImported } = useImportStore();
 
   const groupedFiles = useMemo(() => {
@@ -78,7 +79,7 @@ export function ImportPreviewStep() {
                     <div 
                       key={file.path} 
                       className={`flex items-center gap-2 py-1 px-2 rounded-lg hover:bg-app-hover transition-colors cursor-pointer group ${selectedFile?.path === file.path ? 'bg-app-hover' : ''} ${file.already_imported ? 'opacity-50' : ''}`} 
-                      onClick={() => setSelectedFile(file)}
+                      onClick={() => { setSelectedFile(file); setIsZoomed(false); }}
                     >
                       <div 
                         className={`custom-checkbox ${file.selected ? 'checked' : ''}`}
@@ -130,8 +131,26 @@ export function ImportPreviewStep() {
             /* File detail (shown on selection) */
             <div className="space-y-4">
               {/* Thumbnail */}
-              <div className="w-full aspect-[3/2] rounded-xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #1a4a6e 0%, #2d7aac 50%, #1a6e5a 100%)' }}>
-                <div className="flex flex-col items-center gap-2">
+              <div 
+                className="w-full aspect-[3/2] rounded-xl overflow-hidden bg-app-deepest border border-app-border relative flex items-center justify-center cursor-pointer group"
+                onClick={() => setIsZoomed(!isZoomed)}
+              >
+                <img 
+                  src={`rr-image://localhost${selectedFile.path}`} 
+                  alt={selectedFile.name}
+                  className={`${isZoomed ? 'w-full h-full object-contain cursor-zoom-out' : 'max-w-full max-h-full object-contain cursor-zoom-in'} ${selectedFile.already_imported ? 'opacity-50' : ''} transition-all duration-200`}
+                  loading="lazy"
+                  onError={(e) => {
+                    // Fallback if image fails to load
+                    e.currentTarget.style.display = 'none';
+                    e.currentTarget.parentElement?.classList.add('flex', 'items-center', 'justify-center');
+                    if (e.currentTarget.nextElementSibling) {
+                      (e.currentTarget.nextElementSibling as HTMLElement).style.display = 'flex';
+                    }
+                  }}
+                />
+                {/* Fallback gradient if img fails */}
+                <div className="hidden flex-col items-center gap-2 w-full h-full justify-center" style={{ background: 'linear-gradient(135deg, #1a4a6e 0%, #2d7aac 50%, #1a6e5a 100%)' }}>
                   <Camera className="w-10 h-10 text-white/20" />
                   <span className="text-xs text-white/30 font-medium truncate px-4">{selectedFile.name}</span>
                 </div>
