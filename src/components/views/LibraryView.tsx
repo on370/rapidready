@@ -6,7 +6,6 @@ import { LibraryInspector } from "./library/LibraryInspector";
 export function LibraryView() {
   const [inspectorVisible, setInspectorVisible] = useState(true);
   const [viewMode, setViewMode] = useState<'grid' | 'loupe'>('grid');
-  const [selectedItem, setSelectedItem] = useState<number | null>(null);
 
   return (
     <div className="flex-1 w-full overflow-hidden flex flex-col">

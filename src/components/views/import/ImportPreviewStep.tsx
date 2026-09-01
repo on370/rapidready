@@ -1,8 +1,24 @@
-import { GitBranch, Filter, ChevronDown, Folder, X, MousePointerClick, Camera, CheckCircle2, AlertTriangle, Check } from "lucide-react";
-import { useState } from "react";
+import { GitBranch, Folder, ChevronDown, MousePointerClick, Camera, CheckCircle2, Filter, X, Info } from "lucide-react";
+import { useState, useMemo } from "react";
+import { useImportStore, ScannedFile } from '../../../stores/importStore';
 
 export function ImportPreviewStep() {
-  const [selectedFile, setSelectedFile] = useState<number | null>(null);
+  const [selectedFile, setSelectedFile] = useState<ScannedFile | null>(null);
+  const { scannedFiles, toggleFileSelection, toggleGroupSelection, hideImported } = useImportStore();
+
+  const groupedFiles = useMemo(() => {
+    const groups: Record<string, typeof scannedFiles> = {};
+    const visibleFiles = hideImported ? scannedFiles.filter(f => !f.already_imported) : scannedFiles;
+    
+    for (const file of visibleFiles) {
+      const dateKey = file.formatted_date ? file.formatted_date.split(' ')[0] : 'Unknown Date';
+      if (!groups[dateKey]) groups[dateKey] = [];
+      groups[dateKey].push(file);
+    }
+    return groups;
+  }, [scannedFiles, hideImported]);
+
+  const selectedCount = scannedFiles.filter(f => f.selected).length;
 
   const CheckboxIcon = () => (
     <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5L4.5 7.5L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -18,9 +34,12 @@ export function ImportPreviewStep() {
             <h2 className="text-sm font-semibold text-txt-primary uppercase tracking-wider">Planned Import Structure</h2>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-txt-tertiary">235 files selected</span>
-            <div className="custom-checkbox checked cursor-pointer">
-              <CheckboxIcon />
+            <span className="text-xs text-txt-tertiary">{selectedCount} files selected</span>
+            <div 
+              className={`custom-checkbox cursor-pointer ${selectedCount === scannedFiles.length && scannedFiles.length > 0 ? 'checked' : ''}`}
+              onClick={() => toggleGroupSelection(scannedFiles.map(f => f.path), selectedCount !== scannedFiles.length)}
+            >
+              {selectedCount === scannedFiles.length && scannedFiles.length > 0 && <CheckboxIcon />}
             </div>
           </div>
         </div>
@@ -29,41 +48,65 @@ export function ImportPreviewStep() {
         <div className="flex items-center justify-between px-3 py-2 mb-2 bg-app-card border border-app-border rounded-lg flex-shrink-0">
           <div className="flex items-center gap-2 text-xs">
             <Filter className="w-3 h-3 text-txt-tertiary" />
-            <span className="text-txt-secondary">Importing <span className="text-accent font-semibold">235</span> of 235</span>
+            <span className="text-txt-secondary">Importing <span className="text-accent font-semibold">{selectedCount}</span> of {scannedFiles.length}</span>
           </div>
           <div className="text-[10px] text-txt-tertiary">Click ✗ to exclude files</div>
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto bg-app-card border border-app-border rounded-xl p-3 space-y-0.5">
-          {/* Date folder: 2025-07-18 */}
-          <div className="tree-item">
-            <div className="flex items-center gap-2 py-1.5 px-2 rounded-lg hover:bg-app-hover transition-colors cursor-pointer group">
-              <ChevronDown className="w-3.5 h-3.5 text-txt-tertiary transition-transform duration-200" />
-              <div className="custom-checkbox checked">
-                <CheckboxIcon />
-              </div>
-              <Folder className="w-4 h-4 text-warning" />
-              <span className="text-sm text-txt-primary font-medium">2025-07-18</span>
-              <span className="text-xs text-txt-tertiary ml-auto">142 files</span>
-            </div>
-            <div className="ml-6 pl-3 border-l border-app-border space-y-0.5 mt-0.5">
-              {/* File items */}
-              {[1, 2, 3].map((i) => (
-                <div key={i} className={`flex items-center gap-2 py-1 px-2 rounded-lg hover:bg-app-hover transition-colors cursor-pointer group ${selectedFile === i ? 'bg-app-hover' : ''}`} onClick={() => setSelectedFile(i)}>
-                  <div className="custom-checkbox checked">
-                    <CheckboxIcon />
+          {Object.entries(groupedFiles).map(([date, files]) => {
+            const allSelected = files.every(f => f.selected);
+            return (
+              <div key={date} className="tree-item">
+                <div className="flex items-center gap-2 py-1.5 px-2 rounded-lg hover:bg-app-hover transition-colors cursor-pointer group">
+                  <ChevronDown className="w-3.5 h-3.5 text-txt-tertiary transition-transform duration-200" />
+                  <div 
+                    className={`custom-checkbox ${allSelected ? 'checked' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleGroupSelection(files.map(f => f.path), !allSelected);
+                    }}
+                  >
+                    {allSelected && <CheckboxIcon />}
                   </div>
-                  <div className="thumb-placeholder w-7 h-5 rounded flex-shrink-0" style={{ background: 'linear-gradient(135deg, #1a4a6e, #2d7aac)' }}></div>
-                  <span className="text-xs text-txt-primary truncate flex-1">IMG_450{i}.cr3</span>
-                  <button className="w-4 h-4 rounded flex items-center justify-center text-txt-tertiary hover:text-danger hover:bg-danger/10 transition-all opacity-0 group-hover:opacity-100" title="Exclude from import">
-                    <X className="w-3 h-3" />
-                  </button>
-                  <span className="text-[10px] text-txt-tertiary ml-auto flex-shrink-0">54.2 MB</span>
+                  <Folder className="w-4 h-4 text-warning" />
+                  <span className="text-sm text-txt-primary font-medium">{date}</span>
+                  <span className="text-xs text-txt-tertiary ml-auto">{files.length} files</span>
                 </div>
-              ))}
-              <div className="py-1 px-2 text-[10px] text-txt-tertiary">… and 139 more files</div>
-            </div>
-          </div>
+                <div className="ml-6 pl-3 border-l border-app-border space-y-0.5 mt-0.5">
+                  {files.map((file) => (
+                    <div 
+                      key={file.path} 
+                      className={`flex items-center gap-2 py-1 px-2 rounded-lg hover:bg-app-hover transition-colors cursor-pointer group ${selectedFile?.path === file.path ? 'bg-app-hover' : ''} ${file.already_imported ? 'opacity-50' : ''}`} 
+                      onClick={() => setSelectedFile(file)}
+                    >
+                      <div 
+                        className={`custom-checkbox ${file.selected ? 'checked' : ''}`}
+                        onClick={(e) => { e.stopPropagation(); toggleFileSelection(file.path); }}
+                      >
+                        {file.selected && <CheckboxIcon />}
+                      </div>
+                      <div className="w-7 h-5 rounded flex-shrink-0 flex items-center justify-center bg-app-deepest border border-app-border">
+                        <span className="text-[8px] font-bold text-txt-tertiary">{file.name.split('.').pop()?.toUpperCase() || '?'}</span>
+                      </div>
+                      <span className="text-xs text-txt-primary truncate flex-1 flex items-center gap-1.5">
+                        {file.name}
+                        {file.already_imported && <span className="text-[9px] px-1.5 py-0.5 rounded bg-success/20 text-success">Imported</span>}
+                      </span>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); toggleFileSelection(file.path); }}
+                        className="w-4 h-4 rounded flex items-center justify-center text-txt-tertiary hover:text-danger hover:bg-danger/10 transition-all opacity-0 group-hover:opacity-100" 
+                        title="Exclude from import"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                      <span className="text-[10px] text-txt-tertiary ml-auto flex-shrink-0">{(file.size / (1024 * 1024)).toFixed(1)} MB</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -90,24 +133,26 @@ export function ImportPreviewStep() {
               <div className="w-full aspect-[3/2] rounded-xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #1a4a6e 0%, #2d7aac 50%, #1a6e5a 100%)' }}>
                 <div className="flex flex-col items-center gap-2">
                   <Camera className="w-10 h-10 text-white/20" />
-                  <span className="text-xs text-white/30 font-medium">IMG_450{selectedFile}.cr3</span>
+                  <span className="text-xs text-white/30 font-medium truncate px-4">{selectedFile.name}</span>
                 </div>
               </div>
 
               {/* File info */}
               <div className="bg-app-card border border-app-border rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-txt-primary">IMG_450{selectedFile}.cr3</span>
-                  <span className="text-xs px-2 py-0.5 rounded bg-accent/10 text-accent font-medium">RAW</span>
+                  <span className="text-sm font-semibold text-txt-primary truncate">{selectedFile.name}</span>
+                  <span className="text-xs px-2 py-0.5 rounded bg-accent/10 text-accent font-medium">
+                    {selectedFile.name.split('.').pop()?.toUpperCase()}
+                  </span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div>
                     <span className="text-txt-tertiary">Size</span>
-                    <p className="text-txt-primary font-medium">54.2 MB</p>
+                    <p className="text-txt-primary font-medium">{(selectedFile.size / (1024 * 1024)).toFixed(1)} MB</p>
                   </div>
                   <div>
-                    <span className="text-txt-tertiary">Dimensions</span>
-                    <p className="text-txt-primary font-medium">8192 × 5464</p>
+                    <span className="text-txt-tertiary">Path</span>
+                    <p className="text-txt-primary font-medium truncate" title={selectedFile.path}>{selectedFile.path.length > 30 ? '...' + selectedFile.path.slice(-30) : selectedFile.path}</p>
                   </div>
                 </div>
               </div>
@@ -117,29 +162,12 @@ export function ImportPreviewStep() {
                 <h3 className="text-xs font-semibold text-txt-secondary uppercase tracking-wider mb-3">Date Sources</h3>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-txt-secondary">EXIF DateTimeOriginal</span>
+                    <span className="text-txt-secondary">Detected Date</span>
                     <div className="flex items-center gap-1.5">
-                      <span className="text-txt-primary font-mono">2025-07-18 14:32:15</span>
+                      <span className="text-txt-primary font-mono">{selectedFile.formatted_date || 'Unknown'}</span>
                       <CheckCircle2 className="w-3.5 h-3.5 text-success" />
                     </div>
                   </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-txt-secondary">File System Created</span>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-txt-primary font-mono">2025-07-18 14:32:15</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-txt-secondary">File Modified</span>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-txt-primary font-mono">2025-07-20 09:15:00</span>
-                      <AlertTriangle className="w-3.5 h-3.5 text-warning" />
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-3 pt-3 border-t border-app-border flex items-center gap-1.5 text-xs">
-                  <Check className="w-3.5 h-3.5 text-accent" />
-                  <span className="text-accent font-medium">Best Date: 2025-07-18 14:32:15 (from EXIF)</span>
                 </div>
               </div>
             </div>
@@ -151,6 +179,3 @@ export function ImportPreviewStep() {
 }
 
 // Ensure Info is imported, we missed it earlier in the list above but I will just use what we have or add it.
-function Info(props: any) {
-  return <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-}

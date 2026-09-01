@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "tmp-app",
+  "productName": "RapidReady",
   "version": "0.1.0",
-  "identifier": "com.ole.tmp-app",
+  "identifier": "com.ole.rapid-ready",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "tmp-app",
+        "title": "RapidReady",
         "width": 800,
         "height": 600
       }

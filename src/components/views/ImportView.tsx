@@ -3,12 +3,34 @@ import { ImportSourceStep } from "./import/ImportSourceStep";
 import { ImportPreviewStep } from "./import/ImportPreviewStep";
 import { ImportExecuteStep } from "./import/ImportExecuteStep";
 import { ArrowLeft, ArrowRight } from "lucide-react";
+import { useImportStore } from "../../stores/importStore";
 
 export function ImportView() {
   const [currentStep, setCurrentStep] = useState<number>(1);
+  const { scannedFiles, sourceDirectory, destinationDirectory } = useImportStore();
+
+  const selectedCount = scannedFiles.filter(f => f.selected).length;
+
+  const canProceed = () => {
+    if (currentStep === 1) return sourceDirectory !== null && destinationDirectory !== null;
+    if (currentStep === 2) return selectedCount > 0;
+    return false;
+  };
 
   const handleNext = () => setCurrentStep((prev) => Math.min(prev + 1, 3));
   const handlePrev = () => setCurrentStep((prev) => Math.max(prev - 1, 1));
+
+  const canGoToStep = (step: number) => {
+    if (step <= currentStep) return true;
+    if (step === currentStep + 1) return canProceed();
+    return false; // cannot skip steps forward
+  };
+
+  const handleStepClick = (step: number) => {
+    if (canGoToStep(step)) {
+      setCurrentStep(step);
+    }
+  };
 
   return (
     <div id="view-import" className="flex-col flex-1 overflow-hidden flex">
@@ -16,19 +38,19 @@ export function ImportView() {
       <div className="flex items-center justify-center py-4 px-6 border-b border-app-border bg-app-panel/50 flex-shrink-0">
         <div className="flex items-center gap-2">
           {/* Step 1 */}
-          <button onClick={() => setCurrentStep(1)} className="step-indicator flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 cursor-pointer">
+          <button onClick={() => handleStepClick(1)} className="step-indicator flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 cursor-pointer">
             <div className={`step-num w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold transition-all duration-200 ${currentStep >= 1 ? 'bg-accent text-app-deepest' : 'bg-app-card border border-app-border text-txt-tertiary'}`}>1</div>
             <span className={`text-sm font-medium ${currentStep >= 1 ? 'text-txt-primary' : 'text-txt-tertiary'}`}>Source</span>
           </button>
           <div className={`w-8 h-px ${currentStep >= 2 ? 'bg-accent/50' : 'bg-app-border'}`}></div>
           {/* Step 2 */}
-          <button onClick={() => setCurrentStep(2)} className="step-indicator flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 cursor-pointer">
+          <button onClick={() => handleStepClick(2)} disabled={!canGoToStep(2)} className="step-indicator flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
             <div className={`step-num w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold transition-all duration-200 ${currentStep >= 2 ? 'bg-accent text-app-deepest' : 'bg-app-card border border-app-border text-txt-tertiary'}`}>2</div>
             <span className={`text-sm font-medium ${currentStep >= 2 ? 'text-txt-primary' : 'text-txt-tertiary'}`}>Preview</span>
           </button>
           <div className={`w-8 h-px ${currentStep >= 3 ? 'bg-accent/50' : 'bg-app-border'}`}></div>
           {/* Step 3 */}
-          <button onClick={() => setCurrentStep(3)} className="step-indicator flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 cursor-pointer">
+          <button onClick={() => handleStepClick(3)} disabled={!canGoToStep(3)} className="step-indicator flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
             <div className={`step-num w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold transition-all duration-200 ${currentStep === 3 ? 'bg-accent text-app-deepest' : 'bg-app-card border border-app-border text-txt-tertiary'}`}>3</div>
             <span className={`text-sm font-medium ${currentStep === 3 ? 'text-txt-primary' : 'text-txt-tertiary'}`}>Import</span>
           </button>
@@ -55,8 +77,9 @@ export function ImportView() {
           </button>
           <div className="flex items-center gap-3">
             <button 
-              className="px-6 py-2 bg-accent hover:bg-accent-hover rounded-lg text-sm font-semibold text-app-deepest transition-all duration-150 flex items-center gap-2 shadow-lg shadow-accent/20" 
+              className="px-6 py-2 bg-accent hover:bg-accent-hover rounded-lg text-sm font-semibold text-app-deepest transition-all duration-150 flex items-center gap-2 shadow-lg shadow-accent/20 disabled:opacity-30 disabled:cursor-not-allowed" 
               onClick={handleNext}
+              disabled={!canProceed()}
             >
               <span>{currentStep === 1 ? 'Preview' : 'Start Import'}</span>
               <ArrowRight className="w-4 h-4" />

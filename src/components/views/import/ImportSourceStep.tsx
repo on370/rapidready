@@ -1,54 +1,128 @@
-import { HardDrive, SdCard, Camera, File, Database, Calendar, CheckCircle2, EyeOff, Sparkles, FolderPlus, FolderOutput, SlidersHorizontal, ChevronDown, Pencil, Info, Folder, FolderSearch, Save, Plus, X } from "lucide-react";
-import { useState } from "react";
+import { HardDrive, File, Database, Calendar, CheckCircle2, EyeOff, Sparkles, FolderPlus, FolderInput, FolderOutput, SlidersHorizontal, ChevronDown, Pencil, Info, Folder, FolderSearch, Save, Plus, X } from "lucide-react";
+import { } from "react";
+import { invoke } from '@tauri-apps/api/core';
+import { open } from '@tauri-apps/plugin-dialog';
+import { useImportStore, ScannedFile } from '../../../stores/importStore';
 
 export function ImportSourceStep() {
-  const [hideImported, setHideImported] = useState(true);
+    const { 
+    setSourceDirectory, sourceDirectory,
+    scannedFiles, setScannedFiles, isScanning, setIsScanning,
+    destinationDirectory, setDestinationDirectory,
+    directoryTemplate, setDirectoryTemplate,
+    hideImported, setHideImported
+  } = useImportStore();
+
+  const handleSelectDestination = async () => {
+    try {
+      const selectedPath = await open({
+        directory: true,
+        multiple: false,
+      });
+      if (selectedPath && typeof selectedPath === 'string') {
+        setDestinationDirectory(selectedPath);
+      }
+    } catch (error) {
+      console.error("Failed to select destination:", error);
+    }
+  };
+
+  const handleSelectFolder = async () => {
+    try {
+      const selectedPath = await open({
+        directory: true,
+        multiple: false,
+      });
+
+      if (selectedPath && typeof selectedPath === 'string') {
+        setSourceDirectory(selectedPath);
+        setIsScanning(true);
+        
+        // Scan the directory using Rust backend
+        const files: ScannedFile[] = await invoke('scan_source_directory', { path: selectedPath });
+        
+        // Exclude the 'selected' property here since Zustand store will add it
+        setScannedFiles(files);
+      }
+    } catch (error) {
+      console.error("Failed to select or scan directory:", error);
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  
+
+  const newFiles = scannedFiles.filter(f => !f.already_imported);
+  const alreadyImportedFiles = scannedFiles.filter(f => f.already_imported);
 
   return (
-    <div className="flex-1 min-h-0 overflow-hidden p-6 gap-6 flex">
-      {/* Left Panel: Source */}
+    <div className="flex-1 overflow-hidden p-6 flex gap-6">
+      
+      {/* Left Panel: Source Selection */}
       <div className="flex-1 flex flex-col gap-4 min-w-0 min-h-0 overflow-y-auto pr-1">
         <div className="flex items-center gap-2 mb-1">
-          <HardDrive className="w-4 h-4 text-txt-secondary" />
+          <FolderInput className="w-4 h-4 text-txt-secondary" />
           <h2 className="text-sm font-semibold text-txt-primary uppercase tracking-wider">Source</h2>
         </div>
 
-        {/* SD Card Detected */}
-        <div className="bg-app-card border border-app-border rounded-xl p-5 hover:border-app-border-hover transition-colors duration-200">
-          <div className="flex items-start gap-4">
-            <div className="w-12 h-12 rounded-xl bg-accent/10 flex items-center justify-center flex-shrink-0">
-              <SdCard className="w-6 h-6 text-accent" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-sm font-semibold text-txt-primary">SD Card Detected</span>
-                <span className="w-2 h-2 rounded-full bg-success animate-pulse"></span>
+        {/* Source Cards */}
+        {sourceDirectory ? (
+          <div className="bg-app-card border border-app-border rounded-xl p-4 hover:border-app-border-hover transition-colors cursor-pointer ring-1 ring-accent/30 shadow-[0_0_15px_rgba(var(--accent-color-rgb),0.1)] relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-16 h-16 bg-accent/5 rounded-bl-full"></div>
+            
+            <div className="flex items-start justify-between relative z-10">
+              <div className="min-w-0 pr-4 flex-1">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <h3 className="font-semibold text-txt-primary text-base truncate">
+                    {sourceDirectory.split(/[/\\]/).pop() || sourceDirectory}
+                  </h3>
+                  <span className="w-2 h-2 rounded-full bg-success animate-pulse"></span>
+                </div>
+                <div className="flex items-center gap-2 mb-2">
+                  <Folder className="w-3.5 h-3.5 text-txt-tertiary" />
+                  <span className="text-sm font-medium text-txt-secondary truncate" title={sourceDirectory}>
+                    {sourceDirectory}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-txt-tertiary">
+                  <span className="flex items-center gap-1 font-medium text-txt-primary">
+                    <File className="w-3 h-3 text-accent" /> 
+                    {newFiles.length} new files
+                  </span>
+                  <span>·</span>
+                  <span className="flex items-center gap-1">
+                    <Database className="w-3 h-3" /> 
+                    {(newFiles.reduce((acc, f) => acc + f.size, 0) / (1024 * 1024 * 1024)).toFixed(2)} GB
+                  </span>
+                </div>
+                <div className="text-xs text-txt-tertiary mt-1.5 flex items-center gap-1">
+                  <Calendar className="w-3 h-3" />
+                  {newFiles.length > 0
+                    ? `${newFiles[0]?.formatted_date?.split(' ')[0] || ''} – ${newFiles[newFiles.length - 1]?.formatted_date?.split(' ')[0] || ''}`
+                    : 'No dates found'}
+                </div>
               </div>
-              <div className="flex items-center gap-2 mb-2">
-                <Camera className="w-3.5 h-3.5 text-txt-tertiary" />
-                <span className="text-sm font-medium text-txt-secondary">Canon EOS R5</span>
+              <div className="flex-shrink-0">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-accent/10 text-accent text-[10px] font-semibold uppercase tracking-wide">FOLDER</span>
               </div>
-              <div className="flex items-center gap-3 text-xs text-txt-tertiary">
-                <span className="flex items-center gap-1"><File className="w-3 h-3" /> 847 files</span>
-                <span>·</span>
-                <span className="flex items-center gap-1"><Database className="w-3 h-3" /> 32.4 GB</span>
-              </div>
-              <div className="text-xs text-txt-tertiary mt-1.5 flex items-center gap-1">
-                <Calendar className="w-3 h-3" />
-                2025-07-18 – 2025-07-20
-              </div>
-            </div>
-            <div className="flex-shrink-0">
-              <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-accent/10 text-accent text-[10px] font-semibold uppercase tracking-wide">EOS_DIGITAL</span>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="bg-app-card/30 border border-dashed border-app-border rounded-xl p-6 flex flex-col items-center justify-center text-center opacity-80">
+            <div className="w-12 h-12 rounded-full bg-app-deepest flex items-center justify-center mb-3 text-txt-tertiary">
+              <HardDrive className="w-6 h-6" />
+            </div>
+            <h3 className="font-semibold text-txt-secondary mb-1">No source detected</h3>
+            <p className="text-xs text-txt-tertiary max-w-[200px]">Insert an SD card or select a folder below to begin import.</p>
+          </div>
+        )}
 
         {/* Already Imported Indicator */}
         <div className="bg-app-card border border-app-border rounded-xl p-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-txt-tertiary" />
+              <CheckCircle2 className={`w-4 h-4 ${alreadyImportedFiles.length > 0 ? 'text-success' : 'text-txt-tertiary'}`} />
               <span className="text-sm text-txt-secondary">Already imported</span>
             </div>
             <div className="flex items-center gap-2">
@@ -61,20 +135,36 @@ export function ImportSourceStep() {
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-1.5 text-sm text-txt-tertiary">
               <EyeOff className="w-3.5 h-3.5" />
-              <span>612 already imported (hidden)</span>
+              <span className={alreadyImportedFiles.length > 0 ? "font-medium text-txt-secondary" : ""}>
+                {alreadyImportedFiles.length} already imported {hideImported ? '(hidden)' : '(shown)'}
+              </span>
+            </div>
+            <div className="w-px h-4 bg-app-border"></div>
+            <div className="flex items-center gap-1.5 text-sm text-txt-tertiary">
+              <span className={alreadyImportedFiles.length > 0 ? "text-txt-secondary" : ""}>
+                {(alreadyImportedFiles.reduce((acc, f) => acc + f.size, 0) / (1024 * 1024 * 1024)).toFixed(2)} GB
+              </span>
             </div>
           </div>
           <div className="mt-2 flex items-center gap-1.5">
             <Sparkles className="w-4 h-4 text-accent" />
-            <span className="text-sm font-semibold text-accent">235 new files</span>
-            <span className="text-sm text-txt-tertiary">(12.4 GB)</span>
+            <span className="text-sm font-semibold text-accent">
+              {newFiles.length} new files
+            </span>
+            <span className="text-sm text-txt-tertiary">
+              ({(newFiles.reduce((acc, f) => acc + f.size, 0) / (1024 * 1024 * 1024)).toFixed(2)} GB)
+            </span>
           </div>
         </div>
 
         {/* Or Select Folder */}
-        <button className="flex items-center justify-center gap-2 py-3 px-4 border border-dashed border-app-border rounded-xl text-sm text-txt-secondary hover:border-accent hover:text-accent transition-all duration-200 hover:bg-accent/5">
+        <button 
+          onClick={handleSelectFolder}
+          disabled={isScanning}
+          className="flex items-center justify-center gap-2 py-3 px-4 border border-dashed border-app-border rounded-xl text-sm text-txt-secondary hover:border-accent hover:text-accent transition-all duration-200 hover:bg-accent/5 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
           <FolderPlus className="w-4 h-4" />
-          <span>Or select folder…</span>
+          <span>{isScanning ? 'Scanning...' : 'Or select folder…'}</span>
         </button>
       </div>
 
@@ -106,38 +196,40 @@ export function ImportSourceStep() {
           </p>
         </div>
 
-        {/* Path Input (inherited from profile) */}
+        {/* Path Input */}
         <div className="inherited-field ml-2.5">
           <label className="block text-xs font-medium text-txt-tertiary mb-1.5 flex items-center gap-1.5">
             Archive Path
-            <span className="text-[10px] text-accent/60 font-normal">(from profile)</span>
           </label>
           <div className="flex gap-2">
-            <div className="flex-1 flex items-center bg-app-card border border-app-border rounded-lg px-3 py-2 hover:border-app-border-hover transition-colors">
+            <div className="flex-1 flex items-center bg-app-card border border-app-border rounded-lg px-3 py-2 hover:border-app-border-hover transition-colors overflow-hidden">
               <Folder className="w-4 h-4 text-txt-tertiary mr-2 flex-shrink-0" />
-              <span className="text-sm text-txt-primary truncate">/Volumes/Photos/Archiv</span>
+              <span className={`text-sm truncate ${destinationDirectory ? 'text-txt-primary' : 'text-txt-tertiary italic'}`}>
+                {destinationDirectory || 'Select destination...'}
+              </span>
             </div>
-            <button className="px-3 py-2 bg-app-card border border-app-border rounded-lg hover:bg-app-hover hover:border-app-border-hover transition-all duration-150">
+            <button 
+              onClick={handleSelectDestination}
+              className="px-3 py-2 bg-app-card border border-app-border rounded-lg hover:bg-app-hover hover:border-app-border-hover transition-all duration-150"
+            >
               <FolderSearch className="w-4 h-4 text-txt-secondary" />
             </button>
           </div>
         </div>
 
-        {/* Directory Format Template (inherited from profile) */}
+        {/* Directory Format Template */}
         <div className="inherited-field ml-2.5">
           <label className="block text-xs font-medium text-txt-tertiary mb-1.5 flex items-center gap-1.5">
             Directory Format
-            <span className="text-[10px] text-accent/60 font-normal">(from profile)</span>
           </label>
-          <div className="flex items-center bg-app-card border border-app-border rounded-lg px-3 py-2 hover:border-app-border-hover transition-colors font-mono">
-            <span className="text-sm text-accent">{'{year}'}</span>
-            <span className="text-sm text-txt-tertiary">/</span>
-            <span className="text-sm text-accent">{'{year}'}</span>
-            <span className="text-sm text-txt-tertiary">-</span>
-            <span className="text-sm text-accent">{'{month}'}</span>
-            <span className="text-sm text-txt-tertiary">-</span>
-            <span className="text-sm text-accent">{'{day}'}</span>
-            <span className="text-sm text-txt-tertiary">/</span>
+          <div className="flex items-center bg-app-card border border-app-border rounded-lg px-3 py-2 hover:border-app-border-hover transition-colors font-mono focus-within:border-accent">
+            <input 
+              type="text"
+              value={directoryTemplate}
+              onChange={(e) => setDirectoryTemplate(e.target.value)}
+              className="bg-transparent border-none outline-none text-sm text-txt-primary w-full"
+              placeholder="{year}/{year}-{month}-{day}"
+            />
           </div>
           <p className="text-[11px] text-txt-tertiary mt-1.5">Tokens: <code className="text-accent/70">{'{year}'}</code> <code className="text-accent/70">{'{month}'}</code> <code className="text-accent/70">{'{day}'}</code> <code className="text-accent/70">{'{camera}'}</code> <code className="text-accent/70">{'{ext}'}</code></p>
         </div>

@@ -1,4 +1,4 @@
-import { Bookmark, ChevronDown, Plus, HardDrive, Folder, ChevronRight } from "lucide-react";
+import { Bookmark, ChevronDown, Plus, HardDrive, Folder } from "lucide-react";
 import { useState } from "react";
 
 export function LibraryLeftSidebar() {

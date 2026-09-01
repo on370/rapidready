@@ -1,4 +1,4 @@
-import { Info, X, Camera, MousePointerClick, Pencil, Link as LinkIcon, Save } from "lucide-react";
+import { Info, X, Camera, MousePointerClick, Pencil, Save } from "lucide-react";
 
 interface LibraryInspectorProps {
   close: () => void;
