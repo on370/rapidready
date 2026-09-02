@@ -1,5 +1,6 @@
 import { Settings, Folder, Plus, Zap } from "lucide-react";
 import { useState } from "react";
+import { useLibraryStore } from "../../stores/libraryStore";
 
 export function SettingsView() {
   const [autoDetect, setAutoDetect] = useState(true);
@@ -7,6 +8,7 @@ export function SettingsView() {
   const [deleteSource, setDeleteSource] = useState(false);
   const [launchSystem, setLaunchSystem] = useState(false);
   const [openRapidRaw, setOpenRapidRaw] = useState(true);
+  const { invertScrollZoom, setInvertScrollZoom } = useLibraryStore();
 
   return (
     <div className="flex-1 overflow-auto">
@@ -88,6 +90,15 @@ export function SettingsView() {
                 <p className="text-xs text-txt-tertiary">Start RapidReady when you log in</p>
               </div>
               <div className={`toggle-track ${launchSystem ? 'on' : ''}`} onClick={() => setLaunchSystem(!launchSystem)}>
+                <div className="toggle-knob"></div>
+              </div>
+            </div>
+            <div className="px-5 py-4 flex items-center justify-between">
+              <div>
+                <p className="text-sm text-txt-primary">Invert scroll wheel for zoom</p>
+                <p className="text-xs text-txt-tertiary">Reverse the direction of the scroll wheel when zooming in Loupe view</p>
+              </div>
+              <div className={`toggle-track ${invertScrollZoom ? 'on' : ''}`} onClick={() => setInvertScrollZoom(!invertScrollZoom)}>
                 <div className="toggle-knob"></div>
               </div>
             </div>

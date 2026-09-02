@@ -52,7 +52,7 @@ function buildTree(images: LibraryImage[], rootPath: string): TreeNode {
 
 function TreeView({ node, depth = 0, rootFolder }: { node: TreeNode, depth?: number, rootFolder: string }) {
   const [isOpen, setIsOpen] = useState(depth < 2);
-  const { activeFolderPath, setActiveFolderPath, setViewMode, images, setActiveImageIndex } = useLibraryStore();
+  const { activeFolderPath, setActiveFolderPath, setViewMode, images, activeImageIndex, setActiveImageIndex } = useLibraryStore();
   
   const isSelected = activeFolderPath === node.path;
   
@@ -70,9 +70,10 @@ function TreeView({ node, depth = 0, rootFolder }: { node: TreeNode, depth?: num
   });
 
   if (!node.isDir) {
+    const isActiveImage = images[activeImageIndex]?.path === node.image?.path;
     return (
       <div 
-        className={`flex items-center gap-2 py-1 px-2 rounded-lg transition-colors cursor-pointer text-left hover:bg-app-hover`}
+        className={`flex items-center gap-2 py-1 px-2 rounded-lg transition-colors cursor-pointer text-left ${isActiveImage ? 'bg-accent/20 text-accent font-medium' : 'hover:bg-app-hover text-txt-secondary'}`}
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
         onClick={(e) => {
           e.stopPropagation();

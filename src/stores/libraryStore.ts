@@ -41,6 +41,8 @@ interface LibraryStore {
   setAutoAdvance: (val: boolean) => void;
   
   updateCullingState: (index: number, partialState: Partial<CullingState>) => void;
+  invertScrollZoom: boolean;
+  setInvertScrollZoom: (b: boolean) => void;
 }
 
 export const useLibraryStore = create<LibraryStore>((set) => ({
@@ -75,5 +77,7 @@ export const useLibraryStore = create<LibraryStore>((set) => ({
       };
     }
     return { images: newImages };
-  })
+  }),
+  invertScrollZoom: false,
+  setInvertScrollZoom: (invertScrollZoom) => set({ invertScrollZoom })
 }));

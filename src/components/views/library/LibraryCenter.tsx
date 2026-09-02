@@ -1,5 +1,6 @@
 import { LayoutGrid, Scan, PanelRight, Zap, Star, Trash2, ChevronLeft, ChevronRight, Check } from "lucide-react";
 import { useLibraryStore } from "../../../stores/libraryStore";
+import { ZoomableImage } from "./ZoomableImage";
 import { useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { ask } from "@tauri-apps/plugin-dialog";
@@ -127,9 +128,25 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
         case '5':
           handleCulling(activeImage?.culling.flag || null, parseInt(e.key));
           break;
-        case ' ':
-          setViewMode(viewMode === 'grid' ? 'loupe' : 'grid');
+        case 'e':
+        case 'E':
+        case 'Enter':
+          setViewMode('loupe');
           e.preventDefault();
+          break;
+        case 'g':
+        case 'G':
+        case 'Escape':
+          setViewMode('grid');
+          e.preventDefault();
+          break;
+        case ' ':
+          e.preventDefault();
+          if (e.shiftKey) {
+             if (activeImageIndex > 0) setActiveImageIndex(activeImageIndex - 1);
+          } else {
+             if (activeImageIndex < displayedImages.length - 1) setActiveImageIndex(activeImageIndex + 1);
+          }
           break;
       }
     };
@@ -276,7 +293,17 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="flex-1 flex items-center justify-center bg-app-deepest p-6 min-h-0 relative">
             {activeImage ? (
-              <img src={`rr-image://localhost${activeImage.path}`} className="max-w-full max-h-full object-contain" />
+              <>
+                <ZoomableImage src={`rr-image://localhost${activeImage.path}?fullres=true`} alt={activeImage.name} />
+                
+                {/* Preloading Previous and Next Full-Res images to avoid loading lag */}
+                {activeImageIndex > 0 && (
+                  <img src={`rr-image://localhost${displayedImages[activeImageIndex - 1].path}?fullres=true`} className="hidden" />
+                )}
+                {activeImageIndex < displayedImages.length - 1 && (
+                  <img src={`rr-image://localhost${displayedImages[activeImageIndex + 1].path}?fullres=true`} className="hidden" />
+                )}
+              </>
             ) : null}
             {activeImage?.culling.flag === -1 && <div className="absolute inset-0 bg-danger/10 pointer-events-none" />}
           </div>

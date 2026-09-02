@@ -1,40 +1,25 @@
+const fs = require('fs');
 
+let path = 'src-tauri/src/lib.rs';
+let content = fs.readFileSync(path, 'utf8');
 
-pub mod commands;
-
-use std::path::Path;
-use tauri::http::Response;
-
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_dialog::init())
-        .register_uri_scheme_protocol("rr-image", |_app, request| {
-            let uri_obj = request.uri();
-            let uri_path = uri_obj.path();
-            let query = uri_obj.query().unwrap_or("");
+const newProtocol = `.register_uri_scheme_protocol("rr-image", |_app, request| {
+            let uri = request.uri().to_string();
             
-            let is_fullres = query.contains("fullres=true") || uri_path.ends_with("%3Ffullres=true") || uri_path.ends_with("?fullres=true");
-            
-            let path_str = uri_path;
-            
-            // Clean up path
-            let path_str = if path_str.starts_with("rr-image://localhost") {
-                path_str.strip_prefix("rr-image://localhost").unwrap_or(path_str)
-            } else if path_str.starts_with("rr-image://") {
-                path_str.strip_prefix("rr-image://").unwrap_or(path_str)
-            } else {
-                path_str
+            // Extract query string
+            let (path_part, query_part) = match uri.find('?') {
+                Some(idx) => (&uri[..idx], Some(&uri[idx+1..])),
+                None => (uri.as_str(), None),
             };
             
-            // Strip any remaining ?fullres=true if it was URL encoded in the path
-            let path_str = if path_str.ends_with("%3Ffullres=true") {
-                &path_str[..path_str.len() - 15]
-            } else if path_str.ends_with("?fullres=true") {
-                &path_str[..path_str.len() - 13]
+            let is_fullres = query_part.unwrap_or("").contains("fullres=true");
+            
+            let path_str = if path_part.starts_with("rr-image://localhost") {
+                path_part.strip_prefix("rr-image://localhost").unwrap_or(path_part)
+            } else if path_part.starts_with("rr-image://") {
+                path_part.strip_prefix("rr-image://").unwrap_or(path_part)
             } else {
-                path_str
+                path_part
             };
             
             let decoded_path = match urlencoding::decode(path_str) {
@@ -48,7 +33,7 @@ pub fn run() {
                 let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
                 
                 if ["cr2", "cr3", "arw", "nef", "dng", "orf", "raf"].contains(&ext.as_str()) {
-                    match rapidready_core::thumbnail::get_max_preview_jpeg(path) {
+                    match rapidready_core::thumbnail::get_preview_jpeg(path, 16) {
                         Ok(bytes) => {
                             return Response::builder()
                                 .header("Content-Type", "image/jpeg")
@@ -57,7 +42,7 @@ pub fn run() {
                                 .unwrap();
                         }
                         Err(e) => {
-                            println!("Preview error for {:?}: {:?}", path, e);
+                            println!("Preview error for {}: {:?}", uri, e);
                         }
                     }
                 } else {
@@ -81,22 +66,43 @@ pub fn run() {
                         .unwrap()
                 }
                 Err(e) => {
-                    println!("Preview error for {:?}: {:?}", path, e);
+                    println!("Preview error for {}: {:?}", uri, e);
                     Response::builder()
                         .status(404)
                         .body(Vec::new())
                         .unwrap()
                 }
             }
-        })
-        .invoke_handler(tauri::generate_handler![
-            commands::scan_source_directory,
-            commands::execute_import,
-            commands::get_removable_drives,
-            commands::scan_archive_directory,
-            commands::set_culling_state,
-            commands::delete_files
-        ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        })`;
+
+const startIndex = content.indexOf('.register_uri_scheme_protocol("rr-image"');
+if (startIndex !== -1) {
+    let brackets = 0;
+    let endIndex = -1;
+    let foundOpen = false;
+    for (let i = startIndex; i < content.length; i++) {
+        if (content[i] === '{') {
+            brackets++;
+            foundOpen = true;
+        } else if (content[i] === '}') {
+            brackets--;
+        }
+        
+        if (foundOpen && brackets === 0) {
+            // Find the closing parenthesis after the brace
+            const closeParen = content.indexOf(')', i);
+            endIndex = closeParen + 1;
+            break;
+        }
+    }
+    
+    if (endIndex !== -1) {
+        content = content.substring(0, startIndex) + newProtocol + content.substring(endIndex);
+        fs.writeFileSync(path, content);
+        console.log('Successfully updated lib.rs');
+    } else {
+        console.log('Failed to find end index');
+    }
+} else {
+    console.log('Failed to find start index');
 }
