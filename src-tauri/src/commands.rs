@@ -48,3 +48,8 @@ pub async fn execute_import(
         e.to_string()
     })
 }
+
+#[tauri::command]
+pub fn get_removable_drives() -> Vec<rapidready_core::drives::DriveInfo> {
+    rapidready_core::drives::get_removable_drives()
+}

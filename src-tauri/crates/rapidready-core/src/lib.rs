@@ -5,3 +5,4 @@ pub mod importer;
 pub mod hasher;
 pub mod import_index;
 pub mod thumbnail;
+pub mod drives;

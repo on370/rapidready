@@ -113,9 +113,21 @@ export function ImportPreviewStep() {
 
       {/* Right Panel: Metadata Inspector */}
       <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden pl-4">
-        <div className="flex items-center gap-2 flex-shrink-0 mb-3">
-          <Info className="w-4 h-4 text-txt-secondary" />
-          <h2 className="text-sm font-semibold text-txt-primary uppercase tracking-wider">File Inspector</h2>
+        <div className="flex items-center justify-between flex-shrink-0 mb-3">
+          <div className="flex items-center gap-2">
+            <div className="relative group flex items-center">
+              <span className="cursor-help flex items-center">
+                <Info className="w-4 h-4 text-txt-secondary" />
+              </span>
+              <div className="absolute left-0 top-full mt-2 w-48 p-2 bg-app-deepest border border-app-border rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 text-[10px] text-txt-secondary text-left leading-tight">
+                Displays metadata and a preview for the file selected in the tree.
+              </div>
+            </div>
+            <h2 className="text-sm font-semibold text-txt-primary uppercase tracking-wider">File Inspector</h2>
+          </div>
+          {selectedFile && (
+            <span className="text-[10px] text-txt-tertiary italic">Click picture to zoom</span>
+          )}
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto">
@@ -132,13 +144,13 @@ export function ImportPreviewStep() {
             <div className="space-y-4">
               {/* Thumbnail */}
               <div 
-                className="w-full aspect-[3/2] rounded-xl overflow-hidden bg-app-deepest border border-app-border relative flex items-center justify-center cursor-pointer group"
+                className={`w-full aspect-[3/2] rounded-xl overflow-hidden bg-app-deepest border border-app-border relative flex items-center justify-center group ${isZoomed ? 'cursor-zoom-out' : 'cursor-zoom-in'}`}
                 onClick={() => setIsZoomed(!isZoomed)}
               >
                 <img 
                   src={`rr-image://localhost${selectedFile.path}`} 
                   alt={selectedFile.name}
-                  className={`${isZoomed ? 'w-full h-full object-contain cursor-zoom-out' : 'max-w-full max-h-full object-contain cursor-zoom-in'} ${selectedFile.already_imported ? 'opacity-50' : ''} transition-all duration-200`}
+                  className={`${isZoomed ? 'w-full h-full object-contain' : 'max-w-full max-h-full object-contain'} ${selectedFile.already_imported ? 'opacity-50' : ''} transition-all duration-200`}
                   loading="lazy"
                   onError={(e) => {
                     // Fallback if image fails to load

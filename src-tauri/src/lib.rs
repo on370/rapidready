@@ -52,7 +52,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::scan_source_directory,
-            commands::execute_import
+            commands::execute_import,
+            commands::get_removable_drives
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
