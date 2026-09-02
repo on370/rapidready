@@ -1,6 +1,16 @@
 import { Zap } from "lucide-react";
 
-export function TitleBar() {
+import { ViewType } from "./Sidebar";
+export function TitleBar({ activeView }: { activeView?: ViewType }) {
+  const titles = {
+    import: "Media Importer",
+    library: "Library & Culling",
+    health: "Archive Health",
+    history: "Import History",
+    settings: "Settings"
+  };
+  const title = activeView ? titles[activeView] : "RapidReady";
+
   return (
     <header className="title-bar flex items-center justify-between px-4 h-11 bg-app-panel border-b border-app-border flex-shrink-0" style={{ minHeight: '44px' }}>
       {/* Left: Traffic lights + App name */}
@@ -19,7 +29,7 @@ export function TitleBar() {
         </div>
       </div>
       {/* Right: Window title (dynamic) */}
-      <div id="view-title" className="text-xs text-txt-tertiary">Media Importer</div>
+      <div id="view-title" className="text-xs text-txt-tertiary">{title}</div>
     </header>
   );
 }

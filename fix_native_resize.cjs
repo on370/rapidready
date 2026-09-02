@@ -1,4 +1,7 @@
-import { useState, useRef, useEffect } from "react";
+const fs = require('fs');
+
+let viewPath = 'src/components/views/LibraryView.tsx';
+let viewContent = `import { useState, useRef, useEffect } from "react";
 import { LibraryLeftSidebar } from "./library/LibraryLeftSidebar";
 import { LibraryCenter } from "./library/LibraryCenter";
 import { LibraryInspector } from "./library/LibraryInspector";
@@ -61,7 +64,7 @@ export function LibraryView() {
         
         {/* Left Divider */}
         <div 
-          className={`w-px flex-shrink-0 bg-app-border cursor-col-resize hover:bg-accent/50 transition-colors z-10 ${isDraggingLeft ? 'bg-accent' : ''}`}
+          className={\`w-1.5 flex-shrink-0 bg-app-border cursor-col-resize hover:bg-accent/50 transition-colors z-10 \${isDraggingLeft ? 'bg-accent' : ''}\`}
           onMouseDown={(e) => { e.preventDefault(); setIsDraggingLeft(true); }}
         />
         
@@ -80,7 +83,7 @@ export function LibraryView() {
           <>
             {/* Right Divider */}
             <div 
-              className={`w-px flex-shrink-0 bg-app-border cursor-col-resize hover:bg-accent/50 transition-colors z-10 ${isDraggingRight ? 'bg-accent' : ''}`}
+              className={\`w-1.5 flex-shrink-0 bg-app-border cursor-col-resize hover:bg-accent/50 transition-colors z-10 \${isDraggingRight ? 'bg-accent' : ''}\`}
               onMouseDown={(e) => { e.preventDefault(); setIsDraggingRight(true); }}
             />
             {/* Right Sidebar */}
@@ -92,4 +95,6 @@ export function LibraryView() {
       </div>
     </div>
   );
-}
+}`;
+fs.writeFileSync(viewPath, viewContent);
+console.log('Fixed native resize');

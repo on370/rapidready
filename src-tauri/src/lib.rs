@@ -13,7 +13,7 @@ pub fn run() {
         .register_uri_scheme_protocol("rr-image", |_app, request| {
             // e.g. rr-image://localhost/Volumes/eMion2T/path/to/img.CR3
             let uri = request.uri().to_string();
-            println!("rr-image request: {}", uri);
+            
             
             // Extract the actual path from the URI
             let path_str = if uri.starts_with("rr-image://localhost") {
@@ -53,7 +53,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::scan_source_directory,
             commands::execute_import,
-            commands::get_removable_drives
+            commands::get_removable_drives,
+            commands::scan_archive_directory,
+            commands::set_culling_state,
+            commands::delete_files
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

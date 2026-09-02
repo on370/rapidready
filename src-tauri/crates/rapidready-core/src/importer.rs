@@ -64,6 +64,13 @@ where
         // Copy file
         fs::copy(&file.path, &target_path).await?;
         
+        // VERIFY: Hash the copied file and compare with original hash
+        let target_hash = crate::hasher::hash_file_head(&target_path)?;
+        if target_hash != file.hash {
+            fs::remove_file(&target_path).await?;
+            return Err(anyhow::anyhow!("Hash mismatch after copy: {}", file.name));
+        }
+        
         // Mark as imported
         let _ = import_index.mark_imported(
             &file.hash,

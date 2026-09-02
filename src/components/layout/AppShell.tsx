@@ -11,7 +11,7 @@ interface AppShellProps {
 export function AppShell({ activeView, onViewChange, children }: AppShellProps) {
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden select-none bg-app-deepest text-txt-primary">
-      <TitleBar />
+      <TitleBar activeView={activeView} />
       <div className="flex flex-1 overflow-hidden relative">
         <Sidebar activeView={activeView} onViewChange={onViewChange} />
         <main className="flex-1 flex flex-col overflow-hidden min-w-0 bg-app-deepest relative">

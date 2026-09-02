@@ -27,11 +27,7 @@ pub async fn execute_import(
     destination_base: String,
     template: String,
 ) -> Result<(), String> {
-    let _ = std::fs::write("/tmp/rr_execute.log", "execute_import called"); println!(">>> execute_import called with {} files, dest={}, template={}", files.len(), destination_base, template);
-    let import_index = get_import_index(&app).map_err(|e| {
-        println!(">>> get_import_index failed: {}", e);
-        e
-    })?;
+    let import_index = get_import_index(&app)?;
     
     core_execute_import(
         files,
@@ -43,13 +39,60 @@ pub async fn execute_import(
         },
     )
     .await
-    .map_err(|e| {
-        println!(">>> core_execute_import failed: {:?}", e);
-        e.to_string()
-    })
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub fn get_removable_drives() -> Vec<rapidready_core::drives::DriveInfo> {
     rapidready_core::drives::get_removable_drives()
+}
+
+#[tauri::command]
+pub async fn scan_archive_directory(path: String) -> Result<Vec<rapidready_core::archive::ArchiveFile>, String> {
+    let dir = PathBuf::from(path);
+    rapidready_core::archive::scan_archive_directory(&dir).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn set_culling_state(
+    path: String,
+    flag: Option<i8>,
+    rating: u8,
+    color: Option<String>,
+) -> Result<(), String> {
+    let p = PathBuf::from(path);
+    // Read existing
+    let mut state = rapidready_core::culling::read_sidecar(&p);
+    state.flag = flag;
+    state.rating = rating;
+    state.color = color;
+    
+    // Write updated
+    rapidready_core::culling::write_sidecar(&p, &state).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn delete_files(paths: Vec<String>, to_trash: bool) -> Result<(), String> {
+    for p in paths {
+        let path = PathBuf::from(&p);
+        if path.exists() {
+            if to_trash {
+                // MOVE TO OS TRASH!
+                trash::delete(&path).map_err(|e| format!("Failed to move to trash: {}", e))?;
+            } else {
+                std::fs::remove_file(&path).map_err(|e| e.to_string())?;
+            }
+            
+            // Also delete sidecar (move to trash as well to be safe)
+            let sidecar = rapidready_core::culling::get_sidecar_path(&path);
+            if sidecar.exists() {
+                if to_trash {
+                    let _ = trash::delete(&sidecar);
+                } else {
+                    let _ = std::fs::remove_file(&sidecar);
+                }
+            }
+        }
+    }
+    Ok(())
 }

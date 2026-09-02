@@ -1,4 +1,6 @@
-import { useState, useMemo } from "react";
+const fs = require('fs');
+
+const content = `import { useState, useMemo } from "react";
 import { Bookmark, ChevronDown, Plus, HardDrive, Folder, Image as ImageIcon, ChevronRight } from "lucide-react";
 import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from "@tauri-apps/api/core";
@@ -55,6 +57,7 @@ function TreeView({ node, depth = 0, rootFolder }: { node: TreeNode, depth?: num
   const { activeFolderPath, setActiveFolderPath, setViewMode, images, setActiveImageIndex } = useLibraryStore();
   
   const isSelected = activeFolderPath === node.path;
+  const isFileSelected = activeFolderPath && !node.isDir && activeFolderPath === node.path; // Simplification, not really used since files don't set active folder
   
   // Get all files in this node for the badge
   const countFiles = (n: TreeNode): number => {
@@ -72,8 +75,8 @@ function TreeView({ node, depth = 0, rootFolder }: { node: TreeNode, depth?: num
   if (!node.isDir) {
     return (
       <div 
-        className={`flex items-center gap-2 py-1 px-2 rounded-lg transition-colors cursor-pointer text-left hover:bg-app-hover`}
-        style={{ paddingLeft: `${depth * 12 + 8}px` }}
+        className={\`flex items-center gap-2 py-1 px-2 rounded-lg transition-colors cursor-pointer text-left hover:bg-app-hover\`}
+        style={{ paddingLeft: \`\${depth * 12 + 8}px\` }}
         onClick={(e) => {
           e.stopPropagation();
           // Find this image in the filtered images or global
@@ -101,8 +104,8 @@ function TreeView({ node, depth = 0, rootFolder }: { node: TreeNode, depth?: num
   return (
     <div className="space-y-0.5">
       <div 
-        className={`flex items-center gap-1.5 py-1 px-2 rounded-lg transition-colors cursor-pointer text-left ${isSelected ? 'bg-accent/15' : 'hover:bg-app-hover'}`}
-        style={{ paddingLeft: `${depth * 12 + 4}px` }}
+        className={\`flex items-center gap-1.5 py-1 px-2 rounded-lg transition-colors cursor-pointer text-left \${isSelected ? 'bg-accent/15' : 'hover:bg-app-hover'}\`}
+        style={{ paddingLeft: \`\${depth * 12 + 4}px\` }}
         onClick={() => {
           if (isSelected) {
             setActiveFolderPath(rootFolder);
@@ -114,8 +117,8 @@ function TreeView({ node, depth = 0, rootFolder }: { node: TreeNode, depth?: num
         <div onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }} className="p-0.5 hover:bg-white/10 rounded cursor-pointer">
            {isOpen ? <ChevronDown className="w-3.5 h-3.5 text-txt-tertiary" /> : <ChevronRight className="w-3.5 h-3.5 text-txt-tertiary" />}
         </div>
-        <Folder className={`w-3.5 h-3.5 ${isSelected ? 'text-accent' : 'text-warning/70'}`} />
-        <span className={`text-xs truncate flex-1 ${isSelected ? 'text-accent font-semibold' : 'text-txt-secondary'}`} title={node.name}>{node.name}</span>
+        <Folder className={\`w-3.5 h-3.5 \${isSelected ? 'text-accent' : 'text-warning/70'}\`} />
+        <span className={\`text-xs truncate flex-1 \${isSelected ? 'text-accent font-semibold' : 'text-txt-secondary'}\`} title={node.name}>{node.name}</span>
         {fileCount > 0 && <span className="text-[10px] text-txt-tertiary ml-auto">({fileCount})</span>}
       </div>
       
@@ -174,9 +177,9 @@ export function LibraryLeftSidebar() {
             <Bookmark className="w-3.5 h-3.5" />
             Collections
           </h2>
-          <ChevronDown className={`w-3.5 h-3.5 text-txt-tertiary transition-transform ${!collectionsOpen ? "-rotate-90" : ""}`} />
+          <ChevronDown className={\`w-3.5 h-3.5 text-txt-tertiary transition-transform \${!collectionsOpen ? "-rotate-90" : ""}\`} />
         </div>
-        <div className={`p-2 space-y-0.5 border-b border-app-border ${!collectionsOpen ? "hidden" : ""}`}>
+        <div className={\`p-2 space-y-0.5 border-b border-app-border \${!collectionsOpen ? "hidden" : ""}\`}>
           {/* Quick Filters */}
           <button className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-dashed border-app-border text-xs text-txt-tertiary hover:border-accent hover:text-accent transition-all">
             <Plus className="w-3.5 h-3.5" />
@@ -192,10 +195,10 @@ export function LibraryLeftSidebar() {
             <HardDrive className="w-3.5 h-3.5" />
             Library
           </h2>
-          <ChevronDown className={`w-3.5 h-3.5 text-txt-tertiary transition-transform ${!libraryOpen ? "-rotate-90" : ""}`} />
+          <ChevronDown className={\`w-3.5 h-3.5 text-txt-tertiary transition-transform \${!libraryOpen ? "-rotate-90" : ""}\`} />
         </div>
         
-        <div className={`flex flex-col flex-1 min-h-0 ${!libraryOpen ? "hidden" : ""}`}>
+        <div className={\`flex flex-col flex-1 min-h-0 \${!libraryOpen ? "hidden" : ""}\`}>
           {/* Active Folder Display */}
           <div className="p-2 border-b border-app-border/50 flex-shrink-0">
             <div onClick={handleSelectFolder} className="flex items-center bg-app-card border border-app-border rounded-lg px-2.5 py-1.5 text-xs cursor-pointer hover:border-app-border-hover transition-colors">
@@ -214,3 +217,7 @@ export function LibraryLeftSidebar() {
     </div>
   );
 }
+`;
+
+fs.writeFileSync('src/components/views/library/LibraryLeftSidebar.tsx', content);
+console.log('Sidebar perfectly generated.');
