@@ -2,11 +2,10 @@ import { Zap } from "lucide-react";
 
 import { ViewType } from "./Sidebar";
 export function TitleBar({ activeView }: { activeView?: ViewType }) {
-  const titles = {
+  const titles: Record<ViewType, string> = {
     import: "Media Importer",
     library: "Library & Culling",
-    health: "Archive Health",
-    history: "Import History",
+    tools: "Tools & Dashboard",
     settings: "Settings"
   };
   const title = activeView ? titles[activeView] : "RapidReady";

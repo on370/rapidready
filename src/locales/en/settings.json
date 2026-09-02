@@ -26,6 +26,10 @@
     "invertScrollZoom": {
       "title": "Invert scroll wheel for zoom",
       "desc": "Reverse the direction of the scroll wheel when zooming in Loupe view"
+    },
+    "startupView": {
+      "title": "Open Library Mode after Startup",
+      "desc": "Rather than Import Mode"
     }
   },
   "rapidraw": {
@@ -41,5 +45,17 @@
     "repo": "GitHub Repository",
     "author": "RapidRaw by Timon Käch",
     "report": "Report an Issue"
+  },
+  "locations": {
+    "title": "Archive Locations",
+    "subtitle": "Manage your root storage paths (e.g., SSDs, NAS)",
+    "add": "Add Location",
+    "noLocations": "No locations added yet."
+  },
+  "presets": {
+    "title": "Import Presets",
+    "subtitle": "Manage workflows (Subfolders, Renaming)",
+    "add": "Add Preset",
+    "noPresets": "No presets added yet."
   }
 }

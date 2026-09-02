@@ -1,0 +1,11 @@
+{
+  "sidebar": {
+    "collections": "Sammlungen",
+    "newCollection": "Neue Sammlung",
+    "library": "Bibliothek",
+    "openFolder": "Ordner öffnen...",
+    "noFolder": "Kein Ordner ausgewählt",
+    "addLocation": "Neue Location speichern...",
+    "browseTemp": "Temporären Ordner öffnen..."
+  }
+}

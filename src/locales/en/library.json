@@ -1,0 +1,11 @@
+{
+  "sidebar": {
+    "collections": "Collections",
+    "newCollection": "New Collection",
+    "library": "Library",
+    "openFolder": "Open Folder...",
+    "noFolder": "No folder selected",
+    "addLocation": "Add new Location...",
+    "browseTemp": "Browse temporary folder..."
+  }
+}

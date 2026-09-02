@@ -1,7 +1,7 @@
-import { Download, LayoutGrid, ShieldCheck, Clock, Settings, CircleHelp, Copyright } from "lucide-react";
+import { Download, LayoutGrid, Settings, CircleHelp, Copyright, Wrench } from "lucide-react";
 import { emit } from "@tauri-apps/api/event";
 
-export type ViewType = "import" | "library" | "health" | "history" | "settings";
+export type ViewType = "import" | "library" | "tools" | "settings";
 
 interface SidebarProps {
   activeView: ViewType;
@@ -25,8 +25,7 @@ export function Sidebar({ activeView, onViewChange }: SidebarProps) {
       <div className="flex flex-col gap-1 flex-1">
         <NavButton view="import" icon={Download} label="Import" />
         <NavButton view="library" icon={LayoutGrid} label="Library" />
-        <NavButton view="health" icon={ShieldCheck} label="Archive Health" />
-        <NavButton view="history" icon={Clock} label="History" />
+        <NavButton view="tools" icon={Wrench} label="Tools & Dashboard" />
       </div>
       <div className="flex flex-col gap-1">
         <button

@@ -26,6 +26,10 @@
     "invertScrollZoom": {
       "title": "Scrollrad für Zoom umkehren",
       "desc": "Kehrt die Richtung des Scrollrads beim Zoomen in der Loupe-Ansicht um"
+    },
+    "startupView": {
+      "title": "Library Modus beim Start öffnen",
+      "desc": "Anstelle des Import Modus"
     }
   },
   "rapidraw": {
@@ -41,5 +45,17 @@
     "repo": "GitHub Repository",
     "author": "RapidRaw von Timon Käch",
     "report": "Problem melden"
+  },
+  "locations": {
+    "title": "Archive Locations",
+    "subtitle": "Verwalte deine Haupt-Speicherorte (z.B. SSDs, NAS)",
+    "add": "Location hinzufügen",
+    "noLocations": "Noch keine Locations hinzugefügt."
+  },
+  "presets": {
+    "title": "Import Presets",
+    "subtitle": "Verwalte Workflows (Unterordner, Umbenennung)",
+    "add": "Preset hinzufügen",
+    "noPresets": "Noch keine Presets hinzugefügt."
   }
 }

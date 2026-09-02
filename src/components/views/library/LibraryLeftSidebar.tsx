@@ -1,5 +1,7 @@
-import { useState, useMemo } from "react";
-import { Bookmark, ChevronDown, Plus, HardDrive, Folder, Image as ImageIcon, ChevronRight } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { useTranslation } from "react-i18next";
+import { useSettingsStore } from "../../../stores/settingsStore";
+import { Bookmark, ChevronDown, Plus, HardDrive, Folder, Image as ImageIcon, ChevronRight, FolderOpen } from "lucide-react";
 import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from "@tauri-apps/api/core";
 import { useLibraryStore, LibraryImage } from "../../../stores/libraryStore";
@@ -132,24 +134,35 @@ function TreeView({ node, depth = 0, rootFolder }: { node: TreeNode, depth?: num
 }
 
 export function LibraryLeftSidebar() {
+  const { t } = useTranslation('library');
+  const { lastLibraryPath, setLastLibraryPath, locations, addLocation } = useSettingsStore();
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const [collectionsOpen, setCollectionsOpen] = useState(true);
   const [libraryOpen, setLibraryOpen] = useState(true);
   const { images, setImages, setActiveFolderPath, setViewMode, rootPath, setRootPath } = useLibraryStore();
 
-  const handleSelectFolder = async () => {
-    try {
-      const selected = await open({ directory: true });
-      if (selected && !Array.isArray(selected)) {
-        setRootPath(selected);
-        setActiveFolderPath(selected); // Reset filter to root
-        setViewMode('grid');
-        const loadedImages: LibraryImage[] = await invoke('scan_archive_directory', { path: selected });
-        setImages(loadedImages);
+  // Auto-load last library on mount if nothing is loaded
+  useEffect(() => {
+    let isMounted = true;
+    const loadLast = async () => {
+      if (!rootPath && lastLibraryPath) {
+        try {
+          const loadedImages: LibraryImage[] = await invoke('scan_archive_directory', { path: lastLibraryPath });
+          if (isMounted) {
+            setRootPath(lastLibraryPath);
+            setActiveFolderPath(lastLibraryPath);
+            setImages(loadedImages);
+          }
+        } catch (e) {
+          console.error("Failed to auto-load last library:", e);
+        }
       }
-    } catch (e) {
-      console.error(e);
-    }
-  };
+    };
+    loadLast();
+    return () => { isMounted = false; };
+  }, [rootPath, lastLibraryPath, setRootPath, setActiveFolderPath, setImages]);
+
+
 
   const tree = useMemo(() => {
     if (!rootPath || images.length === 0) return null;
@@ -157,7 +170,7 @@ export function LibraryLeftSidebar() {
   }, [images, rootPath]);
 
   const renderTree = () => {
-    if (!tree) return <div className="text-xs text-txt-tertiary text-center py-4">No folder selected</div>;
+    if (!tree) return <div className="text-xs text-txt-tertiary text-center py-4">{t("sidebar.noFolder")}</div>;
     return Object.values(tree.children).sort((a,b) => {
       if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
       return a.name.localeCompare(b.name);
@@ -172,17 +185,13 @@ export function LibraryLeftSidebar() {
       <div className="flex flex-col flex-shrink-0">
         <div className="px-4 py-3 border-b border-app-border flex items-center justify-between cursor-pointer hover:bg-app-hover/50 transition-colors" onClick={() => setCollectionsOpen(!collectionsOpen)}>
           <h2 className="text-xs font-semibold text-txt-secondary uppercase tracking-wider flex items-center gap-2">
-            <Bookmark className="w-3.5 h-3.5" />
-            Collections
-          </h2>
+            <Bookmark className="w-3.5 h-3.5" />{t("sidebar.collections")}</h2>
           <ChevronDown className={`w-3.5 h-3.5 text-txt-tertiary transition-transform ${!collectionsOpen ? "-rotate-90" : ""}`} />
         </div>
         <div className={`p-2 space-y-0.5 border-b border-app-border ${!collectionsOpen ? "hidden" : ""}`}>
           {/* Quick Filters */}
           <button className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-dashed border-app-border text-xs text-txt-tertiary hover:border-accent hover:text-accent transition-all">
-            <Plus className="w-3.5 h-3.5" />
-            New Collection
-          </button>
+            <Plus className="w-3.5 h-3.5" />{t("sidebar.newCollection")}</button>
         </div>
       </div>
 
@@ -190,20 +199,106 @@ export function LibraryLeftSidebar() {
       <div className="flex flex-col flex-1 min-h-0">
         <div className="px-4 py-3 border-b border-app-border flex items-center justify-between cursor-pointer hover:bg-app-hover/50 transition-colors flex-shrink-0" onClick={() => setLibraryOpen(!libraryOpen)}>
           <h2 className="text-xs font-semibold text-txt-secondary uppercase tracking-wider flex items-center gap-2">
-            <HardDrive className="w-3.5 h-3.5" />
-            Library
-          </h2>
+            <HardDrive className="w-3.5 h-3.5" />{t("sidebar.library")}</h2>
           <ChevronDown className={`w-3.5 h-3.5 text-txt-tertiary transition-transform ${!libraryOpen ? "-rotate-90" : ""}`} />
         </div>
         
         <div className={`flex flex-col flex-1 min-h-0 ${!libraryOpen ? "hidden" : ""}`}>
           {/* Active Folder Display */}
-          <div className="p-2 border-b border-app-border/50 flex-shrink-0">
-            <div onClick={handleSelectFolder} className="flex items-center bg-app-card border border-app-border rounded-lg px-2.5 py-1.5 text-xs cursor-pointer hover:border-app-border-hover transition-colors">
-              <Folder className="w-3.5 h-3.5 text-txt-tertiary mr-1.5 flex-shrink-0" />
-              <span className="truncate flex-1 text-txt-secondary" title={rootPath || "Select Folder..."}>{rootPath ? rootPath.split('/').pop() : "Select Folder..."}</span>
-              <Plus className="w-3 h-3 text-txt-tertiary ml-auto flex-shrink-0" />
-            </div>
+          <div className="p-3 border-b border-app-border/50 flex flex-col gap-2 flex-shrink-0 relative">
+            <button 
+              onClick={() => setDropdownOpen(!dropdownOpen)} 
+              className="w-full flex items-center justify-between px-3 py-1.5 bg-app-card hover:bg-app-hover border border-app-border rounded-lg transition-colors text-xs text-txt-primary"
+            >
+              <div className="flex items-center gap-2 truncate">
+                <HardDrive className="w-3.5 h-3.5 text-accent flex-shrink-0" />
+                <span className="truncate font-medium" title={rootPath || undefined}>
+                  {rootPath ? (locations.find(l => l.path === rootPath)?.name || rootPath.split('/').pop()) : t("sidebar.noFolder")}
+                </span>
+              </div>
+              <ChevronDown className="w-3.5 h-3.5 text-txt-tertiary flex-shrink-0" />
+            </button>
+
+            {dropdownOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setDropdownOpen(false)}></div>
+                <div className="absolute top-[3.2rem] left-3 right-3 bg-app-card border border-app-border rounded-lg shadow-xl z-50 overflow-hidden text-xs py-1 animate-in fade-in zoom-in-95 duration-100">
+                  
+                  {locations.length > 0 && (
+                    <>
+                      <div className="px-3 py-1.5 text-[10px] font-bold text-txt-tertiary uppercase tracking-wider">Locations</div>
+                      {locations.map(loc => (
+                        <button 
+                          key={loc.id}
+                          className="w-full text-left px-3 py-2 hover:bg-app-hover text-txt-secondary hover:text-txt-primary truncate transition-colors flex items-center gap-2"
+                          onClick={async () => {
+                            setDropdownOpen(false);
+                            setRootPath(loc.path);
+                            setActiveFolderPath(loc.path);
+                            setViewMode('grid');
+                            setLastLibraryPath(loc.path);
+                            try {
+                              const loadedImages = (await invoke('scan_archive_directory', { path: loc.path })) as LibraryImage[];
+                              setImages(loadedImages);
+                            } catch(e) {}
+                          }}
+                        >
+                          <Folder className="w-3.5 h-3.5 text-accent" />
+                          <span className="truncate">{loc.name}</span>
+                        </button>
+                      ))}
+                      <div className="h-px bg-app-border my-1"></div>
+                    </>
+                  )}
+                  
+                  <button 
+                    onClick={async () => {
+                      setDropdownOpen(false);
+                      const selected = await open({ directory: true });
+                      if (selected && typeof selected === 'string') {
+                        const defaultName = selected.split('/').pop() || selected;
+                        addLocation({ id: Date.now().toString(), name: defaultName, path: selected });
+                        
+                        setRootPath(selected);
+                        setActiveFolderPath(selected);
+                        setViewMode('grid');
+                        setLastLibraryPath(selected);
+                        try {
+                          const loadedImages = (await invoke('scan_archive_directory', { path: selected })) as LibraryImage[];
+                          setImages(loadedImages);
+                        } catch(e) {}
+                      }
+                    }}
+                    className="w-full text-left px-3 py-2 hover:bg-app-hover text-txt-secondary hover:text-accent transition-colors flex items-center gap-2"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    {t("sidebar.addLocation")}
+                  </button>
+
+                  <button 
+                    onClick={async () => {
+                      setDropdownOpen(false);
+                      const selected = await open({ directory: true });
+                      if (selected && typeof selected === 'string') {
+                        setRootPath(selected);
+                        setActiveFolderPath(selected);
+                        setViewMode('grid');
+                        setLastLibraryPath(selected);
+                        try {
+                          const loadedImages = (await invoke('scan_archive_directory', { path: selected })) as LibraryImage[];
+                          setImages(loadedImages);
+                        } catch(e) {}
+                      }
+                    }}
+                    className="w-full text-left px-3 py-2 hover:bg-app-hover text-txt-secondary hover:text-txt-primary transition-colors flex items-center gap-2"
+                  >
+                    <FolderOpen className="w-3.5 h-3.5" />
+                    {t("sidebar.browseTemp")}
+                  </button>
+
+                </div>
+              </>
+            )}
           </div>
 
           {/* Tree Scroll Area */}
