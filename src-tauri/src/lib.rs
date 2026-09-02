@@ -1,15 +1,31 @@
 
 
 pub mod commands;
+pub mod menu;
 
 use std::path::Path;
 use tauri::http::Response;
+use tauri::Emitter;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            let handle = app.handle();
+            if let Ok(menu) = menu::build_menu(handle) {
+                app.set_menu(menu)?;
+            }
+            app.on_menu_event(move |app, event| {
+                if event.id() == "open_help" {
+                    let _ = app.emit("toggle-help-modal", ());
+                } else if event.id() == "open_about" {
+                    let _ = app.emit("toggle-about-modal", ());
+                }
+            });
+            Ok(())
+        })
         .register_uri_scheme_protocol("rr-image", |_app, request| {
             let uri_obj = request.uri();
             let uri_path = uri_obj.path();

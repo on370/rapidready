@@ -1,8 +1,22 @@
 import { GitBranch, Folder, ChevronDown, MousePointerClick, Camera, CheckCircle2, Filter, X, Info } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { useImportStore, ScannedFile } from '../../../stores/importStore';
 
 export function ImportPreviewStep() {
+  const { t } = useTranslation("help");
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(event.target as Node)) {
+        setIsHelpOpen(false);
+      }
+    };
+    if (isHelpOpen) document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isHelpOpen]);
   const [selectedFile, setSelectedFile] = useState<ScannedFile | null>(null);
   const [isZoomed, setIsZoomed] = useState(false);
   const { scannedFiles, toggleFileSelection, toggleGroupSelection, hideImported } = useImportStore();
@@ -115,13 +129,25 @@ export function ImportPreviewStep() {
       <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden pl-4">
         <div className="flex items-center justify-between flex-shrink-0 mb-3">
           <div className="flex items-center gap-2">
-            <div className="relative group flex items-center">
-              <span className="cursor-help flex items-center">
-                <Info className="w-4 h-4 text-txt-secondary" />
-              </span>
-              <div className="absolute left-0 top-full mt-2 w-48 p-2 bg-app-deepest border border-app-border rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 text-[10px] text-txt-secondary text-left leading-tight">
-                Displays metadata and a preview for the file selected in the tree.
-              </div>
+            <div className="relative" ref={popoverRef}>
+              <button 
+                className={`p-1.5 rounded-full transition-colors ${isHelpOpen ? 'bg-accent/20 text-accent' : 'text-txt-tertiary hover:text-txt-secondary hover:bg-app-hover'}`}
+                onClick={() => setIsHelpOpen(!isHelpOpen)}
+              >
+                <Info className="w-4 h-4" />
+              </button>
+              {isHelpOpen && (
+                <div className="absolute left-0 top-full mt-2 w-64 bg-app-card border border-app-border rounded-xl shadow-2xl z-50 overflow-hidden text-left">
+                  <div className="px-4 py-3 border-b border-app-border bg-app-panel/50">
+                    <h4 className="text-sm font-semibold text-txt-primary">
+                      {t('tooltip.inspectorTitle')}
+                    </h4>
+                  </div>
+                  <div className="p-4 text-xs text-txt-secondary leading-relaxed">
+                    {t('tooltip.inspector')}
+                  </div>
+                </div>
+              )}
             </div>
             <h2 className="text-sm font-semibold text-txt-primary uppercase tracking-wider">File Inspector</h2>
           </div>

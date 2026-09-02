@@ -1,0 +1,16 @@
+{
+  "tooltip": {
+    "loupe": "Loupe-Steuerung",
+    "grid": "Grid-Steuerung",
+    "inspector": "Zeigt Metadaten und eine Vorschau für die im Baum ausgewählte Datei an.",
+    "inspectorTitle": "Datei-Inspektor"
+  },
+  "shortcuts": {
+    "title": "Tastaturkürzel",
+    "next": "Nächstes Bild",
+    "prev": "Vorheriges Bild",
+    "loupe": "Loupe-Ansicht",
+    "grid": "Grid-Ansicht",
+    "zoom": "Zoom an/aus"
+  }
+}

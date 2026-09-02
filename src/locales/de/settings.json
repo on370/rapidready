@@ -1,0 +1,45 @@
+{
+  "title": "Einstellungen",
+  "subtitle": "Konfiguriere RapidReady",
+  "archives": {
+    "title": "Archive",
+    "add": "Archiv hinzufügen"
+  },
+  "general": {
+    "title": "Allgemein",
+    "autoDetect": {
+      "title": "SD-Karten automatisch erkennen",
+      "desc": "Automatisch nach neuen Medien suchen, wenn SD-Karten eingelegt werden"
+    },
+    "verifyCopy": {
+      "title": "Kopieren verifizieren",
+      "desc": "Prüfsummen-Verifizierung stellt die Dateiintegrität sicher"
+    },
+    "deleteSource": {
+      "title": "Nach Import von der Quelle löschen",
+      "desc": "Dateien nach erfolgreichem Import von der SD-Karte entfernen"
+    },
+    "launchSystem": {
+      "title": "Mit dem System starten",
+      "desc": "RapidReady starten, wenn du dich anmeldest"
+    },
+    "invertScrollZoom": {
+      "title": "Scrollrad für Zoom umkehren",
+      "desc": "Kehrt die Richtung des Scrollrads beim Zoomen in der Loupe-Ansicht um"
+    }
+  },
+  "rapidraw": {
+    "title": "RapidRaw Integration",
+    "openAfterImport": {
+      "title": "Nach Import in RapidRaw öffnen",
+      "desc": "Importierten Ordner automatisch in RapidRaw öffnen"
+    }
+  },
+  "about": {
+    "subtitle": "Ein Begleit-Tool für RapidRaw",
+    "license": "MIT Lizenz",
+    "repo": "GitHub Repository",
+    "author": "RapidRaw von Timon Käch",
+    "report": "Problem melden"
+  }
+}

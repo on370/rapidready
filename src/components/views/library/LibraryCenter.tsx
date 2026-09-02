@@ -1,6 +1,7 @@
 import { LayoutGrid, Scan, PanelRight, Zap, Star, Trash2, ChevronLeft, ChevronRight, Check } from "lucide-react";
 import { useLibraryStore } from "../../../stores/libraryStore";
 import { ZoomableImage } from "./ZoomableImage";
+import { HelpPopover } from "../../ui/HelpPopover";
 import { useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { ask } from "@tauri-apps/plugin-dialog";
@@ -181,6 +182,7 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
             </button>
           </div>
           <div className="w-px h-5 bg-app-border mx-1"></div>
+          <HelpPopover viewMode={viewMode} />
           <button className="p-2 rounded-lg hover:bg-app-hover transition-colors" onClick={toggleInspector}>
             <PanelRight className="w-4 h-4 text-txt-secondary" />
           </button>

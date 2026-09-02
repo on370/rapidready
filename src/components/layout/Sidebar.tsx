@@ -1,4 +1,5 @@
-import { Download, LayoutGrid, ShieldCheck, Clock, Settings } from "lucide-react";
+import { Download, LayoutGrid, ShieldCheck, Clock, Settings, CircleHelp, Copyright } from "lucide-react";
+import { emit } from "@tauri-apps/api/event";
 
 export type ViewType = "import" | "library" | "health" | "history" | "settings";
 
@@ -27,8 +28,24 @@ export function Sidebar({ activeView, onViewChange }: SidebarProps) {
         <NavButton view="health" icon={ShieldCheck} label="Archive Health" />
         <NavButton view="history" icon={Clock} label="History" />
       </div>
-      {/* Bottom: Settings */}
-      <NavButton view="settings" icon={Settings} label="Settings" />
+      <div className="flex flex-col gap-1">
+        <button
+          className="nav-btn w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-150 text-txt-secondary hover:bg-app-hover hover:text-txt-primary"
+          onClick={() => window.dispatchEvent(new Event('open-about-modal'))}
+        >
+          <Copyright className="w-[18px] h-[18px]" />
+          <span className="tooltip">About</span>
+        </button>
+        <button
+          className="nav-btn w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-150 text-txt-secondary hover:bg-app-hover hover:text-txt-primary"
+          onClick={() => emit('toggle-help-modal')}
+        >
+          <CircleHelp className="w-[18px] h-[18px]" />
+          <span className="tooltip">Help</span>
+        </button>
+        {/* Bottom: Settings */}
+        <NavButton view="settings" icon={Settings} label="Settings" />
+      </div>
     </nav>
   );
 }

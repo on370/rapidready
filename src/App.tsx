@@ -6,6 +6,8 @@ import { LibraryView } from "./components/views/LibraryView";
 import { HealthView } from "./components/views/HealthView";
 import { HistoryView } from "./components/views/HistoryView";
 import { SettingsView } from "./components/views/SettingsView";
+import { HelpModal } from "./components/ui/HelpModal";
+import { AboutModal } from "./components/ui/AboutModal";
 import "./App.css";
 
 function App() {
@@ -18,6 +20,8 @@ function App() {
       {activeView === "health" && <HealthView />}
       {activeView === "history" && <HistoryView />}
       {activeView === "settings" && <SettingsView />}
+      <HelpModal />
+      <AboutModal />
     </AppShell>
   );
 }

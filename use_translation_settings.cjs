@@ -1,5 +1,23 @@
-import { useTranslation } from "react-i18next";
-import { Settings, Folder, Plus, Globe } from "lucide-react";
+const fs = require('fs');
+let path = 'src/components/views/SettingsView.tsx';
+let content = fs.readFileSync(path, 'utf8');
+
+const importStr = `import { useTranslation } from "react-i18next";\nimport { Settings, Folder, Plus, Zap, Globe } from "lucide-react";\nimport { useState } from "react";\nimport { useLibraryStore } from "../../stores/libraryStore";`;
+
+content = content.replace(/import \{ Settings.*/, importStr);
+content = content.replace(/import \{ useState \} from "react";\nimport \{ useLibraryStore \} from "\.\.\/\.\.\/stores\/libraryStore";\n/, '');
+
+const oldFunc = `export function SettingsView() {
+  const { invertScrollZoom, setInvertScrollZoom } = useLibraryStore();`;
+const newFunc = `export function SettingsView() {
+  const { t, i18n } = useTranslation('settings');
+  const { invertScrollZoom, setInvertScrollZoom } = useLibraryStore();`;
+
+content = content.replace(oldFunc, newFunc);
+
+// Now I will run a huge regex/replace to swap texts, but it's easier to rewrite SettingsView.tsx completely with translations since I know its exact structure.
+const newContent = `import { useTranslation } from "react-i18next";
+import { Settings, Folder, Plus, Zap, Globe } from "lucide-react";
 import { useState } from "react";
 import { useLibraryStore } from "../../stores/libraryStore";
 
@@ -72,7 +90,7 @@ export function SettingsView() {
                 <p className="text-sm text-txt-primary">{t('general.autoDetect.title')}</p>
                 <p className="text-xs text-txt-tertiary">{t('general.autoDetect.desc')}</p>
               </div>
-              <div className={`toggle-track ${autoDetect ? 'on' : ''}`} onClick={() => setAutoDetect(!autoDetect)}>
+              <div className={\`toggle-track \${autoDetect ? 'on' : ''}\`} onClick={() => setAutoDetect(!autoDetect)}>
                 <div className="toggle-knob"></div>
               </div>
             </div>
@@ -81,7 +99,7 @@ export function SettingsView() {
                 <p className="text-sm text-txt-primary">{t('general.verifyCopy.title')}</p>
                 <p className="text-xs text-txt-tertiary">{t('general.verifyCopy.desc')}</p>
               </div>
-              <div className={`toggle-track ${verifyCopy ? 'on' : ''}`} onClick={() => setVerifyCopy(!verifyCopy)}>
+              <div className={\`toggle-track \${verifyCopy ? 'on' : ''}\`} onClick={() => setVerifyCopy(!verifyCopy)}>
                 <div className="toggle-knob"></div>
               </div>
             </div>
@@ -90,7 +108,7 @@ export function SettingsView() {
                 <p className="text-sm text-txt-primary">{t('general.deleteSource.title')}</p>
                 <p className="text-xs text-txt-tertiary">{t('general.deleteSource.desc')}</p>
               </div>
-              <div className={`toggle-track ${deleteSource ? 'on' : ''}`} onClick={() => setDeleteSource(!deleteSource)}>
+              <div className={\`toggle-track \${deleteSource ? 'on' : ''}\`} onClick={() => setDeleteSource(!deleteSource)}>
                 <div className="toggle-knob"></div>
               </div>
             </div>
@@ -99,7 +117,7 @@ export function SettingsView() {
                 <p className="text-sm text-txt-primary">{t('general.launchSystem.title')}</p>
                 <p className="text-xs text-txt-tertiary">{t('general.launchSystem.desc')}</p>
               </div>
-              <div className={`toggle-track ${launchSystem ? 'on' : ''}`} onClick={() => setLaunchSystem(!launchSystem)}>
+              <div className={\`toggle-track \${launchSystem ? 'on' : ''}\`} onClick={() => setLaunchSystem(!launchSystem)}>
                 <div className="toggle-knob"></div>
               </div>
             </div>
@@ -108,7 +126,7 @@ export function SettingsView() {
                 <p className="text-sm text-txt-primary">{t('general.invertScrollZoom.title')}</p>
                 <p className="text-xs text-txt-tertiary">{t('general.invertScrollZoom.desc')}</p>
               </div>
-              <div className={`toggle-track ${invertScrollZoom ? 'on' : ''}`} onClick={() => setInvertScrollZoom(!invertScrollZoom)}>
+              <div className={\`toggle-track \${invertScrollZoom ? 'on' : ''}\`} onClick={() => setInvertScrollZoom(!invertScrollZoom)}>
                 <div className="toggle-knob"></div>
               </div>
             </div>
@@ -125,13 +143,35 @@ export function SettingsView() {
               <p className="text-sm text-txt-primary">{t('rapidraw.openAfterImport.title')}</p>
               <p className="text-xs text-txt-tertiary">{t('rapidraw.openAfterImport.desc')}</p>
             </div>
-            <div className={`toggle-track ${openRapidRaw ? 'on' : ''}`} onClick={() => setOpenRapidRaw(!openRapidRaw)}>
+            <div className={\`toggle-track \${openRapidRaw ? 'on' : ''}\`} onClick={() => setOpenRapidRaw(!openRapidRaw)}>
               <div className="toggle-knob"></div>
             </div>
           </div>
         </div>
 
+        {/* About Section */}
+        <div className="bg-app-card border border-app-border rounded-xl p-6">
+          <div className="flex flex-col items-center text-center">
+            <div className="w-16 h-16 rounded-2xl bg-accent flex items-center justify-center mb-4">
+              <Zap className="w-8 h-8 text-app-deepest" />
+            </div>
+            <h3 className="text-lg font-bold text-txt-primary">RapidReady</h3>
+            <p className="text-xs text-txt-secondary mt-1">Version 0.1.0-alpha (Build 20250726)</p>
+            <p className="text-xs text-txt-tertiary mt-2">{t('about.subtitle')}</p>
+            <p className="text-xs text-txt-tertiary mt-0.5">{t('about.license')} · © 2025</p>
+            <div className="flex items-center gap-4 mt-4">
+              <button className="text-xs text-accent hover:text-accent-hover transition-colors">{t('about.repo')}</button>
+              <span className="text-txt-tertiary">·</span>
+              <button className="text-xs text-accent hover:text-accent-hover transition-colors">{t('about.author')}</button>
+              <span className="text-txt-tertiary">·</span>
+              <button className="text-xs text-accent hover:text-accent-hover transition-colors">{t('about.report')}</button>
+            </div>
+          </div>
         </div>
+      </div>
     </div>
   );
-}
+}`;
+
+fs.writeFileSync(path, newContent);
+console.log('Rewrote SettingsView.tsx with translations and language switcher');
