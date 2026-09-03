@@ -112,7 +112,9 @@ pub fn run() {
             commands::get_removable_drives,
             commands::scan_archive_directory,
             commands::set_culling_state,
-            commands::delete_files
+            commands::delete_files,
+            commands::open_in_rapidraw,
+            commands::show_in_finder
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -6,11 +6,13 @@ import commonEN from './locales/en/common.json';
 import settingsEN from './locales/en/settings.json';
 import helpEN from './locales/en/help.json';
 import libraryEN from './locales/en/library.json';
+import importEN from './locales/en/import.json';
 
 import commonDE from './locales/de/common.json';
 import settingsDE from './locales/de/settings.json';
 import helpDE from './locales/de/help.json';
 import libraryDE from './locales/de/library.json';
+import importDE from './locales/de/import.json';
 
 i18n
   .use(LanguageDetector)
@@ -21,16 +23,18 @@ i18n
         common: commonEN,
         settings: settingsEN,
         help: helpEN,
-        library: libraryEN
+        library: libraryEN,
+        import: importEN,
       },
       de: {
         common: commonDE,
         settings: settingsDE,
         help: helpDE,
-        library: libraryDE
+        library: libraryDE,
+        import: importDE,
       }
     },
-    ns: ['common', 'settings', 'help', 'library'],
+    ns: ['common', 'settings', 'help', 'library', 'import'],
     defaultNS: 'common',
     fallbackLng: 'en',
     interpolation: {

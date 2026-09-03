@@ -5,7 +5,43 @@
     "library": "Library",
     "openFolder": "Open Folder...",
     "noFolder": "No folder selected",
-    "addLocation": "Add new Location...",
-    "browseTemp": "Browse temporary folder..."
+    "addLocation": "Bookmark Location...",
+    "browseTemp": "Open other folder...",
+    "lastImport": "Latest Import"
+  },
+  "header": {
+    "lastImport": "Latest Import",
+    "allImages": "All Images"
+  },
+  "toolbar": {
+    "showInFinder": "In Finder",
+    "showInFinderTooltip": "Show in macOS Finder (⌘⇧F)",
+    "openInRapidRaw": "In RapidRAW",
+    "openInRapidRawTooltip": "Edit in RapidRAW (R)",
+    "viewGrid": "Grid",
+    "viewLoupe": "Loupe",
+    "toggleInspector": "Toggle Inspector"
+  },
+  "inspector": {
+    "title": "Inspector",
+    "noSelection": "No Image Selected",
+    "noSelectionDesc": "Select an image to inspect details.",
+    "fileInfo": "File Info",
+    "camera": "Camera & Exposure",
+    "culling": "Rating & Status",
+    "body": "Body",
+    "lens": "Lens",
+    "iso": "ISO",
+    "aperture": "Aperture",
+    "shutter": "Shutter",
+    "focalLength": "Focal Length",
+    "date": "Date",
+    "size": "Size",
+    "path": "Path",
+    "openInRapidRaw": "Edit in RapidRAW",
+    "showInFinder": "Show in Finder",
+    "pick": "Pick (P)",
+    "unflag": "Unflag (U)",
+    "reject": "Reject (X)"
   }
 }

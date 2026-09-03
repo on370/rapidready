@@ -24,7 +24,7 @@ pub async fn execute_import<F>(
     template: &str,
     import_index: &ImportIndex,
     mut on_progress: F,
-) -> Result<()>
+) -> Result<Vec<String>>
 where
     F: FnMut(ImportProgress) + Send + 'static,
 {
@@ -32,6 +32,7 @@ where
     let total_bytes: u64 = files.iter().map(|f| f.size).sum();
     let mut files_processed = 0;
     let mut bytes_processed = 0;
+    let mut imported_paths = Vec::with_capacity(files.len());
 
     println!("Executing import with {} files to {}", total_files, destination_base);
     let dest_base = Path::new(destination_base);
@@ -50,6 +51,7 @@ where
         }
         
         let target_path = target_dir.join(&file.name);
+        let target_path_str = target_path.to_string_lossy().into_owned();
         
         // Notify progress before copy
         on_progress(ImportProgress {
@@ -58,7 +60,7 @@ where
             bytes_processed,
             total_bytes,
             current_file: file.name.clone(),
-            current_file_path: target_path.to_string_lossy().into_owned(),
+            current_file_path: target_path_str.clone(),
         });
         
         // Copy file
@@ -76,12 +78,13 @@ where
             &file.hash,
             file.size,
             &file.name,
-            &target_path.to_string_lossy()
+            &target_path_str
         );
         
         // Update progress
         files_processed += 1;
         bytes_processed += file.size;
+        imported_paths.push(target_path_str.clone());
         
         // Notify progress after copy
         on_progress(ImportProgress {
@@ -90,9 +93,9 @@ where
             bytes_processed,
             total_bytes,
             current_file: file.name.clone(),
-            current_file_path: target_path.to_string_lossy().into_owned(),
+            current_file_path: target_path_str,
         });
     }
 
-    Ok(())
+    Ok(imported_paths)
 }

@@ -1,6 +1,5 @@
-import { useState } from "react";
+import { useEffect } from "react";
 import { AppShell } from "./components/layout/AppShell";
-import { ViewType } from "./components/layout/Sidebar";
 import { ImportView } from "./components/views/ImportView";
 import { LibraryView } from "./components/views/LibraryView";
 import { ToolsView } from "./components/views/ToolsView";
@@ -8,11 +7,16 @@ import { SettingsView } from "./components/views/SettingsView";
 import { HelpModal } from "./components/ui/HelpModal";
 import { AboutModal } from "./components/ui/AboutModal";
 import { useSettingsStore } from "./stores/settingsStore";
+import { useNavigationStore } from "./stores/navigationStore";
 import "./App.css";
 
 function App() {
   const startupView = useSettingsStore(state => state.startupView);
-  const [activeView, setActiveView] = useState<ViewType>(startupView);
+  const { activeView, setActiveView } = useNavigationStore();
+
+  useEffect(() => {
+    setActiveView(startupView);
+  }, []);
 
   return (
     <AppShell activeView={activeView} onViewChange={setActiveView}>

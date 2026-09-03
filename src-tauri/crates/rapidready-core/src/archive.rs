@@ -59,19 +59,19 @@ pub fn scan_archive_directory(dir: &Path) -> Result<Vec<ArchiveFile>> {
                 if supported_exts.contains(&ext.to_lowercase().as_str()) {
                     let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
                     let name = entry.file_name().to_string_lossy().into_owned();
-                    let date = crate::date_resolver::get_creation_date(path).ok();
+                    let meta = crate::metadata_resolver::get_image_metadata(path);
                     let culling = read_sidecar(path);
                     
                     files.push(ArchiveFile {
                         path: path.to_string_lossy().into_owned(),
                         name,
                         size,
-                        date,
-                        camera: None,
-                        lens: None,
-                        iso: None,
-                        aperture: None,
-                        shutter: None,
+                        date: meta.date,
+                        camera: meta.camera,
+                        lens: meta.lens,
+                        iso: meta.iso,
+                        aperture: meta.aperture,
+                        shutter: meta.shutter,
                         culling,
                     });
                 }

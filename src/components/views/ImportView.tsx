@@ -61,7 +61,7 @@ export function ImportView() {
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden relative">
         {currentStep === 1 && <ImportSourceStep />}
         {currentStep === 2 && <ImportPreviewStep />}
-        {currentStep === 3 && <ImportExecuteStep />}
+        {currentStep === 3 && <ImportExecuteStep onReset={() => setCurrentStep(1)} />}
       </div>
 
       {/* Step Action Bar */}

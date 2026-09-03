@@ -1,8 +1,9 @@
-import { LayoutGrid, Scan, PanelRight, Zap, Star, Trash2, ChevronLeft, ChevronRight, Check } from "lucide-react";
+import { LayoutGrid, Scan, PanelRight, Zap, Star, Trash2, ChevronLeft, ChevronRight, Check, Rocket, FolderOpen } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useLibraryStore } from "../../../stores/libraryStore";
 import { ZoomableImage } from "./ZoomableImage";
 import { HelpPopover } from "../../ui/HelpPopover";
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useState, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { ask } from "@tauri-apps/plugin-dialog";
 
@@ -13,9 +14,36 @@ interface LibraryCenterProps {
 }
 
 export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: LibraryCenterProps) {
-  const { images, activeImageIndex, setActiveImageIndex, autoAdvance, updateCullingState, activeFolderPath, filterMode, setFilterMode } = useLibraryStore();
-  const folderImages = activeFolderPath ? images.filter(img => img.path.startsWith(activeFolderPath)) : images;
-  const displayedImages = folderImages.filter(img => {
+  const { t } = useTranslation('library');
+  const { 
+    images, activeImageIndex, setActiveImageIndex, autoAdvance, 
+    updateCullingState, activeFolderPath, filterMode, setFilterMode,
+    lastImportPaths, isViewingLastImport 
+  } = useLibraryStore();
+
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const [showActionIcons, setShowActionIcons] = useState(false);
+
+  // Measure toolbar container width directly (not screen width!)
+  useEffect(() => {
+    if (!toolbarRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        // Show icons when toolbar has at least 630px (compact, natural gap to Delete button)
+        setShowActionIcons(entry.contentRect.width >= 630);
+      }
+    });
+    observer.observe(toolbarRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  const scopedImages = isViewingLastImport
+    ? images.filter(img => lastImportPaths.includes(img.path))
+    : activeFolderPath 
+      ? images.filter(img => img.path.startsWith(activeFolderPath)) 
+      : images;
+
+  const displayedImages = scopedImages.filter(img => {
     if (filterMode === 'picks') return img.culling.flag === 1;
     if (filterMode === 'rejected') return img.culling.flag === -1;
     if (filterMode.startsWith('rated')) {
@@ -38,15 +66,97 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
       path: activeImage.path,
       flag,
       rating,
-      color: null
+      color: activeImage.culling.color
     }).catch(console.error);
 
-    if (autoAdvance && activeImageIndex < displayedImages.length - 1) {
+    // Auto-advance if enabled and a flag was set
+    if (autoAdvance && flag !== null && activeImageIndex < displayedImages.length - 1) {
       setActiveImageIndex(activeImageIndex + 1);
     }
-  }, [activeImage, activeImageIndex, autoAdvance, displayedImages.length, setActiveImageIndex, updateCullingState]);
+  }, [activeImage, activeImageIndex, displayedImages.length, autoAdvance, images, updateCullingState, setActiveImageIndex]);
 
-    useEffect(() => {
+  // Global Keyboard Shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger shortcuts if an input/textarea is focused
+      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
+      
+      // Shortcut: Cmd + Shift + F -> Reveal in Finder
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'f' || e.key === 'F')) {
+        e.preventDefault();
+        if (activeImage) {
+          invoke('show_in_finder', { path: activeImage.path });
+        }
+        return;
+      }
+
+      // Shortcut: R -> Open in RapidRAW
+      if (!e.metaKey && !e.ctrlKey && !e.altKey && (e.key === 'r' || e.key === 'R')) {
+        e.preventDefault();
+        if (activeImage) {
+          invoke('open_in_rapidraw', { path: activeImage.path });
+        }
+        return;
+      }
+
+      if (e.key === 'ArrowRight' || e.key === 'j') {
+        setActiveImageIndex(Math.min(displayedImages.length - 1, activeImageIndex + 1));
+      } else if (e.key === 'ArrowLeft' || e.key === 'k') {
+        setActiveImageIndex(Math.max(0, activeImageIndex - 1));
+      } else if (e.key === 'ArrowDown') {
+        setActiveImageIndex(Math.min(displayedImages.length - 1, activeImageIndex + 6));
+      } else if (e.key === 'ArrowUp') {
+        setActiveImageIndex(Math.max(0, activeImageIndex - 6));
+      } else {
+        switch (e.key) {
+          case 'p':
+          case 'P':
+            handleCulling(1, activeImage?.culling.rating || 0);
+            break;
+          case 'x':
+          case 'X':
+            handleCulling(-1, activeImage?.culling.rating || 0);
+            break;
+          case 'u':
+          case 'U':
+            handleCulling(null, activeImage?.culling.rating || 0);
+            break;
+          case '0':
+          case '1':
+          case '2':
+          case '3':
+          case '4':
+          case '5':
+            handleCulling(activeImage?.culling.flag || null, parseInt(e.key));
+            break;
+          case 'e':
+          case 'E':
+          case 'Enter':
+            setViewMode('loupe');
+            e.preventDefault();
+            break;
+          case 'g':
+          case 'G':
+          case 'Escape':
+            setViewMode('grid');
+            e.preventDefault();
+            break;
+          case ' ':
+            e.preventDefault();
+            if (e.shiftKey) {
+               if (activeImageIndex > 0) setActiveImageIndex(activeImageIndex - 1);
+            } else {
+               if (activeImageIndex < displayedImages.length - 1) setActiveImageIndex(activeImageIndex + 1);
+            }
+            break;
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeImage, activeImageIndex, displayedImages.length, handleCulling, viewMode, setViewMode]);
+
+  useEffect(() => {
     if (viewMode === 'grid') {
       const el = document.getElementById('active-grid-img');
       if (el) {
@@ -55,115 +165,29 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
     }
   }, [activeImageIndex, viewMode]);
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger if user is typing in an input
-      if (document.activeElement?.tagName === 'INPUT') return;
-
-      switch(e.key) {
-        case 'ArrowRight':
-        case 'ArrowDown': {
-          e.preventDefault();
-          if (viewMode === 'loupe') {
-            if (activeImageIndex < displayedImages.length - 1) setActiveImageIndex(activeImageIndex + 1);
-          } else {
-            if (e.key === 'ArrowRight') {
-              if (activeImageIndex < displayedImages.length - 1) setActiveImageIndex(activeImageIndex + 1);
-            } else {
-              const cols = 6;
-              const rows = Math.ceil(displayedImages.length / cols);
-              const currentRow = Math.floor(activeImageIndex / cols);
-              const currentCol = activeImageIndex % cols;
-              let nextRow = currentRow + 1;
-              if (nextRow >= rows) nextRow = 0;
-              let nextIdx = nextRow * cols + currentCol;
-              if (nextIdx >= displayedImages.length) {
-                nextIdx = currentRow === rows - 1 ? currentCol : displayedImages.length - 1;
-              }
-              setActiveImageIndex(nextIdx);
-            }
-          }
-          break;
-        }
-        case 'ArrowLeft':
-        case 'ArrowUp': {
-          e.preventDefault();
-          if (viewMode === 'loupe') {
-            if (activeImageIndex > 0) setActiveImageIndex(activeImageIndex - 1);
-          } else {
-            if (e.key === 'ArrowLeft') {
-              if (activeImageIndex > 0) setActiveImageIndex(activeImageIndex - 1);
-            } else {
-              const cols = 6;
-              const rows = Math.ceil(displayedImages.length / cols);
-              const currentRow = Math.floor(activeImageIndex / cols);
-              const currentCol = activeImageIndex % cols;
-              let nextRow = currentRow - 1;
-              if (nextRow < 0) nextRow = rows - 1;
-              let nextIdx = nextRow * cols + currentCol;
-              if (nextIdx >= displayedImages.length) {
-                nextIdx = displayedImages.length - 1;
-              }
-              setActiveImageIndex(nextIdx);
-            }
-          }
-          break;
-        }
-        case 'p':
-        case 'P':
-          handleCulling(1, activeImage?.culling.rating || 0);
-          break;
-        case 'x':
-        case 'X':
-          handleCulling(-1, activeImage?.culling.rating || 0);
-          break;
-        case 'u':
-        case 'U':
-          handleCulling(null, activeImage?.culling.rating || 0);
-          break;
-        case '0':
-        case '1':
-        case '2':
-        case '3':
-        case '4':
-        case '5':
-          handleCulling(activeImage?.culling.flag || null, parseInt(e.key));
-          break;
-        case 'e':
-        case 'E':
-        case 'Enter':
-          setViewMode('loupe');
-          e.preventDefault();
-          break;
-        case 'g':
-        case 'G':
-        case 'Escape':
-          setViewMode('grid');
-          e.preventDefault();
-          break;
-        case ' ':
-          e.preventDefault();
-          if (e.shiftKey) {
-             if (activeImageIndex > 0) setActiveImageIndex(activeImageIndex - 1);
-          } else {
-             if (activeImageIndex < displayedImages.length - 1) setActiveImageIndex(activeImageIndex + 1);
-          }
-          break;
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeImageIndex, displayedImages.length, handleCulling, viewMode, setViewMode]);
-
   return (
     <div className="flex-1 flex flex-col overflow-hidden min-w-0">
       {/* Header bar */}
       <div className="px-6 py-4 border-b border-app-border flex items-center justify-between flex-shrink-0">
         <div>
-          <h2 className="text-lg font-bold text-txt-primary truncate max-w-[400px]">{activeFolderPath ? activeFolderPath.split('/').pop() : 'All Images'}</h2>
-          <p className="text-xs text-txt-tertiary mt-0.5">{displayedImages.length} files · {(displayedImages.reduce((acc, img) => acc + img.size, 0) / (1024*1024)).toFixed(1)} MB</p>
+          <h2 className="text-lg font-bold text-txt-primary truncate max-w-[400px]">
+            {isViewingLastImport ? t('header.lastImport') : activeFolderPath ? activeFolderPath.split('/').pop() : t('header.allImages')}
+          </h2>
+          <p className="text-xs text-txt-tertiary mt-0.5">{displayedImages.length} {t('previewFiles', 'files')} · {(displayedImages.reduce((acc, img) => acc + img.size, 0) / (1024*1024)).toFixed(1)} MB</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {/* Auto-Advance (UI setting - placed left of Grid/Loupe) */}
+          <button 
+            onClick={() => useLibraryStore.getState().setAutoAdvance(!autoAdvance)} 
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer ${autoAdvance ? 'bg-warning/15 border-warning/30 text-warning hover:bg-warning/25' : 'bg-app-card border-app-border text-txt-tertiary hover:text-txt-secondary hover:border-app-border-hover'}`}
+            title="Auto-Advance nach Bewertung umschalten"
+          >
+            <Zap className={`w-3.5 h-3.5 ${autoAdvance ? 'fill-warning text-warning' : 'text-txt-tertiary'}`} />
+            <span className="hidden sm:inline">Auto-Advance</span>
+          </button>
+
+          <div className="w-px h-5 bg-app-border mx-1"></div>
+
           {/* View mode toggle: Grid / Loupe */}
           <div className="flex items-center bg-app-card border border-app-border rounded-lg p-0.5">
             <button 
@@ -171,19 +195,19 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
               onClick={() => setViewMode('grid')}
             >
               <LayoutGrid className="w-3.5 h-3.5" />
-              <span>Grid</span>
+              <span>{t('toolbar.viewGrid')}</span>
             </button>
             <button 
               className={`px-2.5 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all duration-150 ${viewMode === 'loupe' ? 'bg-accent/15 text-accent' : 'text-txt-tertiary hover:text-txt-secondary'}`}
               onClick={() => setViewMode('loupe')}
             >
               <Scan className="w-3.5 h-3.5" />
-              <span>Loupe</span>
+              <span>{t('toolbar.viewLoupe')}</span>
             </button>
           </div>
           <div className="w-px h-5 bg-app-border mx-1"></div>
           <HelpPopover viewMode={viewMode} />
-          <button className="p-2 rounded-lg hover:bg-app-hover transition-colors" onClick={toggleInspector}>
+          <button className="p-2 rounded-lg hover:bg-app-hover transition-colors cursor-pointer" onClick={toggleInspector} title={t('toolbar.toggleInspector')}>
             <PanelRight className="w-4 h-4 text-txt-secondary" />
           </button>
         </div>
@@ -210,32 +234,53 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
       </div>
 
       {/* CULLING TOOLBAR */}
-      <div className="flex items-center gap-4 px-4 py-2 border-b border-app-border bg-[#111114] flex-shrink-0">
+      <div ref={toolbarRef} className="flex items-center gap-3 px-4 py-2 border-b border-app-border bg-[#111114] flex-shrink-0 overflow-hidden whitespace-nowrap">
         {/* Flag Buttons */}
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-0.5 flex-shrink-0">
           <button onClick={() => handleCulling(-1, activeImage?.culling.rating || 0)} className={`w-8 h-7 rounded-l-md flex items-center justify-center text-xs font-bold transition-all border border-app-border hover:bg-danger/20 ${activeImage?.culling.flag === -1 ? 'bg-danger text-white' : 'text-txt-tertiary'}`}>X</button>
           <button onClick={() => handleCulling(null, activeImage?.culling.rating || 0)} className={`w-8 h-7 flex items-center justify-center text-xs font-bold transition-all border-y border-app-border hover:bg-app-hover ${activeImage?.culling.flag === null ? 'bg-app-hover text-white' : 'text-txt-tertiary'}`}>U</button>
           <button onClick={() => handleCulling(1, activeImage?.culling.rating || 0)} className={`w-8 h-7 rounded-r-md flex items-center justify-center text-xs font-bold transition-all border border-app-border hover:bg-success/20 ${activeImage?.culling.flag === 1 ? 'bg-success text-white' : 'text-txt-tertiary'}`}>P</button>
         </div>
 
-        <div className="w-px h-6 bg-app-border"></div>
+        <div className="w-px h-6 bg-app-border flex-shrink-0"></div>
 
         {/* Stars */}
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-0.5 flex-shrink-0">
           {[1,2,3,4,5].map(s => (
-            <button key={s} onClick={() => handleCulling(activeImage?.culling.flag || null, activeImage?.culling.rating === s ? 0 : s)} className="w-5 h-5 flex items-center justify-center hover:scale-110 transition-all">
+            <button key={s} onClick={() => handleCulling(activeImage?.culling.flag || null, activeImage?.culling.rating === s ? 0 : s)} className="w-5 h-5 flex items-center justify-center hover:scale-110 transition-all cursor-pointer">
               <Star className={`w-3.5 h-3.5 ${(activeImage?.culling.rating || 0) >= s ? 'text-warning fill-warning' : 'text-txt-tertiary'}`} />
             </button>
           ))}
         </div>
 
-        <div className="w-px h-6 bg-app-border"></div>
+        <div className="w-px h-6 bg-app-border flex-shrink-0"></div>
 
-        {/* Auto-Advance */}
-        <button onClick={() => useLibraryStore.getState().setAutoAdvance(!autoAdvance)} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all ${autoAdvance ? 'bg-warning/15 text-warning hover:bg-warning/25' : 'text-txt-tertiary hover:bg-app-hover'}`}>
-          <Zap className={`w-3 h-3 ${autoAdvance ? 'fill-warning text-warning' : 'text-txt-tertiary'}`} />
-          <span>Auto-Advance</span>
-        </button>
+        {/* Image Actions: In RapidRAW (links) & Finder (rechts) */}
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          {/* Action: Open in RapidRAW */}
+          <button 
+            disabled={!activeImage}
+            onClick={() => activeImage && invoke('open_in_rapidraw', { path: activeImage.path })}
+            className="px-2.5 py-1 bg-accent/15 border border-accent/30 hover:bg-accent hover:text-app-deepest text-accent rounded-md text-xs font-semibold transition-all duration-150 flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex-shrink-0 shadow-sm shadow-accent/10"
+            title={t('toolbar.openInRapidRawTooltip')}
+          >
+            {showActionIcons && <Rocket className="w-3.5 h-3.5 flex-shrink-0" />}
+            <span>{t('toolbar.openInRapidRaw')}</span>
+            <kbd className="text-[10px] opacity-80 font-mono px-1 py-0.2 rounded bg-black/25">R</kbd>
+          </button>
+
+          {/* Action: Show in Finder */}
+          <button 
+            disabled={!activeImage}
+            onClick={() => activeImage && invoke('show_in_finder', { path: activeImage.path })}
+            className="px-2.5 py-1 bg-app-card border border-app-border hover:border-app-border-hover hover:bg-app-hover rounded-md text-xs font-medium text-txt-secondary hover:text-txt-primary transition-all duration-150 flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex-shrink-0 shadow-sm"
+            title={t('toolbar.showInFinderTooltip')}
+          >
+            {showActionIcons && <FolderOpen className="w-3.5 h-3.5 text-txt-tertiary flex-shrink-0" />}
+            <span>{t('toolbar.showInFinder')}</span>
+            <kbd className="text-[10px] text-txt-tertiary font-mono bg-app-panel px-1 py-0.2 rounded border border-app-border">⌘⇧F</kbd>
+          </button>
+        </div>
 
         <div className="flex-1"></div>
 
@@ -247,7 +292,7 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
               title: 'Confirm Delete',
               kind: 'warning',
               okLabel: 'Move to Trash',
-              cancelLabel: 'Cancel' // Default is Cancel, so safe!
+              cancelLabel: 'Cancel'
             }).then(confirmed => {
               if (confirmed) {
                 invoke('delete_files', { paths: rejected.map(i => i.path), toTrash: true }).then(() => {
@@ -259,7 +304,7 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
                 });
               }
             });
-          }} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-danger hover:bg-danger/10 transition-all">
+          }} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-danger hover:bg-danger/10 transition-all flex-shrink-0">
           <Trash2 className="w-3 h-3" />
           <span>Delete Rejected ({displayedImages.filter(i => i.culling.flag === -1).length})</span>
         </button>
@@ -275,6 +320,10 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
                 id={activeImageIndex === idx ? 'active-grid-img' : undefined}
                 className={`aspect-[3/2] rounded-lg border cursor-pointer relative overflow-hidden group ${activeImageIndex === idx ? 'border-accent ring-2 ring-accent' : 'border-app-border hover:border-app-border-hover'}`}
                 onClick={() => setActiveImageIndex(idx)}
+                onDoubleClick={() => {
+                  setActiveImageIndex(idx);
+                  setViewMode('loupe');
+                }}
               >
                 <img src={`rr-image://localhost${img.path}`} className="w-full h-full object-cover" loading="lazy" />
                 <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">

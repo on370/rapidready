@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useSettingsStore } from "../../../stores/settingsStore";
-import { Bookmark, ChevronDown, Plus, HardDrive, Folder, Image as ImageIcon, ChevronRight, FolderOpen } from "lucide-react";
+import { Bookmark, ChevronDown, Plus, HardDrive, Folder, Image as ImageIcon, ChevronRight, FolderOpen, Sparkles } from "lucide-react";
 import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from "@tauri-apps/api/core";
 import { useLibraryStore, LibraryImage } from "../../../stores/libraryStore";
@@ -139,7 +139,10 @@ export function LibraryLeftSidebar() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [collectionsOpen, setCollectionsOpen] = useState(true);
   const [libraryOpen, setLibraryOpen] = useState(true);
-  const { images, setImages, setActiveFolderPath, setViewMode, rootPath, setRootPath } = useLibraryStore();
+  const { 
+    images, setImages, setActiveFolderPath, setViewMode, rootPath, setRootPath,
+    lastImportPaths, isViewingLastImport, setIsViewingLastImport 
+  } = useLibraryStore();
 
   // Auto-load last library on mount if nothing is loaded
   useEffect(() => {
@@ -188,9 +191,21 @@ export function LibraryLeftSidebar() {
             <Bookmark className="w-3.5 h-3.5" />{t("sidebar.collections")}</h2>
           <ChevronDown className={`w-3.5 h-3.5 text-txt-tertiary transition-transform ${!collectionsOpen ? "-rotate-90" : ""}`} />
         </div>
-        <div className={`p-2 space-y-0.5 border-b border-app-border ${!collectionsOpen ? "hidden" : ""}`}>
+        <div className={`p-2 space-y-1 border-b border-app-border ${!collectionsOpen ? "hidden" : ""}`}>
+          {lastImportPaths.length > 0 && (
+            <button 
+              onClick={() => setIsViewingLastImport(true)}
+              className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer ${isViewingLastImport ? 'bg-accent/20 text-accent font-semibold' : 'text-txt-primary hover:bg-app-hover'}`}
+            >
+              <div className="flex items-center gap-2 truncate">
+                <Sparkles className="w-3.5 h-3.5 text-accent flex-shrink-0" />
+                <span className="truncate">{t("sidebar.lastImport")}</span>
+              </div>
+              <span className="text-[10px] text-txt-tertiary flex-shrink-0">({lastImportPaths.length})</span>
+            </button>
+          )}
           {/* Quick Filters */}
-          <button className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-dashed border-app-border text-xs text-txt-tertiary hover:border-accent hover:text-accent transition-all">
+          <button className="w-full flex items-center justify-center gap-2 py-1.5 rounded-lg border border-dashed border-app-border text-xs text-txt-tertiary hover:border-accent hover:text-accent transition-all">
             <Plus className="w-3.5 h-3.5" />{t("sidebar.newCollection")}</button>
         </div>
       </div>

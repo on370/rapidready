@@ -1,7 +1,12 @@
 use chrono::{Datelike, NaiveDateTime};
 
 pub fn build_target_path(template: &str, dt: &NaiveDateTime) -> String {
-    let mut result = template.to_string();
+    let trimmed = template.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    let mut result = trimmed.to_string();
     
     let year = format!("{:04}", dt.year());
     let month = format!("{:02}", dt.month());

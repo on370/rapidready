@@ -172,8 +172,8 @@ export function SettingsView() {
                   key={preset.id}
                   icon={Settings2}
                   name={preset.name}
-                  subtitle={`Format: ${preset.subfolderFormat}`}
-                  onSave={(newName) => updatePreset(preset.id, newName)}
+                  subtitle={`Mode: ${preset.structureMode}`}
+                  onSave={(newName) => updatePreset(preset.id, { name: newName })}
                   onRemove={() => removePreset(preset.id)}
                 />
               ))
@@ -182,7 +182,15 @@ export function SettingsView() {
           <div className="px-5 py-3 border-t border-app-border">
             <button 
               onClick={() => {
-                addPreset({ id: Date.now().toString(), name: "Default Workflow", locationId: "", subfolderFormat: "YYYY/YYYY-MM-DD" });
+                addPreset({ 
+                  id: Date.now().toString(), 
+                  name: "New Workflow", 
+                  locationId: null,
+                  structureMode: 'date',
+                  dateFormat: 'YYYY/YYYY-MM-DD',
+                  customPattern: '{year}/{year}-{month}-{day}',
+                  projectName: '',
+                });
               }}
               className="flex items-center gap-2 text-xs font-semibold text-txt-secondary hover:text-accent transition-colors"
             >

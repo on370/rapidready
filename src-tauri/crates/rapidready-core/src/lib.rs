@@ -8,3 +8,4 @@ pub mod thumbnail;
 pub mod drives;
 pub mod culling;
 pub mod archive;
+pub mod metadata_resolver;

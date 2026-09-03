@@ -26,7 +26,7 @@ pub async fn execute_import(
     files: Vec<ScannedFile>,
     destination_base: String,
     template: String,
-) -> Result<(), String> {
+) -> Result<Vec<String>, String> {
     let import_index = get_import_index(&app)?;
     
     core_execute_import(
@@ -40,6 +40,117 @@ pub async fn execute_import(
     )
     .await
     .map_err(|e| e.to_string())
+}
+
+fn find_first_image_in_path(path_str: &str) -> String {
+    let p = std::path::Path::new(path_str);
+    if p.is_file() {
+        return path_str.to_string();
+    }
+    if p.is_dir() {
+        let valid_extensions = ["cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2", "jpg", "jpeg", "png", "tif", "tiff"];
+        if let Ok(entries) = std::fs::read_dir(p) {
+            for entry in entries.flatten() {
+                let entry_path = entry.path();
+                if entry_path.is_file() {
+                    if let Some(ext) = entry_path.extension().and_then(|e| e.to_str()) {
+                        if valid_extensions.contains(&ext.to_lowercase().as_str()) {
+                            return entry_path.to_string_lossy().into_owned();
+                        }
+                    }
+                } else if entry_path.is_dir() {
+                    if let Ok(sub_entries) = std::fs::read_dir(&entry_path) {
+                        for sub in sub_entries.flatten() {
+                            let sub_path = sub.path();
+                            if sub_path.is_file() {
+                                if let Some(ext) = sub_path.extension().and_then(|e| e.to_str()) {
+                                    if valid_extensions.contains(&ext.to_lowercase().as_str()) {
+                                        return sub_path.to_string_lossy().into_owned();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    path_str.to_string()
+}
+
+fn find_rapidraw_binary() -> Option<std::path::PathBuf> {
+    let p1 = std::path::PathBuf::from("/Applications/RapidRAW.app/Contents/MacOS/RapidRAW");
+    if p1.exists() {
+        return Some(p1);
+    }
+    if let Ok(home) = std::env::var("HOME") {
+        let p2 = std::path::PathBuf::from(home).join("Applications/RapidRAW.app/Contents/MacOS/RapidRAW");
+        if p2.exists() {
+            return Some(p2);
+        }
+    }
+    if let Ok(out) = std::process::Command::new("mdfind")
+        .arg("kMDItemCFBundleIdentifier == 'io.github.CyberTimon.RapidRAW'")
+        .output()
+    {
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        for line in stdout.lines() {
+            let trimmed = line.trim();
+            if !trimmed.is_empty() {
+                let bin = std::path::PathBuf::from(trimmed).join("Contents/MacOS/RapidRAW");
+                if bin.exists() {
+                    return Some(bin);
+                }
+            }
+        }
+    }
+    None
+}
+
+#[tauri::command]
+pub fn open_in_rapidraw(path: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let file_to_open = find_first_image_in_path(&path);
+
+        // If binary is found, launch it directly so tauri-plugin-single-instance in RapidRAW
+        // can receive the CLI argument and forward it via IPC socket to the running instance!
+        if let Some(bin_path) = find_rapidraw_binary() {
+            let _ = std::process::Command::new(&bin_path)
+                .arg(&file_to_open)
+                .spawn();
+
+            // Bring RapidRAW to the foreground
+            let _ = std::process::Command::new("osascript")
+                .args(["-e", "tell application id \"io.github.CyberTimon.RapidRAW\" to activate"])
+                .spawn();
+
+            return Ok(());
+        }
+
+        // Fallback: try bundle id
+        let status = std::process::Command::new("open")
+            .args(["-b", "io.github.CyberTimon.RapidRAW", &file_to_open])
+            .status();
+
+        if let Ok(s) = status {
+            if s.success() {
+                return Ok(());
+            }
+        }
+
+        // Fallback: system default open
+        std::process::Command::new("open")
+            .arg(&file_to_open)
+            .spawn()
+            .map_err(|e| format!("Failed to open: {}", e))?;
+
+        Ok(())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        open::that(&path).map_err(|e| e.to_string())
+    }
 }
 
 #[tauri::command]
@@ -96,3 +207,20 @@ pub async fn delete_files(paths: Vec<String>, to_trash: bool) -> Result<(), Stri
     }
     Ok(())
 }
+
+#[tauri::command]
+pub fn show_in_finder(path: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .args(["-R", &path])
+            .spawn()
+            .map_err(|e| format!("Failed to reveal in Finder: {}", e))?;
+        Ok(())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Ok(())
+    }
+}
+

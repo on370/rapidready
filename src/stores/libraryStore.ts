@@ -43,6 +43,11 @@ interface LibraryStore {
   updateCullingState: (index: number, partialState: Partial<CullingState>) => void;
   invertScrollZoom: boolean;
   setInvertScrollZoom: (b: boolean) => void;
+  
+  lastImportPaths: string[];
+  isViewingLastImport: boolean;
+  setIsViewingLastImport: (viewing: boolean) => void;
+  setLastImportPaths: (paths: string[]) => void;
 }
 
 export const useLibraryStore = create<LibraryStore>((set) => ({
@@ -53,11 +58,16 @@ export const useLibraryStore = create<LibraryStore>((set) => ({
   
   activeImageIndex: 0,
   activeFolderPath: null,
-  setActiveFolderPath: (path) => set({ activeFolderPath: path }),
+  setActiveFolderPath: (path) => set({ activeFolderPath: path, isViewingLastImport: false }),
   setActiveImageIndex: (index) => set({ activeImageIndex: index }),
   
   viewMode: 'grid',
   setViewMode: (mode) => set({ viewMode: mode }),
+  
+  lastImportPaths: [],
+  isViewingLastImport: false,
+  setIsViewingLastImport: (viewing) => set({ isViewingLastImport: viewing, activeFolderPath: null, activeImageIndex: 0 }),
+  setLastImportPaths: (paths) => set({ lastImportPaths: paths }),
   
   filterMode: 'all',
   setFilterMode: (mode) => set({ filterMode: mode }),
