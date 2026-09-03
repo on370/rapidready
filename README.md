@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="RapidReady-logo.jpeg" alt="RapidReady Logo" width="600" />
+  <img src="RapidReady-logo-small.jpg" alt="RapidReady Logo" width="600" />
   
   <h1>RapidReady</h1>
   <p><strong>The blazingly fast companion app for RapidRaw.</strong></p>
