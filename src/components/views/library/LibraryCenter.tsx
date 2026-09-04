@@ -76,10 +76,14 @@ const GridThumbnailItem = React.memo(function GridThumbnailItem({
 const FilmstripThumbnailItem = React.memo(function FilmstripThumbnailItem({
   img,
   isActive,
+  thumbWidth,
+  thumbHeight,
   onSelect,
 }: {
   img: LibraryImage;
   isActive: boolean;
+  thumbWidth: number;
+  thumbHeight: number;
   onSelect: () => void;
 }) {
   const [loaded, setLoaded] = useState(loadedThumbnailCache.has(img.path));
@@ -87,7 +91,8 @@ const FilmstripThumbnailItem = React.memo(function FilmstripThumbnailItem({
   return (
     <div
       onClick={onSelect}
-      className={`w-24 h-16 aspect-[3/2] rounded-lg border relative overflow-hidden flex-shrink-0 cursor-pointer transition-all duration-150 group bg-app-card ${
+      style={{ width: `${thumbWidth}px`, height: `${thumbHeight}px` }}
+      className={`rounded-lg border relative overflow-hidden flex-shrink-0 cursor-pointer transition-all duration-150 group bg-app-card ${
         isActive 
           ? 'border-accent ring-2 ring-accent shadow-md shadow-accent/20 opacity-100' 
           : 'border-app-border hover:border-app-border-hover opacity-75 hover:opacity-100'
@@ -148,6 +153,53 @@ const FilmstripBar = React.memo(function FilmstripBar({
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(1200);
 
+  const [filmstripHeight, setFilmstripHeight] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('rapidready_filmstrip_height');
+      if (saved) {
+        const val = parseInt(saved, 10);
+        if (!isNaN(val)) return Math.max(56, Math.min(180, val));
+      }
+    } catch (_) {}
+    return 80;
+  });
+
+  const [isResizing, setIsResizing] = useState(false);
+  const startDragY = useRef(0);
+  const startHeight = useRef(80);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+    startDragY.current = e.clientY;
+    startHeight.current = filmstripHeight;
+  };
+
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      // Dragging upward increases height, dragging downward decreases height
+      const deltaY = startDragY.current - e.clientY;
+      const nextHeight = Math.max(56, Math.min(180, startHeight.current + deltaY));
+      setFilmstripHeight(nextHeight);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      try {
+        localStorage.setItem('rapidready_filmstrip_height', filmstripHeight.toString());
+      } catch (_) {}
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing, filmstripHeight]);
+
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -166,7 +218,10 @@ const FilmstripBar = React.memo(function FilmstripBar({
     return () => observer.disconnect();
   }, []);
 
-  const ITEM_SLOT = 104; // 96px width + 8px gap
+  const paddingY = 16; // 8px top, 8px bottom
+  const thumbHeight = Math.max(40, filmstripHeight - paddingY);
+  const thumbWidth = Math.round(thumbHeight * 1.5); // 3:2 ratio
+  const ITEM_SLOT = thumbWidth + 8; // 8px gap
   const paddingX = 32; // 16px left + 16px right
   const availWidth = Math.max(100, containerWidth - paddingX);
   
@@ -208,8 +263,24 @@ const FilmstripBar = React.memo(function FilmstripBar({
     <div 
       ref={containerRef}
       onWheel={handleWheel}
-      className="h-20 bg-app-card/60 border-t border-app-border overflow-hidden select-none py-2 px-4 flex items-center justify-center relative"
+      style={{ height: `${filmstripHeight}px` }}
+      className="bg-app-card/60 border-t border-app-border overflow-hidden select-none py-2 px-4 flex items-center justify-center relative flex-shrink-0"
     >
+      {/* Resizing Handle along the top border */}
+      <div 
+        onMouseDown={handleMouseDown}
+        onDoubleClick={() => {
+          setFilmstripHeight(80);
+          try {
+            localStorage.setItem('rapidready_filmstrip_height', '80');
+          } catch (_) {}
+        }}
+        className="absolute top-0 left-0 right-0 h-2 cursor-row-resize flex items-center justify-center group z-20 hover:bg-accent/20 transition-colors"
+        title="Filmstreifen-Größe anpassen (ziehen, Doppelklick für Standardgröße)"
+      >
+        <div className="w-12 h-1 rounded-full bg-app-border group-hover:bg-accent transition-colors" />
+      </div>
+
       <div className="flex items-center justify-center gap-2">
         {visibleImages.map((img, localIdx) => {
           const itemIndex = startIndex + localIdx;
@@ -218,6 +289,8 @@ const FilmstripBar = React.memo(function FilmstripBar({
               key={img.path}
               img={img}
               isActive={activeImageIndex === itemIndex}
+              thumbWidth={thumbWidth}
+              thumbHeight={thumbHeight}
               onSelect={() => onSelect(itemIndex)}
             />
           );
@@ -287,6 +360,17 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
     return true; // 'all'
   });
   const activeImage = displayedImages[activeImageIndex];
+
+  // Sync active photo folder with libraryStore so sidebar tree highlights and scrolls to location
+  useEffect(() => {
+    if (activeImage?.path) {
+      const lastSlash = activeImage.path.lastIndexOf('/');
+      const folder = lastSlash > 0 ? activeImage.path.substring(0, lastSlash) : null;
+      useLibraryStore.getState().setActiveImageFolder(folder);
+    } else {
+      useLibraryStore.getState().setActiveImageFolder(null);
+    }
+  }, [activeImage?.path]);
 
   // Dynamic Grid Math: responsive column count & precise row height
   const [containerWidth, setContainerWidth] = useState(1200);

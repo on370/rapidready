@@ -57,6 +57,8 @@ interface LibraryStore {
   setGridThumbnailSize: (size: number) => void;
   loupeScale: number;
   setLoupeScale: (scale: number) => void;
+  activeImageFolder: string | null;
+  setActiveImageFolder: (folder: string | null) => void;
 }
 
 const getSavedThumbSize = (): number => {
@@ -152,4 +154,6 @@ export const useLibraryStore = create<LibraryStore>((set) => ({
   },
   loupeScale: 0,
   setLoupeScale: (scale) => set({ loupeScale: scale }),
+  activeImageFolder: null,
+  setActiveImageFolder: (folder) => set({ activeImageFolder: folder }),
 }));

@@ -1,7 +1,7 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useSettingsStore } from "../../../stores/settingsStore";
-import { Bookmark, ChevronDown, Plus, HardDrive, Folder, ChevronRight, FolderOpen, Sparkles, Loader2 } from "lucide-react";
+import { Bookmark, ChevronDown, Plus, HardDrive, Folder, ChevronRight, FolderOpen, Sparkles, Loader2, Camera } from "lucide-react";
 import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from "@tauri-apps/api/core";
 import { useLibraryStore, LibraryImage } from "../../../stores/libraryStore";
@@ -51,15 +51,47 @@ function buildTree(images: LibraryImage[], rootPath: string): TreeNode {
 
 function TreeView({ node, depth = 0, rootFolder }: { node: TreeNode, depth?: number, rootFolder: string }) {
   const [isOpen, setIsOpen] = useState(depth < 2);
-  const { activeFolderPath, setActiveFolderPath } = useLibraryStore();
+  const { activeFolderPath, setActiveFolderPath, activeImageFolder } = useLibraryStore();
+  const nodeRef = useRef<HTMLDivElement>(null);
   
   const isSelected = activeFolderPath === node.path;
+  const isImageLocation = activeImageFolder === node.path;
+  const isAncestorOfImage = activeImageFolder ? (activeImageFolder === node.path || activeImageFolder.startsWith(node.path + '/')) : false;
+
+  // Auto-expand tree branch leading to the active photo
+  useEffect(() => {
+    if (isAncestorOfImage) {
+      setIsOpen(true);
+    }
+  }, [isAncestorOfImage]);
+
+  // Auto-scroll the folder containing the active photo into view
+  useEffect(() => {
+    if (isImageLocation && nodeRef.current) {
+      const timer = setTimeout(() => {
+        nodeRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }, 80);
+      return () => clearTimeout(timer);
+    }
+  }, [isImageLocation]);
+
   const childNodes = Object.values(node.children).sort((a, b) => a.name.localeCompare(b.name));
+
+  // Distinct visual styling for folder selection vs. photo location (Variant C: clean icon/badge distinction)
+  let containerStyle = "hover:bg-app-hover text-txt-secondary";
+  if (isSelected && isImageLocation) {
+    containerStyle = "bg-accent/20 text-accent font-semibold";
+  } else if (isSelected) {
+    containerStyle = "bg-accent/15 text-accent font-semibold";
+  } else if (isImageLocation) {
+    containerStyle = "bg-amber-400/10 text-txt-primary font-medium";
+  }
 
   return (
     <div className="space-y-0.5">
       <div 
-        className={`flex items-center gap-1.5 py-1 px-2 rounded-lg transition-colors cursor-pointer text-left ${isSelected ? 'bg-accent/15' : 'hover:bg-app-hover'}`}
+        ref={nodeRef}
+        className={`flex items-center gap-1.5 py-1 px-2 rounded-lg transition-colors cursor-pointer text-left ${containerStyle}`}
         style={{ paddingLeft: `${depth * 12 + 4}px` }}
         onClick={() => {
           if (isSelected) {
@@ -78,9 +110,35 @@ function TreeView({ node, depth = 0, rootFolder }: { node: TreeNode, depth?: num
         >
           {isOpen ? <ChevronDown className="w-3.5 h-3.5 text-txt-tertiary" /> : <ChevronRight className="w-3.5 h-3.5 text-txt-tertiary" />}
         </div>
-        <Folder className={`w-3.5 h-3.5 ${isSelected ? 'text-accent' : 'text-warning/70'}`} />
-        <span className={`text-xs truncate flex-1 ${isSelected ? 'text-accent font-semibold' : 'text-txt-secondary'}`} title={node.name}>{node.name}</span>
-        {node.fileCount > 0 && <span className="text-[10px] text-txt-tertiary ml-auto font-mono">({node.fileCount})</span>}
+        
+        {isImageLocation ? (
+          <FolderOpen className={`w-3.5 h-3.5 ${isSelected ? 'text-accent' : 'text-amber-400'}`} />
+        ) : (
+          <Folder className={`w-3.5 h-3.5 ${isSelected ? 'text-accent' : 'text-warning/70'}`} />
+        )}
+        
+        <span 
+          className={`text-xs truncate flex-1 ${
+            isSelected ? 'text-accent font-semibold' : isImageLocation ? 'text-txt-primary font-medium' : 'text-txt-secondary'
+          }`} 
+          title={node.name}
+        >
+          {node.name}
+        </span>
+
+        {isImageLocation && (
+          <span title="Enthält das aktuell ausgewählte Foto" className="flex items-center flex-shrink-0">
+            <Camera 
+              className={`w-3 h-3 animate-pulse ${isSelected ? 'text-accent' : 'text-amber-400'}`} 
+            />
+          </span>
+        )}
+
+        {node.fileCount > 0 && (
+          <span className="text-[10px] text-txt-tertiary ml-auto font-mono flex-shrink-0">
+            ({node.fileCount})
+          </span>
+        )}
       </div>
       
       {isOpen && childNodes.length > 0 && (
