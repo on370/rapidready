@@ -13,6 +13,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
+        .manage(commands::SidecarWatcherState::default())
         .setup(|app| {
             let handle = app.handle();
             if let Ok(menu) = menu::build_menu(handle) {
@@ -119,6 +120,8 @@ pub fn run() {
             commands::get_removable_drives,
             commands::scan_archive_directory,
             commands::set_culling_state,
+            commands::get_culling_state,
+            commands::start_watching_directory,
             commands::delete_files,
             commands::open_in_rapidraw,
             commands::show_in_finder,

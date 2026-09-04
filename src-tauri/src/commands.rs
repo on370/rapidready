@@ -2,7 +2,9 @@ use rapidready_core::scanner::{scan_directory, ScannedFile};
 use rapidready_core::importer::{execute_import as core_execute_import, ImportProgress};
 use rapidready_core::import_index::ImportIndex;
 use std::path::PathBuf;
+use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
+use notify::{Watcher, RecommendedWatcher};
 
 fn get_import_index(app: &AppHandle) -> Result<ImportIndex, String> {
     let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
@@ -166,9 +168,88 @@ pub fn get_removable_drives() -> Vec<rapidready_core::drives::DriveInfo> {
     rapidready_core::drives::get_removable_drives()
 }
 
+pub struct SidecarWatcherState {
+    pub watcher: Mutex<Option<RecommendedWatcher>>,
+    pub watched_dir: Mutex<Option<PathBuf>>,
+}
+
+impl Default for SidecarWatcherState {
+    fn default() -> Self {
+        Self {
+            watcher: Mutex::new(None),
+            watched_dir: Mutex::new(None),
+        }
+    }
+}
+
+pub fn start_watching_dir_internal(
+    app: &AppHandle,
+    dir: &std::path::Path,
+    state: &SidecarWatcherState,
+) -> Result<(), String> {
+    if !dir.exists() || !dir.is_dir() {
+        return Ok(());
+    }
+
+    let should_watch = {
+        let current = state.watched_dir.lock().unwrap();
+        match &*current {
+            Some(w) => *w != dir && !dir.starts_with(w),
+            None => true,
+        }
+    };
+
+    if should_watch {
+        let app_handle = app.clone();
+        let mut watcher = notify::recommended_watcher(move |res: Result<notify::Event, notify::Error>| {
+            if let Ok(event) = res {
+                for p in event.paths {
+                    let path_str = p.to_string_lossy();
+                    if path_str.ends_with(".rrdata") {
+                        let img_path_str = path_str.strip_suffix(".rrdata").unwrap_or(&path_str).to_string();
+                        let img_path = PathBuf::from(&img_path_str);
+                        let culling = rapidready_core::culling::read_sidecar(&img_path);
+                        let _ = app_handle.emit("sidecar-updated", serde_json::json!({
+                            "path": img_path_str,
+                            "culling": culling
+                        }));
+                    }
+                }
+            }
+        }).map_err(|e| e.to_string())?;
+
+        watcher.watch(dir, notify::RecursiveMode::Recursive).map_err(|e| e.to_string())?;
+        *state.watcher.lock().unwrap() = Some(watcher);
+        *state.watched_dir.lock().unwrap() = Some(dir.to_path_buf());
+    }
+    Ok(())
+}
+
 #[tauri::command]
-pub async fn scan_archive_directory(path: String) -> Result<Vec<rapidready_core::archive::ArchiveFile>, String> {
+pub fn start_watching_directory(
+    app: AppHandle,
+    path: String,
+    state: tauri::State<'_, SidecarWatcherState>,
+) -> Result<(), String> {
     let dir = PathBuf::from(path);
+    start_watching_dir_internal(&app, &dir, &state)
+}
+
+#[tauri::command]
+pub fn get_culling_state(path: String) -> rapidready_core::culling::CullingState {
+    let p = PathBuf::from(path);
+    rapidready_core::culling::read_sidecar(&p)
+}
+
+#[tauri::command]
+pub async fn scan_archive_directory(
+    app: AppHandle,
+    path: String,
+    state: tauri::State<'_, SidecarWatcherState>,
+) -> Result<Vec<rapidready_core::archive::ArchiveFile>, String> {
+    let dir = PathBuf::from(&path);
+    let _ = start_watching_dir_internal(&app, &dir, &state);
+
     tauri::async_runtime::spawn_blocking(move || {
         rapidready_core::archive::scan_archive_directory(&dir).map_err(|e| e.to_string())
     })

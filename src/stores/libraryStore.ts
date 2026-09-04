@@ -41,6 +41,7 @@ interface LibraryStore {
   setAutoAdvance: (val: boolean) => void;
   
   updateCullingState: (index: number, partialState: Partial<CullingState>) => void;
+  updateImageCullingByPath: (path: string, culling: CullingState) => void;
   invertScrollZoom: boolean;
   setInvertScrollZoom: (b: boolean) => void;
   
@@ -86,6 +87,28 @@ export const useLibraryStore = create<LibraryStore>((set) => ({
         }
       };
     }
+    return { images: newImages };
+  }),
+  updateImageCullingByPath: (path, culling) => set((state) => {
+    const idx = state.images.findIndex((img) => img.path === path);
+    if (idx === -1) return state;
+    const cur = state.images[idx].culling;
+    if (
+      cur.rating === culling.rating &&
+      cur.flag === culling.flag &&
+      cur.color === culling.color &&
+      JSON.stringify(cur.tags) === JSON.stringify(culling.tags)
+    ) {
+      return state;
+    }
+    const newImages = [...state.images];
+    newImages[idx] = {
+      ...newImages[idx],
+      culling: {
+        ...newImages[idx].culling,
+        ...culling,
+      },
+    };
     return { images: newImages };
   }),
   invertScrollZoom: false,
