@@ -1,5 +1,5 @@
 import React, { useEffect, useCallback, useState, useRef } from "react";
-import { LayoutGrid, Scan, PanelRight, Zap, Star, Trash2, ChevronLeft, ChevronRight, Check, Rocket, FolderOpen, Film, Loader2 } from "lucide-react";
+import { LayoutGrid, Scan, PanelRight, Zap, Star, Trash2, ChevronLeft, ChevronRight, Check, Rocket, FolderOpen, Film, Loader2, ZoomIn, ZoomOut } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useLibraryStore, LibraryImage } from "../../../stores/libraryStore";
 import { ZoomableImage } from "./ZoomableImage";
@@ -8,26 +8,57 @@ import { invoke } from "@tauri-apps/api/core";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
+const loadedThumbnailCache = new Set<string>();
+
 const GridThumbnailItem = React.memo(function GridThumbnailItem({
   img,
   isSelected,
+  isScrolling,
   onSelect,
   onOpen,
 }: {
   img: LibraryImage;
   isSelected: boolean;
+  isScrolling: boolean;
   onSelect: () => void;
   onOpen: () => void;
 }) {
+  const isLoaded = loadedThumbnailCache.has(img.path);
+  const [shouldLoad, setShouldLoad] = useState(isLoaded || !isScrolling);
+
+  useEffect(() => {
+    if (shouldLoad) return;
+    if (isScrolling) return;
+
+    // When user pauses scrubbing for 150ms, load visible thumbnails
+    const timer = setTimeout(() => {
+      setShouldLoad(true);
+    }, 150);
+
+    return () => clearTimeout(timer);
+  }, [isScrolling, shouldLoad]);
+
   return (
     <div 
-      className={`aspect-[3/2] rounded-lg border cursor-pointer relative overflow-hidden group ${
+      className={`aspect-[3/2] rounded-lg border cursor-pointer relative overflow-hidden bg-app-card group transition-colors ${
         isSelected ? 'border-accent ring-2 ring-accent' : 'border-app-border hover:border-app-border-hover'
       }`}
       onClick={onSelect}
       onDoubleClick={onOpen}
     >
-      <img src={`rr-image://localhost${img.path}`} className="w-full h-full object-cover" loading="lazy" alt={img.name} />
+      {shouldLoad ? (
+        <img 
+          src={`rr-image://localhost${img.path}`} 
+          className="w-full h-full object-cover" 
+          loading="lazy" 
+          alt={img.name} 
+          onLoad={() => loadedThumbnailCache.add(img.path)}
+        />
+      ) : (
+        <div className="w-full h-full bg-[#161619] flex items-center justify-center">
+          <div className="w-6 h-6 rounded-md bg-white/[0.03]" />
+        </div>
+      )}
       <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
         {img.culling.flag === 1 && <div className="w-4 h-4 rounded-full bg-success flex items-center justify-center shadow"><Check className="w-3 h-3 text-white" /></div>}
         {img.culling.flag === -1 && <div className="w-4 h-4 rounded-full bg-danger flex items-center justify-center text-[10px] font-bold text-white shadow">X</div>}
@@ -51,21 +82,33 @@ const FilmstripThumbnailItem = React.memo(function FilmstripThumbnailItem({
   isActive: boolean;
   onSelect: () => void;
 }) {
+  const [loaded, setLoaded] = useState(loadedThumbnailCache.has(img.path));
+
   return (
     <div
       onClick={onSelect}
-      className={`w-24 h-16 aspect-[3/2] rounded-lg border relative overflow-hidden flex-shrink-0 cursor-pointer transition-all duration-150 group ${
+      className={`w-24 h-16 aspect-[3/2] rounded-lg border relative overflow-hidden flex-shrink-0 cursor-pointer transition-all duration-150 group bg-app-card ${
         isActive 
-          ? 'border-accent ring-2 ring-accent shadow-md shadow-accent/20' 
-          : 'border-app-border hover:border-app-border-hover opacity-70 hover:opacity-100'
+          ? 'border-accent ring-2 ring-accent shadow-md shadow-accent/20 opacity-100' 
+          : 'border-app-border hover:border-app-border-hover opacity-75 hover:opacity-100'
       }`}
     >
       <img 
         src={`rr-image://localhost${img.path}`} 
-        className="w-full h-full object-cover pointer-events-none" 
-        loading="lazy" 
+        className={`w-full h-full object-cover pointer-events-none transition-opacity duration-150 ${
+          loaded ? 'opacity-100' : 'opacity-0'
+        }`} 
         alt={img.name} 
+        onLoad={() => {
+          loadedThumbnailCache.add(img.path);
+          setLoaded(true);
+        }}
       />
+      {!loaded && (
+        <div className="absolute inset-0 bg-[#161619] flex items-center justify-center pointer-events-none">
+          <div className="w-5 h-5 rounded bg-white/[0.04] animate-pulse" />
+        </div>
+      )}
       <div className="absolute top-1 right-1 flex gap-0.5 pointer-events-none">
         {img.culling.flag === 1 && (
           <div className="w-3.5 h-3.5 rounded-full bg-success flex items-center justify-center shadow">
@@ -91,6 +134,99 @@ const FilmstripThumbnailItem = React.memo(function FilmstripThumbnailItem({
   );
 });
 
+interface FilmstripBarProps {
+  displayedImages: LibraryImage[];
+  activeImageIndex: number;
+  onSelect: (index: number) => void;
+}
+
+const FilmstripBar = React.memo(function FilmstripBar({
+  displayedImages,
+  activeImageIndex,
+  onSelect,
+}: FilmstripBarProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(1200);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const updateWidth = () => {
+      if (el.clientWidth > 0) setContainerWidth(el.clientWidth);
+    };
+    updateWidth();
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 0) {
+          setContainerWidth(entry.contentRect.width);
+        }
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const ITEM_SLOT = 104; // 96px width + 8px gap
+  const paddingX = 32; // 16px left + 16px right
+  const availWidth = Math.max(100, containerWidth - paddingX);
+  
+  // Calculate how many thumbnails fit in the container
+  const maxFit = Math.max(1, Math.floor((availWidth + 8) / ITEM_SLOT));
+  // Prefer an odd number of visible items so active thumbnail is centered
+  const visibleCount = Math.min(displayedImages.length, maxFit % 2 === 0 ? Math.max(1, maxFit - 1) : maxFit);
+  const half = Math.floor(visibleCount / 2);
+
+  // Compute start and end indices so activeImageIndex is centered whenever possible
+  let startIndex = Math.max(0, activeImageIndex - half);
+  let endIndex = startIndex + visibleCount;
+  if (endIndex > displayedImages.length) {
+    endIndex = displayedImages.length;
+    startIndex = Math.max(0, endIndex - visibleCount);
+  }
+
+  const visibleImages = displayedImages.slice(startIndex, endIndex);
+
+  // Translate mouse wheel / trackpad scrolling to step between photos
+  const wheelAccumulator = useRef(0);
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    wheelAccumulator.current += delta;
+    if (wheelAccumulator.current > 35) {
+      wheelAccumulator.current = 0;
+      if (activeImageIndex < displayedImages.length - 1) {
+        onSelect(activeImageIndex + 1);
+      }
+    } else if (wheelAccumulator.current < -35) {
+      wheelAccumulator.current = 0;
+      if (activeImageIndex > 0) {
+        onSelect(activeImageIndex - 1);
+      }
+    }
+  };
+
+  return (
+    <div 
+      ref={containerRef}
+      onWheel={handleWheel}
+      className="h-20 bg-app-card/60 border-t border-app-border overflow-hidden select-none py-2 px-4 flex items-center justify-center relative"
+    >
+      <div className="flex items-center justify-center gap-2">
+        {visibleImages.map((img, localIdx) => {
+          const itemIndex = startIndex + localIdx;
+          return (
+            <FilmstripThumbnailItem
+              key={img.path}
+              img={img}
+              isActive={activeImageIndex === itemIndex}
+              onSelect={() => onSelect(itemIndex)}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+});
+
 interface LibraryCenterProps {
   viewMode: 'grid' | 'loupe';
   setViewMode: (mode: 'grid' | 'loupe') => void;
@@ -102,14 +238,14 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
   const { 
     images, activeImageIndex, setActiveImageIndex, autoAdvance, 
     updateCullingState, activeFolderPath, filterMode, setFilterMode,
-    lastImportPaths, isViewingLastImport, isLoading 
+    lastImportPaths, isViewingLastImport, isLoading,
+    gridThumbnailSize, setGridThumbnailSize, loupeScale, setLoupeScale
   } = useLibraryStore();
 
   const toolbarRef = useRef<HTMLDivElement>(null);
   const [showActionIcons, setShowActionIcons] = useState(false);
   const [showFilmstrip, setShowFilmstrip] = useState(true);
   const gridContainerRef = useRef<HTMLDivElement>(null);
-  const filmstripContainerRef = useRef<HTMLDivElement>(null);
 
   // Measure toolbar container width directly (not screen width!)
   useEffect(() => {
@@ -128,11 +264,12 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
 
   // Debounce preloading so rapid key-navigation doesn't hammer QuickLook with full-res requests
   useEffect(() => {
+    if (viewMode !== 'loupe') return;
     const timer = setTimeout(() => {
       setDebouncedActiveIndex(activeImageIndex);
-    }, 250);
+    }, 400);
     return () => clearTimeout(timer);
-  }, [activeImageIndex]);
+  }, [activeImageIndex, viewMode]);
 
   const scopedImages = isViewingLastImport
     ? images.filter(img => lastImportPaths.includes(img.path))
@@ -176,7 +313,7 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
   // Available width inside padding (p-6 = 24px left + 24px right = 48px)
   const paddingX = 48;
   const gap = 12; // gap-3 = 12px
-  const targetWidth = 190;
+  const targetWidth = gridThumbnailSize;
   const availableWidth = Math.max(100, containerWidth - paddingX);
 
   // Responsive number of columns based on container width
@@ -192,7 +329,8 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
     getScrollElement: () => gridContainerRef.current,
     estimateSize: () => itemHeight,
     gap,
-    overscan: 3,
+    overscan: 2,
+    isScrollingResetDelay: 100,
   });
 
   // Re-measure virtualizer whenever container width, columns or itemHeight change
@@ -200,20 +338,6 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
     rowVirtualizer.measure();
   }, [itemHeight, numColumns]);
 
-  const filmstripVirtualizer = useVirtualizer({
-    count: displayedImages.length,
-    getScrollElement: () => filmstripContainerRef.current,
-    estimateSize: () => 104,
-    horizontal: true,
-    overscan: 5,
-  });
-
-  // Auto-scroll active thumbnail in filmstrip into view
-  useEffect(() => {
-    if (viewMode === 'loupe' && showFilmstrip && displayedImages.length > 0 && activeImageIndex >= 0) {
-      filmstripVirtualizer.scrollToIndex(activeImageIndex, { align: 'center', behavior: 'smooth' });
-    }
-  }, [activeImageIndex, viewMode, showFilmstrip, displayedImages.length]);
 
   // Auto-scroll active thumbnail in grid into view
   useEffect(() => {
@@ -338,7 +462,7 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
           <p className="text-xs text-txt-tertiary mt-0.5">{displayedImages.length} {t('previewFiles', 'files')} · {(displayedImages.reduce((acc, img) => acc + img.size, 0) / (1024*1024)).toFixed(1)} MB</p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          {/* Auto-Advance (UI setting - placed left of Grid/Loupe) */}
+          {/* Auto-Advance (UI setting - placed left) */}
           <button 
             onClick={() => useLibraryStore.getState().setAutoAdvance(!autoAdvance)} 
             className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer ${autoAdvance ? 'bg-warning/15 border-warning/30 text-warning hover:bg-warning/25' : 'bg-app-card border-app-border text-txt-tertiary hover:text-txt-secondary hover:border-app-border-hover'}`}
@@ -348,7 +472,74 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
             <span className="hidden sm:inline">Auto-Advance</span>
           </button>
 
-          <div className="w-px h-5 bg-app-border mx-1"></div>
+          <div className="w-px h-5 bg-app-border mx-0.5"></div>
+
+          {/* Dual-Mode Zoom Slider (Grid Thumbnail Zoom / Loupe Image Zoom) */}
+          <div 
+            className="flex items-center gap-1.5 bg-app-card border border-app-border rounded-lg px-2 py-1 h-[30px]"
+            title={
+              viewMode === 'grid' 
+                ? `Thumbnail-Größe: ${gridThumbnailSize}px` 
+                : loupeScale <= 0 
+                  ? 'Zoom: Einpassen (Fit)' 
+                  : `Zoom: ${Math.round(loupeScale * 100)}%`
+            }
+          >
+            <button 
+              onClick={() => {
+                if (viewMode === 'grid') {
+                  setGridThumbnailSize(Math.max(120, gridThumbnailSize - 20));
+                } else {
+                  if (loupeScale <= 1) {
+                    setLoupeScale(0);
+                  } else {
+                    setLoupeScale(Math.max(1, Math.round((loupeScale - 0.25) * 100) / 100));
+                  }
+                }
+              }}
+              className="text-txt-tertiary hover:text-txt-secondary transition-colors cursor-pointer p-0.5 rounded"
+              title={viewMode === 'grid' ? 'Kleinere Thumbnails' : 'Verkleinern'}
+            >
+              <ZoomOut className="w-3.5 h-3.5" />
+            </button>
+
+            <input 
+              type="range"
+              min={viewMode === 'grid' ? 120 : 0}
+              max={viewMode === 'grid' ? 400 : 5}
+              step={viewMode === 'grid' ? 10 : 0.1}
+              value={viewMode === 'grid' ? gridThumbnailSize : loupeScale}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value);
+                if (viewMode === 'grid') {
+                  setGridThumbnailSize(val);
+                } else {
+                  setLoupeScale(val < 0.5 ? 0 : val);
+                }
+              }}
+              className="zoom-slider w-16 sm:w-20 md:w-24 cursor-pointer"
+            />
+
+            <button 
+              onClick={() => {
+                if (viewMode === 'grid') {
+                  setGridThumbnailSize(Math.min(400, gridThumbnailSize + 20));
+                } else {
+                  if (loupeScale <= 0) {
+                    setLoupeScale(1);
+                  } else {
+                    setLoupeScale(Math.min(5, Math.round((loupeScale + 0.25) * 100) / 100));
+                  }
+                }
+              }}
+              className="text-txt-tertiary hover:text-txt-secondary transition-colors cursor-pointer p-0.5 rounded"
+              title={viewMode === 'grid' ? 'Größere Thumbnails' : 'Vergrößern'}
+            >
+              <ZoomIn className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="w-px h-5 bg-app-border mx-0.5"></div>
 
           {/* View mode toggle: Grid / Loupe */}
           <div className="flex items-center bg-app-card border border-app-border rounded-lg p-0.5">
@@ -511,6 +702,7 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
                           key={img.path}
                           img={img}
                           isSelected={activeImageIndex === globalIdx}
+                          isScrolling={rowVirtualizer.isScrolling}
                           onSelect={() => setActiveImageIndex(globalIdx)}
                           onOpen={() => {
                             setActiveImageIndex(globalIdx);
@@ -539,11 +731,11 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
                 {/* Preload Previous and Next Full-Res images when navigation pauses */}
                 {debouncedActiveIndex === activeImageIndex && (
                   <>
-                    {activeImageIndex > 0 && (
-                      <img src={`rr-image://localhost${displayedImages[activeImageIndex - 1].path}?fullres=true`} className="hidden" />
+                    {debouncedActiveIndex > 0 && (
+                      <img src={`rr-image://localhost${displayedImages[debouncedActiveIndex - 1].path}?fullres=true`} className="hidden" />
                     )}
-                    {activeImageIndex < displayedImages.length - 1 && (
-                      <img src={`rr-image://localhost${displayedImages[activeImageIndex + 1].path}?fullres=true`} className="hidden" />
+                    {debouncedActiveIndex < displayedImages.length - 1 && (
+                      <img src={`rr-image://localhost${displayedImages[debouncedActiveIndex + 1].path}?fullres=true`} className="hidden" />
                     )}
                   </>
                 )}
@@ -554,42 +746,11 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
 
           {/* Filmstrip Bar */}
           {showFilmstrip && (
-            <div 
-              ref={filmstripContainerRef}
-              className="h-20 bg-app-card/60 border-t border-app-border flex items-center overflow-x-auto overflow-y-hidden flex-shrink-0 select-none scrollbar-thin px-3"
-            >
-              <div
-                style={{
-                  width: `${filmstripVirtualizer.getTotalSize()}px`,
-                  height: '64px',
-                  position: 'relative',
-                }}
-              >
-                {filmstripVirtualizer.getVirtualItems().map((virtualItem) => {
-                  const img = displayedImages[virtualItem.index];
-                  if (!img) return null;
-                  return (
-                    <div
-                      key={img.path}
-                      style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        transform: `translateX(${virtualItem.start}px)`,
-                        width: '96px',
-                        height: '64px',
-                      }}
-                    >
-                      <FilmstripThumbnailItem
-                        img={img}
-                        isActive={activeImageIndex === virtualItem.index}
-                        onSelect={() => setActiveImageIndex(virtualItem.index)}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+            <FilmstripBar
+              displayedImages={displayedImages}
+              activeImageIndex={activeImageIndex}
+              onSelect={setActiveImageIndex}
+            />
           )}
 
           {/* Bottom Bar: Prev/Next Buttons + Info + Filmstrip Toggle */}

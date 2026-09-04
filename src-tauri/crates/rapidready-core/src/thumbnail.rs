@@ -8,10 +8,10 @@ use thumb_rs::{get_thumbnail, ThumbnailScale};
 use anyhow::{Context, Result};
 use lru::LruCache;
 
-// In-memory LRU cache holding up to 600 thumbnail/preview JPEGs (~20-30MB RAM)
+// In-memory LRU cache holding up to 10,000 thumbnail/preview JPEGs (~200MB RAM)
 // Provides instantaneous ~0.01ms responses on repeat requests or grid scrolls
 static THUMBNAIL_CACHE: LazyLock<Mutex<LruCache<String, Vec<u8>>>> = LazyLock::new(|| {
-    Mutex::new(LruCache::new(NonZeroUsize::new(600).unwrap()))
+    Mutex::new(LruCache::new(NonZeroUsize::new(10000).unwrap()))
 });
 
 pub fn find_companion_jpeg(raw_path: &Path) -> Option<std::path::PathBuf> {
@@ -121,7 +121,7 @@ mod tests {
 
     #[test]
     fn test_find_companion_jpeg() {
-        let temp_dir = std::env::temp_dir().join(format!("rr_test_{}", std::process::id()));
+        let temp_dir = std::env::temp_dir().join(format!("rr_thumb_test_{}", std::process::id()));
         let _ = std::fs::create_dir_all(&temp_dir);
         let raw_path = temp_dir.join("IMG_0001.CR3");
         let jpg_path = temp_dir.join("IMG_0001.JPG");

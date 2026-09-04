@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, MouseEvent as ReactMouseEvent, WheelEvent } from "react";
+import { useState, useRef, useEffect, useCallback, MouseEvent as ReactMouseEvent, WheelEvent } from "react";
 import { useLibraryStore } from "../../../stores/libraryStore";
 
 interface ZoomableImageProps {
@@ -8,14 +8,15 @@ interface ZoomableImageProps {
 }
 
 export function ZoomableImage({ src, previewSrc, alt }: ZoomableImageProps) {
-  const { invertScrollZoom } = useLibraryStore();
+  const { invertScrollZoom, loupeScale, setLoupeScale } = useLibraryStore();
   const [currentSrc, setCurrentSrc] = useState(previewSrc || src);
-  const [scale, setScale] = useState(1);
-  const [isZoomed, setIsZoomed] = useState(false);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [isMinimapDragging, setIsMinimapDragging] = useState(false);
   
+  const isZoomed = loupeScale > 0;
+  const scale = loupeScale > 0 ? loupeScale : 1;
+
   const containerRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const minimapRef = useRef<HTMLDivElement>(null);
@@ -23,8 +24,7 @@ export function ZoomableImage({ src, previewSrc, alt }: ZoomableImageProps) {
 
   // Reset state & progressive load: show preview immediately, load full-res in background
   useEffect(() => {
-    setIsZoomed(false);
-    setScale(1);
+    setLoupeScale(0);
     setPosition({ x: 0, y: 0 });
 
     if (previewSrc) {
@@ -35,7 +35,66 @@ export function ZoomableImage({ src, previewSrc, alt }: ZoomableImageProps) {
     img.onload = () => {
       setCurrentSrc(src);
     };
-  }, [src, previewSrc]);
+  }, [src, previewSrc, setLoupeScale]);
+
+  const clampAndSetPosition = useCallback((x: number, y: number, currentScale = scale) => {
+    if (!containerRef.current || !imageRef.current) return;
+    const contRect = containerRef.current.getBoundingClientRect();
+    
+    const imgW = imageRef.current.naturalWidth * currentScale;
+    const imgH = imageRef.current.naturalHeight * currentScale;
+    
+    const maxTx = Math.max(0, (imgW - contRect.width) / 2);
+    const maxTy = Math.max(0, (imgH - contRect.height) / 2);
+
+    setPosition({
+      x: Math.max(-maxTx, Math.min(maxTx, x)),
+      y: Math.max(-maxTy, Math.min(maxTy, y))
+    });
+  }, [scale]);
+
+  // Keep position clamped when loupeScale changes externally
+  useEffect(() => {
+    if (loupeScale <= 0) {
+      setPosition({ x: 0, y: 0 });
+    } else {
+      clampAndSetPosition(position.x, position.y, loupeScale);
+    }
+  }, [loupeScale, clampAndSetPosition]);
+
+  const performZoomIn = useCallback((amount: number) => {
+    const base = loupeScale <= 0 ? 1 : loupeScale;
+    const next = Math.min(5, Math.round((base + amount) * 100) / 100);
+    setLoupeScale(next);
+  }, [loupeScale, setLoupeScale]);
+
+  const performZoomOut = useCallback((amount: number) => {
+    if (loupeScale <= 0) return;
+    const next = Math.round((loupeScale - amount) * 100) / 100;
+    if (next < 0.8) {
+      setLoupeScale(0);
+      setPosition({ x: 0, y: 0 });
+    } else {
+      setLoupeScale(next);
+    }
+  }, [loupeScale, setLoupeScale]);
+
+  const toggleZoom = useCallback((e?: ReactMouseEvent) => {
+    if (isZoomed) {
+      setLoupeScale(0);
+      setPosition({ x: 0, y: 0 });
+    } else {
+      setLoupeScale(1); // 1 is 100% native resolution
+      if (e && containerRef.current && imageRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        const clickX = e.clientX - rect.left - rect.width / 2;
+        const clickY = e.clientY - rect.top - rect.height / 2;
+        clampAndSetPosition(-clickX, -clickY, 1);
+      } else {
+        setPosition({ x: 0, y: 0 });
+      }
+    }
+  }, [isZoomed, setLoupeScale, clampAndSetPosition]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -53,82 +112,7 @@ export function ZoomableImage({ src, previewSrc, alt }: ZoomableImageProps) {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isZoomed]);
-
-  const getFitScale = () => {
-    if (!containerRef.current || !imageRef.current) return 1;
-    const cW = containerRef.current.clientWidth;
-    const cH = containerRef.current.clientHeight;
-    const iW = imageRef.current.naturalWidth;
-    const iH = imageRef.current.naturalHeight;
-    if (!iW || !iH) return 1;
-    return Math.min(1, Math.min(cW / iW, cH / iH)); // Cap at 1 so fit scale isn't larger than native
-  };
-
-  const performZoomIn = (amount: number) => {
-    if (!isZoomed) {
-      setIsZoomed(true);
-      setScale(getFitScale() + amount);
-    } else {
-      setScale(s => Math.min(s + amount, 5));
-    }
-  };
-
-  const performZoomOut = (amount: number) => {
-    if (!isZoomed) return;
-    const fitScale = getFitScale();
-    setScale(s => {
-      const next = s - amount;
-      if (next <= fitScale) {
-        setIsZoomed(false);
-        setPosition({ x: 0, y: 0 });
-        return 1;
-      }
-      return next;
-    });
-  };
-
-  const toggleZoom = (e?: ReactMouseEvent) => {
-    if (isZoomed) {
-      setIsZoomed(false);
-      setScale(1);
-      setPosition({ x: 0, y: 0 });
-    } else {
-      setIsZoomed(true);
-      setScale(1); // 1 is 100% native resolution
-      if (e && containerRef.current && imageRef.current) {
-        const rect = containerRef.current.getBoundingClientRect();
-        const clickX = e.clientX - rect.left - rect.width / 2;
-        const clickY = e.clientY - rect.top - rect.height / 2;
-        clampAndSetPosition(-clickX, -clickY);
-      } else {
-        setPosition({ x: 0, y: 0 });
-      }
-    }
-  };
-
-  const clampAndSetPosition = (x: number, y: number) => {
-    if (!containerRef.current || !imageRef.current) return;
-    const contRect = containerRef.current.getBoundingClientRect();
-    
-    // Max translation depends on image dimensions and scale
-    // If the image is smaller than container, translation is 0
-    // If larger, max translation is (imgSize * scale - contSize) / 2
-    
-    // We assume the image displays at its natural size when zoomed, 
-    // multiplied by our explicit scale factor.
-    // The browser calculates actual bounding rect size for us!
-    const imgW = imageRef.current.naturalWidth * scale;
-    const imgH = imageRef.current.naturalHeight * scale;
-    
-    const maxTx = Math.max(0, (imgW - contRect.width) / 2);
-    const maxTy = Math.max(0, (imgH - contRect.height) / 2);
-
-    setPosition({
-      x: Math.max(-maxTx, Math.min(maxTx, x)),
-      y: Math.max(-maxTy, Math.min(maxTy, y))
-    });
-  };
+  }, [toggleZoom, performZoomIn, performZoomOut]);
 
   const onMouseDown = (e: ReactMouseEvent) => {
     if (!isZoomed) {

@@ -52,7 +52,23 @@ interface LibraryStore {
   isViewingLastImport: boolean;
   setIsViewingLastImport: (viewing: boolean) => void;
   setLastImportPaths: (paths: string[]) => void;
+  
+  gridThumbnailSize: number;
+  setGridThumbnailSize: (size: number) => void;
+  loupeScale: number;
+  setLoupeScale: (scale: number) => void;
 }
+
+const getSavedThumbSize = (): number => {
+  try {
+    const saved = localStorage.getItem('rapidready_thumb_size');
+    if (saved) {
+      const parsed = parseInt(saved, 10);
+      if (!isNaN(parsed)) return Math.max(120, Math.min(400, parsed));
+    }
+  } catch (_) {}
+  return 190;
+};
 
 export const useLibraryStore = create<LibraryStore>((set) => ({
   images: [],
@@ -125,5 +141,15 @@ export const useLibraryStore = create<LibraryStore>((set) => ({
     return { images: newImages };
   }),
   invertScrollZoom: false,
-  setInvertScrollZoom: (invertScrollZoom) => set({ invertScrollZoom })
+  setInvertScrollZoom: (invertScrollZoom) => set({ invertScrollZoom }),
+  
+  gridThumbnailSize: getSavedThumbSize(),
+  setGridThumbnailSize: (size) => {
+    try {
+      localStorage.setItem('rapidready_thumb_size', size.toString());
+    } catch (_) {}
+    set({ gridThumbnailSize: size });
+  },
+  loupeScale: 0,
+  setLoupeScale: (scale) => set({ loupeScale: scale }),
 }));

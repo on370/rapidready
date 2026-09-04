@@ -250,3 +250,37 @@ html, body, #root {
   overflow: hidden;
   background-color: var(--color-app-deepest);
 }
+
+/* ── Zoom Slider Custom Handle ────────────────────────── */
+input[type="range"].zoom-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--color-app-border);
+  height: 3px;
+  border-radius: 2px;
+  outline: none;
+}
+
+input[type="range"].zoom-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #a1a1aa; /* soft light gray (zinc-400) */
+  border: 1px solid #71717a; /* zinc-500 */
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  transition: transform 0.1s ease, background-color 0.15s ease;
+}
+
+input[type="range"].zoom-slider::-webkit-slider-thumb:hover {
+  background: #d4d4d8; /* zinc-300 */
+  transform: scale(1.2);
+}
+
+input[type="range"].zoom-slider::-webkit-slider-thumb:active {
+  background: var(--color-accent);
+  border-color: var(--color-accent-hover);
+  transform: scale(1.15);
+}
