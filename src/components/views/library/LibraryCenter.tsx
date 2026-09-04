@@ -1,4 +1,4 @@
-import { LayoutGrid, Scan, PanelRight, Zap, Star, Trash2, ChevronLeft, ChevronRight, Check, Rocket, FolderOpen } from "lucide-react";
+import { LayoutGrid, Scan, PanelRight, Zap, Star, Trash2, ChevronLeft, ChevronRight, Check, Rocket, FolderOpen, Film } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useLibraryStore } from "../../../stores/libraryStore";
 import { ZoomableImage } from "./ZoomableImage";
@@ -23,6 +23,9 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
 
   const toolbarRef = useRef<HTMLDivElement>(null);
   const [showActionIcons, setShowActionIcons] = useState(false);
+  const [showFilmstrip, setShowFilmstrip] = useState(true);
+  const filmstripContainerRef = useRef<HTMLDivElement>(null);
+  const activeThumbnailRef = useRef<HTMLDivElement>(null);
 
   // Measure toolbar container width directly (not screen width!)
   useEffect(() => {
@@ -46,6 +49,17 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
     }, 250);
     return () => clearTimeout(timer);
   }, [activeImageIndex]);
+
+  // Auto-scroll active thumbnail in filmstrip into view
+  useEffect(() => {
+    if (viewMode === 'loupe' && showFilmstrip && activeThumbnailRef.current) {
+      activeThumbnailRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+        inline: 'center',
+      });
+    }
+  }, [activeImageIndex, viewMode, showFilmstrip]);
 
   const scopedImages = isViewingLastImport
     ? images.filter(img => lastImportPaths.includes(img.path))
@@ -376,17 +390,100 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
             ) : null}
             {activeImage?.culling.flag === -1 && <div className="absolute inset-0 bg-danger/10 pointer-events-none" />}
           </div>
+
+          {/* Filmstrip Bar */}
+          {showFilmstrip && (
+            <div 
+              ref={filmstripContainerRef}
+              className="h-20 bg-app-card/60 border-t border-app-border flex items-center px-3 gap-2 overflow-x-auto overflow-y-hidden flex-shrink-0 select-none scrollbar-thin"
+            >
+              {displayedImages.map((img, idx) => {
+                const isActive = activeImageIndex === idx;
+                return (
+                  <div
+                    key={img.path}
+                    ref={isActive ? activeThumbnailRef : undefined}
+                    onClick={() => setActiveImageIndex(idx)}
+                    className={`h-16 aspect-[3/2] rounded-lg border relative overflow-hidden flex-shrink-0 cursor-pointer transition-all duration-150 group ${
+                      isActive 
+                        ? 'border-accent ring-2 ring-accent shadow-md shadow-accent/20' 
+                        : 'border-app-border hover:border-app-border-hover opacity-70 hover:opacity-100'
+                    }`}
+                  >
+                    <img 
+                      src={`rr-image://localhost${img.path}`} 
+                      className="w-full h-full object-cover pointer-events-none" 
+                      loading="lazy" 
+                      alt={img.name} 
+                    />
+                    {/* Culling flags */}
+                    <div className="absolute top-1 right-1 flex gap-0.5 pointer-events-none">
+                      {img.culling.flag === 1 && (
+                        <div className="w-3.5 h-3.5 rounded-full bg-success flex items-center justify-center shadow">
+                          <Check className="w-2.5 h-2.5 text-white" />
+                        </div>
+                      )}
+                      {img.culling.flag === -1 && (
+                        <div className="w-3.5 h-3.5 rounded-full bg-danger flex items-center justify-center text-[8px] font-bold text-white shadow">
+                          X
+                        </div>
+                      )}
+                    </div>
+                    {/* Rating stars */}
+                    {img.culling.rating > 0 && (
+                      <div className="absolute bottom-0.5 left-1 flex items-center gap-0.5 bg-black/60 px-1 py-0.2 rounded text-[9px] text-warning pointer-events-none font-bold">
+                        <Star className="w-2.5 h-2.5 fill-warning text-warning" />
+                        <span>{img.culling.rating}</span>
+                      </div>
+                    )}
+                    {/* Reject overlay */}
+                    {img.culling.flag === -1 && (
+                      <div className="absolute inset-0 bg-danger/25 pointer-events-none" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Bottom Bar: Prev/Next Buttons + Info + Filmstrip Toggle */}
           <div className="flex items-center justify-between px-4 py-2 border-t border-app-border bg-app-panel/80 flex-shrink-0">
-            <button className="p-1.5 rounded-lg hover:bg-app-hover transition-colors" onClick={() => setActiveImageIndex(Math.max(0, activeImageIndex - 1))}>
-              <ChevronLeft className="w-4 h-4 text-txt-secondary" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button 
+                className="p-1.5 rounded-lg hover:bg-app-hover transition-colors text-txt-secondary hover:text-txt-primary cursor-pointer" 
+                onClick={() => setActiveImageIndex(Math.max(0, activeImageIndex - 1))}
+                title="Vorheriges Bild (← oder K)"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <button 
+                className="p-1.5 rounded-lg hover:bg-app-hover transition-colors text-txt-secondary hover:text-txt-primary cursor-pointer" 
+                onClick={() => setActiveImageIndex(Math.min(displayedImages.length - 1, activeImageIndex + 1))}
+                title="Nächstes Bild (→ oder J)"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+
             <div className="flex items-center gap-4 text-xs text-txt-secondary">
-              <span className="font-semibold text-txt-primary">{activeImage?.name}</span>
+              <span className="font-semibold text-txt-primary truncate max-w-[200px]" title={activeImage?.name}>{activeImage?.name}</span>
               <span>{displayedImages.length > 0 ? activeImageIndex + 1 : 0} / {displayedImages.length}</span>
             </div>
-            <button className="p-1.5 rounded-lg hover:bg-app-hover transition-colors" onClick={() => setActiveImageIndex(Math.min(displayedImages.length - 1, activeImageIndex + 1))}>
-              <ChevronRight className="w-4 h-4 text-txt-secondary" />
-            </button>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowFilmstrip(!showFilmstrip)}
+                className={`px-2.5 py-1 rounded-lg transition-all flex items-center gap-1.5 text-xs font-medium cursor-pointer border ${
+                  showFilmstrip 
+                    ? 'bg-accent/15 border-accent/30 text-accent hover:bg-accent/25' 
+                    : 'bg-app-card border-app-border text-txt-tertiary hover:bg-app-hover hover:text-txt-secondary'
+                }`}
+                title="Filmstreifen ein-/ausblenden"
+              >
+                <Film className="w-3.5 h-3.5" />
+                <span className="text-[11px]">Filmstreifen</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
