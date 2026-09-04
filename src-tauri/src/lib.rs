@@ -15,6 +15,10 @@ pub fn run() {
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(commands::SidecarWatcherState::default())
         .setup(|app| {
+            use tauri::Manager;
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_theme(Some(tauri::Theme::Dark));
+            }
             let handle = app.handle();
             if let Ok(menu) = menu::build_menu(handle) {
                 app.set_menu(menu)?;
@@ -126,7 +130,10 @@ pub fn run() {
             commands::open_in_rapidraw,
             commands::show_in_finder,
             commands::check_path_exists,
-            commands::quit_app
+            commands::quit_app,
+            commands::close_window,
+            commands::minimize_window,
+            commands::toggle_maximize_window
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

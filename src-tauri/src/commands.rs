@@ -327,5 +327,26 @@ pub fn quit_app(app: AppHandle) {
     app.exit(0);
 }
 
+#[tauri::command]
+pub fn close_window(window: tauri::Window) {
+    let _ = window.close();
+}
+
+#[tauri::command]
+pub fn minimize_window(window: tauri::Window) {
+    let _ = window.minimize();
+}
+
+#[tauri::command]
+pub fn toggle_maximize_window(window: tauri::Window) {
+    if let Ok(is_max) = window.is_maximized() {
+        if is_max {
+            let _ = window.unmaximize();
+        } else {
+            let _ = window.maximize();
+        }
+    }
+}
+
 
 
