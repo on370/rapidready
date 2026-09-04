@@ -1,4 +1,12 @@
 {
+  "wizard": {
+    "stepSource": "Source",
+    "stepPreview": "Preview",
+    "stepImport": "Import",
+    "btnBack": "Back",
+    "btnPreview": "Preview",
+    "btnStartImport": "Start Import"
+  },
   "source": {
     "title": "Source",
     "waitingForSd": "Waiting for SD Card...",
@@ -14,7 +22,11 @@
     "alreadyImported": "Already imported",
     "hideImported": "Hide imported",
     "shown": "shown",
-    "hidden": "hidden"
+    "hidden": "hidden",
+    "gbFree": "{{size}} GB free",
+    "sdCardDefault": "SD Card",
+    "pairStats": "{{total}} photos ({{pairs}} pairs)",
+    "baseLabel": "Base:"
   },
   "destination": {
     "title": "Destination",
@@ -47,6 +59,18 @@
     "previewFiles": "files",
     "collection": "Add to Collection"
   },
+  "preview": {
+    "fileInspector": "File Inspector",
+    "selectPhotoHint": "Select a photo from the tree to inspect its metadata",
+    "clickToZoom": "Click picture to zoom",
+    "importedBadge": "Imported",
+    "pairBadge": "Pair",
+    "toggleRaw": "RAW ({{ext}}) - Click to toggle",
+    "toggleJpg": "JPEG - Click to toggle",
+    "excludePhoto": "Exclude photo from import",
+    "photosCount": "{{count}} photos",
+    "photoCountSingle": "{{count}} photo"
+  },
   "execute": {
     "importing": "Importing Files",
     "copyingTo": "Copying to",
@@ -58,6 +82,9 @@
     "goToLibrary": "Cull in Library",
     "openInRapidRaw": "Open in RapidRaw",
     "newImport": "New Import",
-    "noDestinationError": "ERROR: No destination directory selected."
+    "noDestinationError": "ERROR: No destination directory selected.",
+    "starting": "Starting...",
+    "filesProgress": "{{current}} of {{total}} files",
+    "bytesProgress": "{{current}} of {{total}} GB"
   }
 }

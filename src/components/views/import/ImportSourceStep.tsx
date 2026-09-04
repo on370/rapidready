@@ -315,7 +315,7 @@ export function ImportSourceStep() {
 
     const header = (
       <div className="flex items-center gap-2 text-xs text-txt-tertiary border-b border-app-border/40 pb-2 mb-2 min-w-0">
-        <span className="text-[10px] font-bold text-txt-tertiary uppercase tracking-wider flex-shrink-0">Basis:</span>
+        <span className="text-[10px] font-bold text-txt-tertiary uppercase tracking-wider flex-shrink-0">{t('source.baseLabel')}</span>
         <span className="font-mono text-txt-secondary truncate" title={destinationDirectory}>{destinationDirectory}/</span>
       </div>
     );
@@ -523,8 +523,8 @@ export function ImportSourceStep() {
                     )}
                   </div>
                   <div>
-                    <h3 className="text-sm font-semibold text-txt-primary truncate max-w-[140px]" title={drive.name}>{drive.name || 'SD Card'}</h3>
-                    <p className="text-[10px] text-txt-tertiary">{(drive.available_space / (1024*1024*1024)).toFixed(1)} GB free</p>
+                    <h3 className="text-sm font-semibold text-txt-primary truncate max-w-[140px]" title={drive.name}>{drive.name || t('source.sdCardDefault')}</h3>
+                    <p className="text-[10px] text-txt-tertiary">{t('source.gbFree', { size: (drive.available_space / (1024*1024*1024)).toFixed(1) })}</p>
                   </div>
                 </button>
               ))}
@@ -580,7 +580,7 @@ export function ImportSourceStep() {
             ) : (
               <>
                 <span className="text-sm font-semibold text-accent">
-                  {pairStats.pairs > 0 ? `${pairStats.totalPhotos} Fotos (${pairStats.pairs} Paare)` : `${newFiles.length} ${t('source.newFiles')}`}
+                  {pairStats.pairs > 0 ? t('source.pairStats', { total: pairStats.totalPhotos, pairs: pairStats.pairs }) : `${newFiles.length} ${t('source.newFiles')}`}
                 </span>
                 <span className="text-sm text-txt-tertiary">
                   ({(newFiles.reduce((acc, f) => acc + f.size, 0) / (1024 * 1024 * 1024)).toFixed(2)} GB)

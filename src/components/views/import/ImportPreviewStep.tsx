@@ -23,7 +23,8 @@ export interface PairedImportItem {
 }
 
 export function ImportPreviewStep() {
-  const { t } = useTranslation("help");
+  const { t } = useTranslation("import");
+  const { t: tHelp } = useTranslation("help");
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
 
@@ -257,7 +258,7 @@ export function ImportPreviewStep() {
                   <Folder className="w-4 h-4 text-warning" />
                   <span className="text-sm text-txt-primary font-medium">{date}</span>
                   <span className="text-xs text-txt-tertiary ml-auto">
-                    {pairs.length} {pairs.length === 1 ? 'photo' : 'photos'}
+                    {pairs.length === 1 ? t('preview.photoCountSingle', { count: 1 }) : t('preview.photosCount', { count: pairs.length })}
                   </span>
                 </div>
                 {!isCollapsed && (
@@ -301,7 +302,7 @@ export function ImportPreviewStep() {
                                 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30'
                                 : 'bg-app-deepest text-txt-tertiary line-through opacity-40 border border-app-border hover:opacity-75'
                             }`}
-                            title={`RAW (${pair.rawFile.name.split('.').pop()?.toUpperCase()}) - Click to toggle`}
+                            title={t('preview.toggleRaw', { ext: pair.rawFile.name.split('.').pop()?.toUpperCase() || 'RAW' })}
                           >
                             {pair.rawFile.name.split('.').pop()?.toUpperCase() || 'RAW'}
                           </button>
@@ -318,7 +319,7 @@ export function ImportPreviewStep() {
                                 ? 'bg-accent/20 text-accent border border-accent/40 hover:bg-accent/30'
                                 : 'bg-app-deepest text-txt-tertiary line-through opacity-40 border border-app-border hover:opacity-75'
                             }`}
-                            title="JPEG - Click to toggle"
+                            title={t('preview.toggleJpg')}
                           >
                             JPG
                           </button>
@@ -333,7 +334,7 @@ export function ImportPreviewStep() {
                       {/* Imported Tag */}
                       {pair.allImported && (
                         <span className="text-[9px] px-1.5 py-0.5 rounded bg-success/20 text-success flex-shrink-0">
-                          Imported
+                          {t('preview.importedBadge')}
                         </span>
                       )}
 
@@ -344,7 +345,7 @@ export function ImportPreviewStep() {
                           toggleGroupSelection(pair.files.map(f => f.path), false);
                         }}
                         className="w-4 h-4 rounded flex items-center justify-center text-txt-tertiary hover:text-danger hover:bg-danger/10 transition-all opacity-0 group-hover:opacity-100" 
-                        title="Exclude photo from import"
+                        title={t('preview.excludePhoto')}
                       >
                         <X className="w-3 h-3" />
                       </button>
@@ -378,19 +379,19 @@ export function ImportPreviewStep() {
                 <div className="absolute left-0 top-full mt-2 w-64 bg-app-card border border-app-border rounded-xl shadow-2xl z-50 overflow-hidden text-left">
                   <div className="px-4 py-3 border-b border-app-border bg-app-panel/50">
                     <h4 className="text-sm font-semibold text-txt-primary">
-                      {t('tooltip.inspectorTitle')}
+                      {tHelp('tooltip.inspectorTitle')}
                     </h4>
                   </div>
                   <div className="p-4 text-xs text-txt-secondary leading-relaxed">
-                    {t('tooltip.inspector')}
+                    {tHelp('tooltip.inspector')}
                   </div>
                 </div>
               )}
             </div>
-            <h2 className="text-sm font-semibold text-txt-primary uppercase tracking-wider">File Inspector</h2>
+            <h2 className="text-sm font-semibold text-txt-primary uppercase tracking-wider">{t('preview.fileInspector')}</h2>
           </div>
           {selectedPair && (
-            <span className="text-[10px] text-txt-tertiary italic">Click picture to zoom</span>
+            <span className="text-[10px] text-txt-tertiary italic">{t('preview.clickToZoom')}</span>
           )}
         </div>
 
@@ -401,7 +402,7 @@ export function ImportPreviewStep() {
               <div className="w-16 h-16 rounded-2xl bg-app-card border border-app-border flex items-center justify-center mb-4">
                 <MousePointerClick className="w-7 h-7 text-txt-tertiary" />
               </div>
-              <p className="text-sm text-txt-tertiary">Select a photo from the tree to inspect its metadata</p>
+              <p className="text-sm text-txt-tertiary">{t('preview.selectPhotoHint')}</p>
             </div>
           ) : (
             /* Photo detail */
@@ -447,7 +448,7 @@ export function ImportPreviewStep() {
                     )}
                     {selectedPair.rawFile && selectedPair.jpgFile && (
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-app-deepest text-txt-tertiary border border-app-border">
-                        Pair
+                        {t('preview.pairBadge')}
                       </span>
                     )}
                   </div>

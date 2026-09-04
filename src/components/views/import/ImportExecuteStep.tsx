@@ -9,6 +9,7 @@ import { listen } from '@tauri-apps/api/event';
 import { useImportStore } from '../../../stores/importStore';
 import { useLibraryStore, LibraryImage } from '../../../stores/libraryStore';
 import { useNavigationStore } from '../../../stores/navigationStore';
+import { useSettingsStore } from '../../../stores/settingsStore';
 
 interface ImportProgress {
   files_processed: number;
@@ -91,6 +92,12 @@ export function ImportExecuteStep({ onReset }: ImportExecuteStepProps) {
         });
         
         setIsComplete(true);
+
+        if (useSettingsStore.getState().openRapidRaw && resultPaths && resultPaths.length > 0) {
+          invoke('open_in_rapidraw', { path: resultPaths[0] }).catch(err => {
+            console.error("Auto-open in RapidRaw failed:", err);
+          });
+        }
       } catch (error) {
         console.error("Import failed:", error);
         setLogs(prev => [...prev, `ERROR: ${error}`]);
@@ -176,14 +183,14 @@ export function ImportExecuteStep({ onReset }: ImportExecuteStepProps) {
             {/* Main Progress Bar */}
             <div className="w-full">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-semibold text-txt-primary">{p_files} of {t_files} files</span>
+                <span className="text-sm font-semibold text-txt-primary">{t('execute.filesProgress', { current: p_files, total: t_files })}</span>
                 <span className="text-sm font-bold text-accent tabular-nums">{percent}%</span>
               </div>
               <div className="w-full h-3 bg-app-card rounded-full overflow-hidden border border-app-border">
                 <div className="progress-fill h-full rounded-full transition-all duration-300" style={{ width: `${percent}%` }}></div>
               </div>
               <div className="flex items-center justify-between mt-2 text-xs text-txt-tertiary">
-                <span>{(p_bytes / (1024 * 1024 * 1024)).toFixed(2)} of {(t_bytes / (1024 * 1024 * 1024)).toFixed(2)} GB</span>
+                <span>{t('execute.bytesProgress', { current: (p_bytes / (1024 * 1024 * 1024)).toFixed(2), total: (t_bytes / (1024 * 1024 * 1024)).toFixed(2) })}</span>
               </div>
             </div>
 
@@ -193,7 +200,7 @@ export function ImportExecuteStep({ onReset }: ImportExecuteStepProps) {
                 <File className="w-4 h-4 text-accent animate-spin" style={{ animationDuration: '2s' }} />
               </div>
               <div className="min-w-0">
-                <p className="text-sm text-txt-primary font-medium truncate">{progress ? progress.current_file : 'Starting...'}</p>
+                <p className="text-sm text-txt-primary font-medium truncate">{progress ? progress.current_file : t('execute.starting')}</p>
                 <p className="text-xs text-txt-tertiary truncate" title={progress ? progress.current_file_path : ''}>
                   {t('execute.copyingTo')} {progress ? progress.current_file_path : '...'}
                 </p>
@@ -275,7 +282,7 @@ export function ImportExecuteStep({ onReset }: ImportExecuteStepProps) {
                 className="px-5 py-2.5 bg-app-card border border-app-border hover:border-app-border-hover text-txt-primary hover:bg-app-hover text-sm font-medium rounded-lg transition-all duration-150 flex items-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 <Rocket className="w-4 h-4 text-accent" />
-                <span>{isOpeningRapidRaw ? 'Starting...' : t('execute.openInRapidRaw')}</span>
+                <span>{isOpeningRapidRaw ? t('execute.starting') : t('execute.openInRapidRaw')}</span>
               </button>
 
               <button 

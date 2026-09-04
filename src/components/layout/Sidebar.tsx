@@ -1,5 +1,6 @@
-import { Download, LayoutGrid, Settings, CircleHelp, Copyright, Wrench, Loader2 } from "lucide-react";
+import { Download, LayoutGrid, Settings, CircleHelp, Copyright, Loader2 } from "lucide-react";
 import { emit } from "@tauri-apps/api/event";
+import { useTranslation } from "react-i18next";
 import { useImportStore } from "../../stores/importStore";
 
 export type ViewType = "import" | "library" | "tools" | "settings";
@@ -10,6 +11,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({ activeView, onViewChange }: SidebarProps) {
+  const { t } = useTranslation('common');
   const isScanning = useImportStore(state => state.isScanning);
 
   const NavButton = ({ view, icon: Icon, iconClassName, label }: { view: ViewType, icon: any, iconClassName?: string, label: string }) => (
@@ -33,10 +35,11 @@ export function Sidebar({ activeView, onViewChange }: SidebarProps) {
           view="import" 
           icon={isScanning ? Loader2 : Download} 
           iconClassName={isScanning ? "animate-spin text-accent" : ""}
-          label={isScanning ? "Import (Scanning...)" : "Import"} 
+          label={isScanning ? t("nav.importScanning") : t("nav.import")} 
         />
-        <NavButton view="library" icon={LayoutGrid} label="Library" />
-        <NavButton view="tools" icon={Wrench} label="Tools & Dashboard" />
+        <NavButton view="library" icon={LayoutGrid} label={t("nav.library")} />
+        {/* v0.2 roadmap: Tools & Dashboard */}
+        {/* <NavButton view="tools" icon={Wrench} label={t("nav.tools")} /> */}
       </div>
       <div className="flex flex-col gap-1">
         <button
@@ -44,17 +47,17 @@ export function Sidebar({ activeView, onViewChange }: SidebarProps) {
           onClick={() => window.dispatchEvent(new Event('open-about-modal'))}
         >
           <Copyright className="w-[18px] h-[18px]" />
-          <span className="tooltip">About</span>
+          <span className="tooltip">{t("nav.about")}</span>
         </button>
         <button
           className="nav-btn w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-150 text-txt-secondary hover:bg-app-hover hover:text-txt-primary"
           onClick={() => emit('toggle-help-modal')}
         >
           <CircleHelp className="w-[18px] h-[18px]" />
-          <span className="tooltip">Help</span>
+          <span className="tooltip">{t("nav.help")}</span>
         </button>
         {/* Bottom: Settings */}
-        <NavButton view="settings" icon={Settings} label="Settings" />
+        <NavButton view="settings" icon={Settings} label={t("nav.settings")} />
       </div>
     </nav>
   );

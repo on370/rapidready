@@ -81,10 +81,12 @@ export function SettingsView() {
   const { t, i18n } = useTranslation('settings');
   const { invertScrollZoom, setInvertScrollZoom } = useLibraryStore();
   const {
+    /* Unconnected/dummy toggles hidden for MVP:
     autoDetect, setAutoDetect,
     verifyCopy, setVerifyCopy,
     deleteSource, setDeleteSource,
     launchSystem, setLaunchSystem,
+    */
     openRapidRaw, setOpenRapidRaw,
     startupView, setStartupView,
     locations, addLocation, removeLocation, updateLocation,
@@ -206,6 +208,7 @@ export function SettingsView() {
             <h3 className="text-sm font-semibold text-txt-primary">{t('general.title')}</h3>
           </div>
           <div className="divide-y divide-app-border">
+            {/* Hidden for MVP: autoDetect, verifyCopy, deleteSource
             <div className="px-5 py-4 flex items-center justify-between">
               <div>
                 <p className="text-sm text-txt-primary">{t('general.autoDetect.title')}</p>
@@ -233,6 +236,7 @@ export function SettingsView() {
                 <div className="toggle-knob"></div>
               </div>
             </div>
+            */}
             <div className="px-5 py-4 flex items-center justify-between">
               <div>
                 <p className="text-sm text-txt-primary">{t('general.startupView.title')}</p>
@@ -242,6 +246,7 @@ export function SettingsView() {
                 <div className="toggle-knob"></div>
               </div>
             </div>
+            {/* Hidden for MVP: launchSystem
             <div className="px-5 py-4 flex items-center justify-between">
               <div>
                 <p className="text-sm text-txt-primary">{t('general.launchSystem.title')}</p>
@@ -251,6 +256,7 @@ export function SettingsView() {
                 <div className="toggle-knob"></div>
               </div>
             </div>
+            */}
             <div className="px-5 py-4 flex items-center justify-between">
               <div>
                 <p className="text-sm text-txt-primary">{t('general.invertScrollZoom.title')}</p>

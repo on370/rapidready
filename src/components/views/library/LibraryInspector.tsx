@@ -134,7 +134,7 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
                   title={t('inspector.pick')}
                 >
                   <Check className="w-3 h-3" />
-                  <span>Pick</span>
+                  <span>{t('inspector.pickBtn', 'Pick')}</span>
                   <kbd className="text-[9px] opacity-70 font-mono">P</kbd>
                 </button>
 
@@ -143,7 +143,7 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
                   className={`flex-1 py-1.5 rounded-md text-xs font-medium flex items-center justify-center gap-1 transition-all border cursor-pointer ${activeImage.culling.flag === null ? 'bg-app-hover text-txt-primary border-app-border' : 'border-app-border hover:bg-app-hover text-txt-tertiary'}`}
                   title={t('inspector.unflag')}
                 >
-                  <span>Unflag</span>
+                  <span>{t('inspector.unflagBtn', 'Unflag')}</span>
                   <kbd className="text-[9px] opacity-70 font-mono">U</kbd>
                 </button>
 
@@ -152,7 +152,7 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
                   className={`flex-1 py-1.5 rounded-md text-xs font-semibold flex items-center justify-center gap-1 transition-all border cursor-pointer ${activeImage.culling.flag === -1 ? 'bg-danger text-white border-danger' : 'border-app-border hover:bg-danger/15 text-txt-secondary'}`}
                   title={t('inspector.reject')}
                 >
-                  <span>Reject</span>
+                  <span>{t('inspector.rejectBtn', 'Reject')}</span>
                   <kbd className="text-[9px] opacity-70 font-mono">X</kbd>
                 </button>
               </div>

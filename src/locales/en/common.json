@@ -4,5 +4,23 @@
   "cancel": "Cancel",
   "save": "Save",
   "remove": "Remove",
-  "default": "Default"
+  "default": "Default",
+  "nav": {
+    "import": "Import",
+    "importScanning": "Import (Scanning...)",
+    "library": "Library",
+    "tools": "Tools & Dashboard",
+    "about": "About RapidReady",
+    "help": "Help",
+    "settings": "Settings"
+  },
+  "window": {
+    "close": "Close",
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "viewImport": "Media Importer",
+    "viewLibrary": "Library & Culling",
+    "viewTools": "Tools & Dashboard",
+    "viewSettings": "Settings"
+  }
 }

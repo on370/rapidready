@@ -1,12 +1,15 @@
 import { invoke } from "@tauri-apps/api/core";
+import { useTranslation } from "react-i18next";
 import { ViewType } from "./Sidebar";
 
 export function TitleBar({ activeView }: { activeView?: ViewType }) {
+  const { t } = useTranslation('common');
+
   const titles: Record<ViewType, string> = {
-    import: "Media Importer",
-    library: "Library & Culling",
-    tools: "Tools & Dashboard",
-    settings: "Settings"
+    import: t("window.viewImport"),
+    library: t("window.viewLibrary"),
+    tools: t("window.viewTools"),
+    settings: t("window.viewSettings")
   };
   const title = activeView ? titles[activeView] : "RapidReady";
 
@@ -22,17 +25,17 @@ export function TitleBar({ activeView }: { activeView?: ViewType }) {
         <div className="flex items-center gap-2 mr-3">
           <button 
             className="traffic-light tl-close cursor-pointer" 
-            title="Schließen"
+            title={t("window.close")}
             onClick={() => invoke("close_window")}
           />
           <button 
             className="traffic-light tl-minimize cursor-pointer" 
-            title="Minimieren"
+            title={t("window.minimize")}
             onClick={() => invoke("minimize_window")}
           />
           <button 
             className="traffic-light tl-maximize cursor-pointer" 
-            title="Maximieren"
+            title={t("window.maximize")}
             onClick={() => invoke("toggle_maximize_window")}
           />
         </div>

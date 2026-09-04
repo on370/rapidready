@@ -3,14 +3,40 @@
     "loupe": "Loupe Controls",
     "grid": "Grid Controls",
     "inspector": "Displays metadata and a preview for the file selected in the tree.",
-    "inspectorTitle": "File Inspector"
+    "inspectorTitle": "File Inspector",
+    "helpTitle": "Help & Shortcuts",
+    "zoomInOut": "Zoom in/out",
+    "panImage": "Pan image",
+    "rateImage": "Rate image",
+    "pickReject": "Pick / Reject"
   },
   "shortcuts": {
-    "title": "Keyboard Shortcuts",
-    "next": "Next Image",
-    "prev": "Previous Image",
-    "loupe": "Loupe View",
-    "grid": "Grid View",
-    "zoom": "Toggle Zoom"
+    "title": "Global Keyboard Shortcuts",
+    "sections": {
+      "navigation": "Navigation & Views",
+      "zoomPan": "Zoom & Pan (Loupe)",
+      "culling": "Culling & Rating",
+      "system": "System"
+    },
+    "actions": {
+      "next": "Next Image",
+      "prev": "Previous Image",
+      "loupe": "Loupe View",
+      "grid": "Grid View",
+      "fullscreen": "Toggle Fullscreen",
+      "zoom": "Toggle Zoom",
+      "zoomIn": "Zoom In",
+      "zoomOut": "Zoom Out",
+      "pan": "Pan Image",
+      "rate15": "Set Rating 1-5",
+      "removeRate": "Remove Rating",
+      "pick": "Pick (Flag)",
+      "reject": "Reject",
+      "removeFlag": "Remove Flag",
+      "settings": "Open Settings",
+      "help": "Show this Help",
+      "quit": "Quit Application"
+    },
+    "footer": "RapidReady Help & Shortcuts"
   }
 }

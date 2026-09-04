@@ -150,6 +150,7 @@ const FilmstripBar = React.memo(function FilmstripBar({
   activeImageIndex,
   onSelect,
 }: FilmstripBarProps) {
+  const { t } = useTranslation('library');
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(1200);
 
@@ -276,7 +277,7 @@ const FilmstripBar = React.memo(function FilmstripBar({
           } catch (_) {}
         }}
         className="absolute top-0 left-0 right-0 h-2 cursor-row-resize flex items-center justify-center group z-20 hover:bg-accent/20 transition-colors"
-        title="Filmstreifen-Größe anpassen (ziehen, Doppelklick für Standardgröße)"
+        title={t('filmstrip.resizeTooltip')}
       >
         <div className="w-12 h-1 rounded-full bg-app-border group-hover:bg-accent transition-colors" />
       </div>
@@ -550,10 +551,10 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
           <button 
             onClick={() => useLibraryStore.getState().setAutoAdvance(!autoAdvance)} 
             className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer ${autoAdvance ? 'bg-warning/15 border-warning/30 text-warning hover:bg-warning/25' : 'bg-app-card border-app-border text-txt-tertiary hover:text-txt-secondary hover:border-app-border-hover'}`}
-            title="Auto-Advance nach Bewertung umschalten"
+            title={t('toolbar.autoAdvanceTooltip')}
           >
             <Zap className={`w-3.5 h-3.5 ${autoAdvance ? 'fill-warning text-warning' : 'text-txt-tertiary'}`} />
-            <span className="hidden sm:inline">Auto-Advance</span>
+            <span className="hidden sm:inline">{t('toolbar.autoAdvance')}</span>
           </button>
 
           <div className="w-px h-5 bg-app-border mx-0.5"></div>
@@ -563,10 +564,10 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
             className="flex items-center gap-1.5 bg-app-card border border-app-border rounded-lg px-2 py-1 h-[30px]"
             title={
               viewMode === 'grid' 
-                ? `Thumbnail-Größe: ${gridThumbnailSize}px` 
+                ? t('toolbar.zoomThumbnailSize', { size: gridThumbnailSize }) 
                 : loupeScale <= 0 
-                  ? 'Zoom: Einpassen (Fit)' 
-                  : `Zoom: ${Math.round(loupeScale * 100)}%`
+                  ? t('toolbar.zoomFit') 
+                  : t('toolbar.zoomPercent', { percent: Math.round(loupeScale * 100) })
             }
           >
             <button 
@@ -582,7 +583,7 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
                 }
               }}
               className="text-txt-tertiary hover:text-txt-secondary transition-colors cursor-pointer p-0.5 rounded"
-              title={viewMode === 'grid' ? 'Kleinere Thumbnails' : 'Verkleinern'}
+              title={viewMode === 'grid' ? t('toolbar.smallerThumbnails') : t('toolbar.zoomOut')}
             >
               <ZoomOut className="w-3.5 h-3.5" />
             </button>
@@ -617,7 +618,7 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
                 }
               }}
               className="text-txt-tertiary hover:text-txt-secondary transition-colors cursor-pointer p-0.5 rounded"
-              title={viewMode === 'grid' ? 'Größere Thumbnails' : 'Vergrößern'}
+              title={viewMode === 'grid' ? t('toolbar.largerThumbnails') : t('toolbar.zoomIn')}
             >
               <ZoomIn className="w-3.5 h-3.5" />
             </button>
@@ -652,14 +653,14 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
 
       {/* FILTER BAR */}
       <div className="flex items-center gap-3 px-4 py-2 border-b border-app-border bg-app-panel/60 flex-shrink-0 text-xs">
-        <span className="text-txt-tertiary font-medium">Filters:</span>
+        <span className="text-txt-tertiary font-medium">{t('filters.label')}</span>
         <div className="flex items-center gap-1 text-[11px]">
-          <button onClick={() => setFilterMode('all')} className={`filter-pill px-2 py-1 rounded-md font-medium ${filterMode === 'all' ? 'bg-accent/15 text-accent' : 'text-txt-tertiary hover:bg-app-hover'}`}>All</button>
+          <button onClick={() => setFilterMode('all')} className={`filter-pill px-2 py-1 rounded-md font-medium ${filterMode === 'all' ? 'bg-accent/15 text-accent' : 'text-txt-tertiary hover:bg-app-hover'}`}>{t('filters.all')}</button>
           <button onClick={() => setFilterMode('picks')} className={`filter-pill px-2 py-1 rounded-md font-medium flex items-center gap-1 ${filterMode === 'picks' ? 'bg-success/15 text-success' : 'text-txt-tertiary hover:bg-app-hover'}`}>
-            <span className="w-1.5 h-1.5 rounded-full bg-success"></span>Picks
+            <span className="w-1.5 h-1.5 rounded-full bg-success"></span>{t('filters.picks')}
           </button>
           <button onClick={() => setFilterMode('rejected')} className={`filter-pill px-2 py-1 rounded-md font-medium flex items-center gap-1 ${filterMode === 'rejected' ? 'bg-danger/15 text-danger' : 'text-txt-tertiary hover:bg-app-hover'}`}>
-            <span className="w-1.5 h-1.5 rounded-full bg-danger"></span>Rejected
+            <span className="w-1.5 h-1.5 rounded-full bg-danger"></span>{t('filters.rejected')}
           </button>
         </div>
         <div className="w-px h-4 bg-app-border"></div>
@@ -725,11 +726,11 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
         <button onClick={() => {
             const rejected = displayedImages.filter(i => i.culling.flag === -1);
             if (rejected.length === 0) return;
-            ask(`Move ${rejected.length} rejected images to the OS Trash?`, {
-              title: 'Confirm Delete',
+            ask(t('delete.confirmMessage', { count: rejected.length }), {
+              title: t('delete.confirmTitle'),
               kind: 'warning',
-              okLabel: 'Move to Trash',
-              cancelLabel: 'Cancel'
+              okLabel: t('delete.okLabel'),
+              cancelLabel: t('delete.cancelLabel')
             }).then(confirmed => {
               if (confirmed) {
                 invoke('delete_files', { paths: rejected.map(i => i.path), toTrash: true }).then(() => {
@@ -737,13 +738,13 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
                   useLibraryStore.getState().setImages(remaining);
                 }).catch(err => {
                   console.error(err);
-                  alert('Failed to move to trash: ' + err);
+                  alert(t('delete.failedError') + err);
                 });
               }
             });
           }} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-danger hover:bg-danger/10 transition-all flex-shrink-0">
           <Trash2 className="w-3 h-3" />
-          <span>Delete Rejected ({displayedImages.filter(i => i.culling.flag === -1).length})</span>
+          <span>{t('delete.button', { count: displayedImages.filter(i => i.culling.flag === -1).length })}</span>
         </button>
       </div>
 
@@ -752,7 +753,7 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
         <div ref={gridContainerRef} className="flex-1 overflow-auto p-6 relative">
           {displayedImages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-txt-tertiary text-sm">
-              Keine Bilder gefunden
+              {t('empty')}
             </div>
           ) : (
             <div
@@ -843,14 +844,14 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
               <button 
                 className="p-1.5 rounded-lg hover:bg-app-hover transition-colors text-txt-secondary hover:text-txt-primary cursor-pointer" 
                 onClick={() => setActiveImageIndex(Math.max(0, activeImageIndex - 1))}
-                title="Vorheriges Bild (← oder K)"
+                title={t('filmstrip.prevTooltip')}
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <button 
                 className="p-1.5 rounded-lg hover:bg-app-hover transition-colors text-txt-secondary hover:text-txt-primary cursor-pointer" 
                 onClick={() => setActiveImageIndex(Math.min(displayedImages.length - 1, activeImageIndex + 1))}
-                title="Nächstes Bild (→ oder J)"
+                title={t('filmstrip.nextTooltip')}
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
@@ -869,10 +870,10 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
                     ? 'bg-accent/15 border-accent/30 text-accent hover:bg-accent/25' 
                     : 'bg-app-card border-app-border text-txt-tertiary hover:bg-app-hover hover:text-txt-secondary'
                 }`}
-                title="Filmstreifen ein-/ausblenden"
+                title={t('filmstrip.toggleTooltip')}
               >
                 <Film className="w-3.5 h-3.5" />
-                <span className="text-[11px]">Filmstreifen</span>
+                <span className="text-[11px]">{t('filmstrip.title')}</span>
               </button>
             </div>
           </div>
@@ -883,8 +884,8 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
       {isLoading && (
         <div className="absolute inset-0 bg-app-deepest/80 backdrop-blur-xs z-50 flex flex-col items-center justify-center gap-3 animate-in fade-in duration-150">
           <Loader2 className="w-8 h-8 text-accent animate-spin" />
-          <p className="text-sm font-semibold text-txt-primary">Archiv wird indexiert...</p>
-          <p className="text-xs text-txt-tertiary">Dateien werden geladen und Culling-Sidecars synchronisiert</p>
+          <p className="text-sm font-semibold text-txt-primary">{t('loading.indexing')}</p>
+          <p className="text-xs text-txt-tertiary">{t('loading.syncing')}</p>
         </div>
       )}
     </div>

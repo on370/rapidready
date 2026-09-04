@@ -216,7 +216,7 @@ export function LibraryLeftSidebar() {
           <ChevronDown className={`w-3.5 h-3.5 text-txt-tertiary transition-transform ${!collectionsOpen ? "-rotate-90" : ""}`} />
         </div>
         <div className={`p-2 space-y-1 border-b border-app-border ${!collectionsOpen ? "hidden" : ""}`}>
-          {lastImportPaths.length > 0 && (
+          {lastImportPaths.length > 0 ? (
             <button 
               onClick={() => setIsViewingLastImport(true)}
               className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer ${isViewingLastImport ? 'bg-accent/20 text-accent font-semibold' : 'text-txt-primary hover:bg-app-hover'}`}
@@ -227,10 +227,14 @@ export function LibraryLeftSidebar() {
               </div>
               <span className="text-[10px] text-txt-tertiary flex-shrink-0">({lastImportPaths.length})</span>
             </button>
+          ) : (
+            <div className="px-2 py-1 text-xs text-txt-tertiary italic">
+              {t("sidebar.noCollections")}
+            </div>
           )}
-          {/* Quick Filters */}
-          <button className="w-full flex items-center justify-center gap-2 py-1.5 rounded-lg border border-dashed border-app-border text-xs text-txt-tertiary hover:border-accent hover:text-accent transition-all">
-            <Plus className="w-3.5 h-3.5" />{t("sidebar.newCollection")}</button>
+          {/* v0.2 roadmap: Neue Sammlung */}
+          {/* <button className="w-full flex items-center justify-center gap-2 py-1.5 rounded-lg border border-dashed border-app-border text-xs text-txt-tertiary hover:border-accent hover:text-accent transition-all">
+            <Plus className="w-3.5 h-3.5" />{t("sidebar.newCollection")}</button> */}
         </div>
       </div>
 
@@ -268,7 +272,7 @@ export function LibraryLeftSidebar() {
                   
                   {locations.length > 0 && (
                     <>
-                      <div className="px-3 py-1.5 text-[10px] font-bold text-txt-tertiary uppercase tracking-wider">Locations</div>
+                      <div className="px-3 py-1.5 text-[10px] font-bold text-txt-tertiary uppercase tracking-wider">{t("sidebar.locationsTitle")}</div>
                       {locations.map(loc => (
                         <button 
                           key={loc.id}

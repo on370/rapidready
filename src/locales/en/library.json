@@ -2,12 +2,15 @@
   "sidebar": {
     "collections": "Collections",
     "newCollection": "New Collection",
+    "noCollections": "No active collections",
     "library": "Library",
     "openFolder": "Open Folder...",
     "noFolder": "No folder selected",
     "addLocation": "Bookmark Location...",
     "browseTemp": "Open other folder...",
-    "lastImport": "Latest Import"
+    "lastImport": "Latest Import",
+    "locationsTitle": "Locations",
+    "scanning": "Scanning library..."
   },
   "header": {
     "lastImport": "Latest Import",
@@ -20,7 +23,42 @@
     "openInRapidRawTooltip": "Edit in RapidRAW (R)",
     "viewGrid": "Grid",
     "viewLoupe": "Loupe",
-    "toggleInspector": "Toggle Inspector"
+    "toggleInspector": "Toggle Inspector",
+    "autoAdvance": "Auto-Advance",
+    "autoAdvanceTooltip": "Toggle Auto-Advance after rating",
+    "zoomThumbnailSize": "Thumbnail Size: {{size}}px",
+    "zoomFit": "Zoom: Fit",
+    "zoomPercent": "Zoom: {{percent}}%",
+    "smallerThumbnails": "Smaller Thumbnails",
+    "largerThumbnails": "Larger Thumbnails",
+    "zoomOut": "Zoom Out",
+    "zoomIn": "Zoom In"
+  },
+  "filters": {
+    "label": "Filters:",
+    "all": "All",
+    "picks": "Picks",
+    "rejected": "Rejected"
+  },
+  "filmstrip": {
+    "title": "Filmstrip",
+    "toggleTooltip": "Toggle Filmstrip",
+    "resizeTooltip": "Resize filmstrip (drag, double-click to reset)",
+    "prevTooltip": "Previous Image (← or K)",
+    "nextTooltip": "Next Image (→ or J)"
+  },
+  "delete": {
+    "button": "Delete Rejected ({{count}})",
+    "confirmMessage": "Move {{count}} rejected images to the macOS Trash?",
+    "confirmTitle": "Confirm Delete",
+    "okLabel": "Move to Trash",
+    "cancelLabel": "Cancel",
+    "failedError": "Failed to move to trash: "
+  },
+  "empty": "No images found",
+  "loading": {
+    "indexing": "Indexing archive...",
+    "syncing": "Loading files and synchronizing culling sidecars"
   },
   "inspector": {
     "title": "Inspector",
@@ -42,6 +80,9 @@
     "showInFinder": "Show in Finder",
     "pick": "Pick (P)",
     "unflag": "Unflag (U)",
-    "reject": "Reject (X)"
+    "reject": "Reject (X)",
+    "pickBtn": "Pick",
+    "unflagBtn": "Unflag",
+    "rejectBtn": "Reject"
   }
 }

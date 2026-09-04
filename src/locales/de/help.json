@@ -1,16 +1,42 @@
 {
   "tooltip": {
-    "loupe": "Loupe-Steuerung",
-    "grid": "Grid-Steuerung",
+    "loupe": "Lupe-Steuerung",
+    "grid": "Raster-Steuerung",
     "inspector": "Zeigt Metadaten und eine Vorschau für die im Baum ausgewählte Datei an.",
-    "inspectorTitle": "Datei-Inspektor"
+    "inspectorTitle": "Datei-Inspektor",
+    "helpTitle": "Hilfe & Tastaturkürzel",
+    "zoomInOut": "Vergrößern / Verkleinern",
+    "panImage": "Bild verschieben",
+    "rateImage": "Bild bewerten",
+    "pickReject": "Auswählen / Verwerfen"
   },
   "shortcuts": {
-    "title": "Tastaturkürzel",
-    "next": "Nächstes Bild",
-    "prev": "Vorheriges Bild",
-    "loupe": "Loupe-Ansicht",
-    "grid": "Grid-Ansicht",
-    "zoom": "Zoom an/aus"
+    "title": "Globale Tastaturkürzel",
+    "sections": {
+      "navigation": "Navigation & Ansichten",
+      "zoomPan": "Zoom & Bewegen (Lupe)",
+      "culling": "Culling & Bewertung",
+      "system": "System"
+    },
+    "actions": {
+      "next": "Nächstes Bild",
+      "prev": "Vorheriges Bild",
+      "loupe": "Lupe-Ansicht",
+      "grid": "Raster-Ansicht",
+      "fullscreen": "Vollbild umschalten",
+      "zoom": "Zoom an/aus",
+      "zoomIn": "Vergrößern",
+      "zoomOut": "Verkleinern",
+      "pan": "Bild verschieben",
+      "rate15": "Bewertung 1-5 vergeben",
+      "removeRate": "Bewertung entfernen",
+      "pick": "Auswählen (Pick)",
+      "reject": "Verwerfen (Reject)",
+      "removeFlag": "Markierung aufheben",
+      "settings": "Einstellungen öffnen",
+      "help": "Diese Hilfe anzeigen",
+      "quit": "RapidReady beenden"
+    },
+    "footer": "RapidReady Hilfe & Tastaturkürzel"
   }
 }

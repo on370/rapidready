@@ -2,12 +2,15 @@
   "sidebar": {
     "collections": "Sammlungen",
     "newCollection": "Neue Sammlung",
+    "noCollections": "Keine aktiven Sammlungen",
     "library": "Bibliothek",
     "openFolder": "Ordner öffnen...",
     "noFolder": "Kein Ordner ausgewählt",
     "addLocation": "Neue Location speichern...",
     "browseTemp": "Temporären Ordner öffnen...",
-    "lastImport": "Letzter Import"
+    "lastImport": "Letzter Import",
+    "locationsTitle": "Locations",
+    "scanning": "Bibliothek wird gescannt..."
   },
   "header": {
     "lastImport": "Letzter Import",
@@ -20,7 +23,42 @@
     "openInRapidRawTooltip": "In RapidRAW bearbeiten (R)",
     "viewGrid": "Raster",
     "viewLoupe": "Lupe",
-    "toggleInspector": "Inspector ein-/ausblenden"
+    "toggleInspector": "Inspector ein-/ausblenden",
+    "autoAdvance": "Auto-Advance",
+    "autoAdvanceTooltip": "Auto-Advance nach Bewertung umschalten",
+    "zoomThumbnailSize": "Thumbnail-Größe: {{size}}px",
+    "zoomFit": "Zoom: Einpassen (Fit)",
+    "zoomPercent": "Zoom: {{percent}}%",
+    "smallerThumbnails": "Kleinere Thumbnails",
+    "largerThumbnails": "Größere Thumbnails",
+    "zoomOut": "Verkleinern",
+    "zoomIn": "Vergrößern"
+  },
+  "filters": {
+    "label": "Filter:",
+    "all": "Alle",
+    "picks": "Auswahl",
+    "rejected": "Verworfen"
+  },
+  "filmstrip": {
+    "title": "Filmstreifen",
+    "toggleTooltip": "Filmstreifen ein-/ausblenden",
+    "resizeTooltip": "Filmstreifen-Größe anpassen (ziehen, Doppelklick für Standardgröße)",
+    "prevTooltip": "Vorheriges Bild (← oder K)",
+    "nextTooltip": "Nächstes Bild (→ oder J)"
+  },
+  "delete": {
+    "button": "Verworfene löschen ({{count}})",
+    "confirmMessage": "Möchtest du {{count}} verworfene Bilder in den macOS Papierkorb verschieben?",
+    "confirmTitle": "Löschen bestätigen",
+    "okLabel": "In den Papierkorb",
+    "cancelLabel": "Abbrechen",
+    "failedError": "Verschieben in den Papierkorb fehlgeschlagen: "
+  },
+  "empty": "Keine Bilder gefunden",
+  "loading": {
+    "indexing": "Archiv wird indexiert...",
+    "syncing": "Dateien werden geladen und Culling-Sidecars synchronisiert"
   },
   "inspector": {
     "title": "Inspector",
@@ -42,6 +80,9 @@
     "showInFinder": "Im Finder anzeigen",
     "pick": "Auswahl (P)",
     "unflag": "Keine Markierung (U)",
-    "reject": "Verwerfen (X)"
+    "reject": "Verwerfen (X)",
+    "pickBtn": "Auswahl",
+    "unflagBtn": "Aufheben",
+    "rejectBtn": "Verwerfen"
   }
 }

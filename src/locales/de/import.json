@@ -1,4 +1,12 @@
 {
+  "wizard": {
+    "stepSource": "Quelle",
+    "stepPreview": "Vorschau",
+    "stepImport": "Importieren",
+    "btnBack": "Zurück",
+    "btnPreview": "Vorschau",
+    "btnStartImport": "Import starten"
+  },
   "source": {
     "title": "Quelle",
     "waitingForSd": "Warte auf SD-Karte...",
@@ -14,7 +22,11 @@
     "alreadyImported": "Bereits importiert",
     "hideImported": "Importierte ausblenden",
     "shown": "eingeblendet",
-    "hidden": "ausgeblendet"
+    "hidden": "ausgeblendet",
+    "gbFree": "{{size}} GB frei",
+    "sdCardDefault": "Speicherkarte",
+    "pairStats": "{{total}} Fotos ({{pairs}} Paare)",
+    "baseLabel": "Basis:"
   },
   "destination": {
     "title": "Ziel & Struktur",
@@ -47,6 +59,18 @@
     "previewFiles": "Dateien",
     "collection": "Zu Collection hinzufügen"
   },
+  "preview": {
+    "fileInspector": "Datei-Inspektor",
+    "selectPhotoHint": "Wähle ein Foto im Baum aus, um Metadaten anzuzeigen",
+    "clickToZoom": "Klicke auf das Bild zum Zoomen",
+    "importedBadge": "Importiert",
+    "pairBadge": "Paar",
+    "toggleRaw": "RAW ({{ext}}) - Klicke zum Umschalten",
+    "toggleJpg": "JPEG - Klicke zum Umschalten",
+    "excludePhoto": "Foto vom Import ausschließen",
+    "photosCount": "{{count}} Fotos",
+    "photoCountSingle": "{{count}} Foto"
+  },
   "execute": {
     "importing": "Dateien importieren",
     "copyingTo": "Kopiere nach",
@@ -58,6 +82,9 @@
     "goToLibrary": "In Library sichten",
     "openInRapidRaw": "In RapidRaw öffnen",
     "newImport": "Neuer Import",
-    "noDestinationError": "FEHLER: Kein Zielverzeichnis ausgewählt."
+    "noDestinationError": "FEHLER: Kein Zielverzeichnis ausgewählt.",
+    "starting": "Wird gestartet...",
+    "filesProgress": "{{current}} von {{total}} Dateien",
+    "bytesProgress": "{{current}} von {{total}} GB"
   }
 }

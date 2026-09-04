@@ -28,7 +28,7 @@ export function HelpPopover({ viewMode }: HelpPopoverProps) {
       <button 
         className={`p-1.5 rounded-full transition-colors ${isOpen ? 'bg-accent/20 text-accent' : 'text-txt-tertiary hover:text-txt-secondary hover:bg-app-hover'}`}
         onClick={() => setIsOpen(!isOpen)}
-        title="Help & Shortcuts"
+        title={t('tooltip.helpTitle')}
       >
         <Info className="w-4 h-4" />
       </button>
@@ -44,38 +44,38 @@ export function HelpPopover({ viewMode }: HelpPopoverProps) {
             {viewMode === 'loupe' ? (
               <>
                 <div className="flex justify-between items-center text-xs">
-                  <span className="text-txt-secondary">Zoom in/out</span>
+                  <span className="text-txt-secondary">{t('tooltip.zoomInOut')}</span>
                   <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">Scroll / Z</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
-                  <span className="text-txt-secondary">Pan image</span>
+                  <span className="text-txt-secondary">{t('tooltip.panImage')}</span>
                   <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">Drag</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
-                  <span className="text-txt-secondary">{t('shortcuts.next')}</span>
+                  <span className="text-txt-secondary">{t('shortcuts.actions.next')}</span>
                   <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">Space</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
-                  <span className="text-txt-secondary">{t('shortcuts.prev')}</span>
+                  <span className="text-txt-secondary">{t('shortcuts.actions.prev')}</span>
                   <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">Shift+Space</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
-                  <span className="text-txt-secondary">{t('shortcuts.grid')}</span>
+                  <span className="text-txt-secondary">{t('shortcuts.actions.grid')}</span>
                   <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">G / Esc</span>
                 </div>
               </>
             ) : (
               <>
                 <div className="flex justify-between items-center text-xs">
-                  <span className="text-txt-secondary">{t('shortcuts.loupe')}</span>
+                  <span className="text-txt-secondary">{t('shortcuts.actions.loupe')}</span>
                   <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">E / Enter</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
-                  <span className="text-txt-secondary">Rate Image</span>
+                  <span className="text-txt-secondary">{t('tooltip.rateImage')}</span>
                   <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">1-5</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
-                  <span className="text-txt-secondary">Pick / Reject</span>
+                  <span className="text-txt-secondary">{t('tooltip.pickReject')}</span>
                   <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">P / X</span>
                 </div>
               </>

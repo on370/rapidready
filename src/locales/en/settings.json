@@ -41,6 +41,7 @@
   },
   "about": {
     "subtitle": "A companion tool for RapidRaw",
+    "createdBy": "by Ole N",
     "license": "MIT License",
     "repo": "GitHub Repository",
     "author": "RapidRaw by Timon Käch",
