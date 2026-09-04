@@ -45,6 +45,9 @@ interface LibraryStore {
   invertScrollZoom: boolean;
   setInvertScrollZoom: (b: boolean) => void;
   
+  isLoading: boolean;
+  setIsLoading: (loading: boolean) => void;
+  updateImageMetadata: (path: string, meta: Partial<LibraryImage>) => void;
   lastImportPaths: string[];
   isViewingLastImport: boolean;
   setIsViewingLastImport: (viewing: boolean) => void;
@@ -55,7 +58,17 @@ export const useLibraryStore = create<LibraryStore>((set) => ({
   images: [],
   rootPath: null,
   setRootPath: (path) => set({ rootPath: path }),
-  setImages: (images) => set({ images, activeImageIndex: 0 }),
+  setImages: (images) => set({ images, activeImageIndex: 0, isLoading: false }),
+  
+  isLoading: false,
+  setIsLoading: (loading) => set({ isLoading: loading }),
+  updateImageMetadata: (path, meta) => set((state) => {
+    const idx = state.images.findIndex(img => img.path === path);
+    if (idx === -1) return state;
+    const newImages = [...state.images];
+    newImages[idx] = { ...newImages[idx], ...meta };
+    return { images: newImages };
+  }),
   
   activeImageIndex: 0,
   activeFolderPath: null,

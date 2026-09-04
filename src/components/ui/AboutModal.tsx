@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
-import { X, Zap } from 'lucide-react';
+import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { listen } from '@tauri-apps/api/event';
+import appLogo from '../../assets/RapidReady-icon.png';
+import buildInfo from '../../build-info.json';
 
 export function AboutModal() {
   const [isOpen, setIsOpen] = useState(false);
@@ -46,18 +48,20 @@ export function AboutModal() {
         </button>
 
         <div className="p-8 flex flex-col items-center text-center">
-          <div className="w-20 h-20 rounded-3xl bg-accent flex items-center justify-center mb-5 shadow-lg shadow-accent/20">
-            <Zap className="w-10 h-10 text-app-deepest" />
-          </div>
+          <img 
+            src={appLogo} 
+            alt="RapidReady Logo" 
+            className="w-20 h-20 mb-5 object-contain select-none drop-shadow-xl" 
+          />
           
           <h2 className="text-2xl font-bold text-txt-primary">RapidReady</h2>
-          <p className="text-sm text-txt-secondary mt-1">Version 0.1.0-alpha</p>
-          <p className="text-xs text-txt-tertiary mt-0.5">Build 20250726</p>
+          <p className="text-sm text-txt-secondary mt-1">Version {buildInfo.version}</p>
+          <p className="text-xs text-txt-tertiary mt-0.5 font-mono">Build {buildInfo.buildNumber}</p>
           
           <div className="w-12 h-px bg-app-border my-5"></div>
           
           <p className="text-sm text-txt-primary font-medium">{t('about.subtitle', 'A companion tool for RapidRaw')}</p>
-          <p className="text-xs text-txt-tertiary mt-2">{t('about.license', 'MIT License')} · © 2025</p>
+          <p className="text-xs text-txt-tertiary mt-2">{t('about.license', 'MIT License')} · © 2026</p>
           
           <div className="flex flex-col items-center gap-3 mt-8 w-full">
             <button className="w-full py-2 bg-app-deepest hover:bg-app-hover border border-app-border rounded-lg text-xs font-medium text-txt-primary transition-colors">

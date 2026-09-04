@@ -348,5 +348,14 @@ pub fn toggle_maximize_window(window: tauri::Window) {
     }
 }
 
+#[tauri::command]
+pub async fn get_image_metadata(path: String) -> Result<rapidready_core::metadata_resolver::ImageMetadata, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        Ok(rapidready_core::metadata_resolver::get_image_metadata(std::path::Path::new(&path)))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 
 

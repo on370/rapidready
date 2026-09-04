@@ -1,51 +1,48 @@
 import { useState, useMemo, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useSettingsStore } from "../../../stores/settingsStore";
-import { Bookmark, ChevronDown, Plus, HardDrive, Folder, Image as ImageIcon, ChevronRight, FolderOpen, Sparkles } from "lucide-react";
+import { Bookmark, ChevronDown, Plus, HardDrive, Folder, ChevronRight, FolderOpen, Sparkles, Loader2 } from "lucide-react";
 import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from "@tauri-apps/api/core";
 import { useLibraryStore, LibraryImage } from "../../../stores/libraryStore";
 
-// Tree node definition
+// Folder Tree node definition (folders only, no leaf file clutter)
 type TreeNode = {
   name: string;
   path: string;
-  isDir: boolean;
+  fileCount: number;
   children: { [key: string]: TreeNode };
-  image?: LibraryImage;
 };
 
-// Helper to build a file tree from flat paths
+// Helper to build a clean folder tree from flat image paths
 function buildTree(images: LibraryImage[], rootPath: string): TreeNode {
-  const root: TreeNode = { name: "Root", path: rootPath, isDir: true, children: {} };
+  const root: TreeNode = { name: "Root", path: rootPath, fileCount: 0, children: {} };
   
   images.forEach(img => {
-    // Only build tree for files inside rootPath
     if (!img.path.startsWith(rootPath)) return;
+    root.fileCount++;
     
     let relPath = img.path.substring(rootPath.length);
     if (relPath.startsWith('/')) relPath = relPath.substring(1);
     
     const parts = relPath.split('/');
+    if (parts.length <= 1) return; // File directly in root folder
     
     let current = root;
     let currentPath = rootPath;
-    
-    for (let i = 0; i < parts.length; i++) {
+    for (let i = 0; i < parts.length - 1; i++) {
       const part = parts[i];
       currentPath = currentPath + '/' + part;
-      
       if (!current.children[part]) {
-        const isFile = i === parts.length - 1;
         current.children[part] = {
           name: part,
           path: currentPath,
-          isDir: !isFile,
-          children: {},
-          image: isFile ? img : undefined
+          fileCount: 0,
+          children: {}
         };
       }
       current = current.children[part];
+      current.fileCount++;
     }
   });
   
@@ -54,52 +51,10 @@ function buildTree(images: LibraryImage[], rootPath: string): TreeNode {
 
 function TreeView({ node, depth = 0, rootFolder }: { node: TreeNode, depth?: number, rootFolder: string }) {
   const [isOpen, setIsOpen] = useState(depth < 2);
-  const { activeFolderPath, setActiveFolderPath, setViewMode, images, activeImageIndex, setActiveImageIndex } = useLibraryStore();
+  const { activeFolderPath, setActiveFolderPath } = useLibraryStore();
   
   const isSelected = activeFolderPath === node.path;
-  
-  // Get all files in this node for the badge
-  const countFiles = (n: TreeNode): number => {
-    let count = n.image ? 1 : 0;
-    Object.values(n.children).forEach(c => count += countFiles(c));
-    return count;
-  };
-  
-  const fileCount = countFiles(node);
-  const childNodes = Object.values(node.children).sort((a, b) => {
-    if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
-    return a.name.localeCompare(b.name);
-  });
-
-  if (!node.isDir) {
-    const isActiveImage = images[activeImageIndex]?.path === node.image?.path;
-    return (
-      <div 
-        className={`flex items-center gap-2 py-1 px-2 rounded-lg transition-colors cursor-pointer text-left ${isActiveImage ? 'bg-accent/20 text-accent font-medium' : 'hover:bg-app-hover text-txt-secondary'}`}
-        style={{ paddingLeft: `${depth * 12 + 8}px` }}
-        onClick={(e) => {
-          e.stopPropagation();
-          // Find this image in the filtered images or global
-          // For simplicity, just select its parent folder and set active image
-          let parentPath = node.path.substring(0, node.path.lastIndexOf('/'));
-          if (!activeFolderPath || !node.path.startsWith(activeFolderPath)) {
-             setActiveFolderPath(parentPath);
-          } else {
-             parentPath = activeFolderPath;
-          }
-          setViewMode('loupe');
-          
-          // Need to update active index
-          const displayed = images.filter(img => img.path.startsWith(parentPath));
-          const idx = displayed.findIndex(img => img.path === node.image?.path);
-          if (idx !== -1) setActiveImageIndex(idx);
-        }}
-      >
-        <ImageIcon className="w-3.5 h-3.5 text-txt-tertiary flex-shrink-0" />
-        <span className="text-xs text-txt-secondary truncate flex-1" title={node.name}>{node.name}</span>
-      </div>
-    );
-  }
+  const childNodes = Object.values(node.children).sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <div className="space-y-0.5">
@@ -114,18 +69,24 @@ function TreeView({ node, depth = 0, rootFolder }: { node: TreeNode, depth?: num
           }
         }}
       >
-        <div onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }} className="p-0.5 hover:bg-white/10 rounded cursor-pointer">
-           {isOpen ? <ChevronDown className="w-3.5 h-3.5 text-txt-tertiary" /> : <ChevronRight className="w-3.5 h-3.5 text-txt-tertiary" />}
+        <div 
+          onClick={(e) => { 
+            e.stopPropagation(); 
+            if (childNodes.length > 0) setIsOpen(!isOpen); 
+          }} 
+          className={`p-0.5 rounded cursor-pointer ${childNodes.length > 0 ? 'hover:bg-white/10' : 'opacity-0 pointer-events-none'}`}
+        >
+          {isOpen ? <ChevronDown className="w-3.5 h-3.5 text-txt-tertiary" /> : <ChevronRight className="w-3.5 h-3.5 text-txt-tertiary" />}
         </div>
         <Folder className={`w-3.5 h-3.5 ${isSelected ? 'text-accent' : 'text-warning/70'}`} />
         <span className={`text-xs truncate flex-1 ${isSelected ? 'text-accent font-semibold' : 'text-txt-secondary'}`} title={node.name}>{node.name}</span>
-        {fileCount > 0 && <span className="text-[10px] text-txt-tertiary ml-auto">({fileCount})</span>}
+        {node.fileCount > 0 && <span className="text-[10px] text-txt-tertiary ml-auto font-mono">({node.fileCount})</span>}
       </div>
       
       {isOpen && childNodes.length > 0 && (
         <div className="space-y-0.5">
-          {childNodes.map((child, idx) => (
-            <TreeView key={idx} node={child} depth={depth + 1} rootFolder={rootFolder} />
+          {childNodes.map((child) => (
+            <TreeView key={child.path} node={child} depth={depth + 1} rootFolder={rootFolder} />
           ))}
         </div>
       )}
@@ -141,31 +102,31 @@ export function LibraryLeftSidebar() {
   const [libraryOpen, setLibraryOpen] = useState(true);
   const { 
     images, setImages, setActiveFolderPath, setViewMode, rootPath, setRootPath,
-    lastImportPaths, isViewingLastImport, setIsViewingLastImport 
+    lastImportPaths, isViewingLastImport, setIsViewingLastImport,
+    isLoading, setIsLoading
   } = useLibraryStore();
+
+  const loadFolder = async (path: string) => {
+    setRootPath(path);
+    setActiveFolderPath(path);
+    setViewMode('grid');
+    setLastLibraryPath(path);
+    setIsLoading(true);
+    try {
+      const loadedImages = (await invoke('scan_archive_directory', { path })) as LibraryImage[];
+      setImages(loadedImages);
+    } catch(e) {
+      console.error("Failed to load archive directory:", e);
+      setIsLoading(false);
+    }
+  };
 
   // Auto-load last library on mount if nothing is loaded
   useEffect(() => {
-    let isMounted = true;
-    const loadLast = async () => {
-      if (!rootPath && lastLibraryPath) {
-        try {
-          const loadedImages: LibraryImage[] = await invoke('scan_archive_directory', { path: lastLibraryPath });
-          if (isMounted) {
-            setRootPath(lastLibraryPath);
-            setActiveFolderPath(lastLibraryPath);
-            setImages(loadedImages);
-          }
-        } catch (e) {
-          console.error("Failed to auto-load last library:", e);
-        }
-      }
-    };
-    loadLast();
-    return () => { isMounted = false; };
-  }, [rootPath, lastLibraryPath, setRootPath, setActiveFolderPath, setImages]);
-
-
+    if (!rootPath && lastLibraryPath) {
+      loadFolder(lastLibraryPath);
+    }
+  }, []);
 
   const tree = useMemo(() => {
     if (!rootPath || images.length === 0) return null;
@@ -173,12 +134,17 @@ export function LibraryLeftSidebar() {
   }, [images, rootPath]);
 
   const renderTree = () => {
+    if (isLoading) {
+      return (
+        <div className="flex flex-col items-center justify-center py-8 gap-2 text-txt-secondary">
+          <Loader2 className="w-5 h-5 text-accent animate-spin" />
+          <span className="text-xs">{t("sidebar.scanning", "Scanning library...")}</span>
+        </div>
+      );
+    }
     if (!tree) return <div className="text-xs text-txt-tertiary text-center py-4">{t("sidebar.noFolder")}</div>;
-    return Object.values(tree.children).sort((a,b) => {
-      if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
-      return a.name.localeCompare(b.name);
-    }).map((child, idx) => (
-      <TreeView key={idx} node={child} depth={0} rootFolder={rootPath || ''} />
+    return Object.values(tree.children).sort((a,b) => a.name.localeCompare(b.name)).map((child) => (
+      <TreeView key={child.path} node={child} depth={0} rootFolder={rootPath || ''} />
     ));
   };
 
@@ -214,7 +180,10 @@ export function LibraryLeftSidebar() {
       <div className="flex flex-col flex-1 min-h-0">
         <div className="px-4 py-3 border-b border-app-border flex items-center justify-between cursor-pointer hover:bg-app-hover/50 transition-colors flex-shrink-0" onClick={() => setLibraryOpen(!libraryOpen)}>
           <h2 className="text-xs font-semibold text-txt-secondary uppercase tracking-wider flex items-center gap-2">
-            <HardDrive className="w-3.5 h-3.5" />{t("sidebar.library")}</h2>
+            <HardDrive className="w-3.5 h-3.5" />
+            {t("sidebar.library")}
+            {isLoading && <Loader2 className="w-3 h-3 text-accent animate-spin ml-1" />}
+          </h2>
           <ChevronDown className={`w-3.5 h-3.5 text-txt-tertiary transition-transform ${!libraryOpen ? "-rotate-90" : ""}`} />
         </div>
         
@@ -246,16 +215,9 @@ export function LibraryLeftSidebar() {
                         <button 
                           key={loc.id}
                           className="w-full text-left px-3 py-2 hover:bg-app-hover text-txt-secondary hover:text-txt-primary truncate transition-colors flex items-center gap-2"
-                          onClick={async () => {
+                          onClick={() => {
                             setDropdownOpen(false);
-                            setRootPath(loc.path);
-                            setActiveFolderPath(loc.path);
-                            setViewMode('grid');
-                            setLastLibraryPath(loc.path);
-                            try {
-                              const loadedImages = (await invoke('scan_archive_directory', { path: loc.path })) as LibraryImage[];
-                              setImages(loadedImages);
-                            } catch(e) {}
+                            loadFolder(loc.path);
                           }}
                         >
                           <Folder className="w-3.5 h-3.5 text-accent" />
@@ -273,15 +235,7 @@ export function LibraryLeftSidebar() {
                       if (selected && typeof selected === 'string') {
                         const defaultName = selected.split('/').pop() || selected;
                         addLocation({ id: Date.now().toString(), name: defaultName, path: selected });
-                        
-                        setRootPath(selected);
-                        setActiveFolderPath(selected);
-                        setViewMode('grid');
-                        setLastLibraryPath(selected);
-                        try {
-                          const loadedImages = (await invoke('scan_archive_directory', { path: selected })) as LibraryImage[];
-                          setImages(loadedImages);
-                        } catch(e) {}
+                        loadFolder(selected);
                       }
                     }}
                     className="w-full text-left px-3 py-2 hover:bg-app-hover text-txt-secondary hover:text-accent transition-colors flex items-center gap-2"
@@ -295,14 +249,7 @@ export function LibraryLeftSidebar() {
                       setDropdownOpen(false);
                       const selected = await open({ directory: true });
                       if (selected && typeof selected === 'string') {
-                        setRootPath(selected);
-                        setActiveFolderPath(selected);
-                        setViewMode('grid');
-                        setLastLibraryPath(selected);
-                        try {
-                          const loadedImages = (await invoke('scan_archive_directory', { path: selected })) as LibraryImage[];
-                          setImages(loadedImages);
-                        } catch(e) {}
+                        loadFolder(selected);
                       }
                     }}
                     className="w-full text-left px-3 py-2 hover:bg-app-hover text-txt-secondary hover:text-txt-primary transition-colors flex items-center gap-2"

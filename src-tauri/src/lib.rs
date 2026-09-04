@@ -7,6 +7,11 @@ use std::path::Path;
 use tauri::http::Response;
 use tauri::Emitter;
 
+#[cfg(target_os = "macos")]
+extern "C" {
+    fn set_macos_dock_icon(bytes: *const u8, length: usize);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -15,6 +20,14 @@ pub fn run() {
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(commands::SidecarWatcherState::default())
         .setup(|app| {
+            #[cfg(target_os = "macos")]
+            {
+                const ICON_BYTES: &[u8] = include_bytes!("../icons/icon.png");
+                unsafe {
+                    set_macos_dock_icon(ICON_BYTES.as_ptr(), ICON_BYTES.len());
+                }
+            }
+
             use tauri::Manager;
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_theme(Some(tauri::Theme::Dark));
@@ -133,7 +146,8 @@ pub fn run() {
             commands::quit_app,
             commands::close_window,
             commands::minimize_window,
-            commands::toggle_maximize_window
+            commands::toggle_maximize_window,
+            commands::get_image_metadata
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { 
   Info, X, MousePointerClick, Star, Check 
 } from "lucide-react";
@@ -13,7 +14,7 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
   const { t } = useTranslation('library');
   const { 
     images, activeImageIndex, 
-    updateCullingState, activeFolderPath, 
+    updateCullingState, updateImageMetadata, activeFolderPath, 
     lastImportPaths, isViewingLastImport 
   } = useLibraryStore();
 
@@ -24,6 +25,37 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
       : images;
 
   const activeImage = scopedImages[activeImageIndex];
+
+  // Lazy-load detailed EXIF metadata when an image is selected
+  useEffect(() => {
+    if (!activeImage) return;
+    if (activeImage.camera === undefined || activeImage.camera === null) {
+      let isMounted = true;
+      invoke<{
+        date: string | null;
+        camera: string | null;
+        lens: string | null;
+        iso: string | null;
+        aperture: string | null;
+        shutter: string | null;
+      }>('get_image_metadata', { path: activeImage.path })
+        .then(meta => {
+          if (isMounted && meta) {
+            updateImageMetadata(activeImage.path, {
+              camera: meta.camera || null,
+              lens: meta.lens || null,
+              iso: meta.iso || null,
+              aperture: meta.aperture || null,
+              shutter: meta.shutter || null,
+              date: meta.date || activeImage.date,
+            });
+          }
+        })
+        .catch(console.error);
+
+      return () => { isMounted = false; };
+    }
+  }, [activeImage?.path, updateImageMetadata]);
 
   const handleCulling = (flag: number | null, rating: number) => {
     if (!activeImage) return;

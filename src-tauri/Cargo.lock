@@ -3501,6 +3501,7 @@ dependencies = [
 name = "rapid-ready"
 version = "0.1.0"
 dependencies = [
+ "cc",
  "notify",
  "rapidready-core",
  "serde",
@@ -3524,6 +3525,7 @@ dependencies = [
  "image",
  "kamadak-exif",
  "lru",
+ "rayon",
  "regex",
  "rusqlite",
  "serde",

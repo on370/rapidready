@@ -44,42 +44,50 @@ pub fn get_directory_tree(dir: &Path) -> Result<DirNode> {
     Ok(root)
 }
 
+use rayon::prelude::*;
+use crate::date_resolver::get_fast_creation_date;
+
 pub fn scan_archive_directory(dir: &Path) -> Result<Vec<ArchiveFile>> {
     let mut files = Vec::new();
     let supported_exts = [
         "jpg", "jpeg", "png", "tif", "tiff", // Raster
-        "cr2", "cr3", "arw", "nef", "dng", "orf", "raf", // RAW
+        "cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2", // RAW
     ];
 
-    // Removed max_depth(1) so it scans recursively!
+    // Fast filesystem traversal: Collect file info without opening full image/EXIF bodies
     for entry in WalkDir::new(dir).max_depth(4).into_iter().filter_map(|e| e.ok()) {
         let path = entry.path();
         if path.is_file() {
             if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
                 if supported_exts.contains(&ext.to_lowercase().as_str()) {
-                    let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+                    let metadata = entry.metadata().ok();
+                    let size = metadata.as_ref().map(|m| m.len()).unwrap_or(0);
                     let name = entry.file_name().to_string_lossy().into_owned();
-                    let meta = crate::metadata_resolver::get_image_metadata(path);
-                    let culling = read_sidecar(path);
+                    let date = get_fast_creation_date(path, metadata.as_ref());
                     
                     files.push(ArchiveFile {
                         path: path.to_string_lossy().into_owned(),
                         name,
                         size,
-                        date: meta.date,
-                        camera: meta.camera,
-                        lens: meta.lens,
-                        iso: meta.iso,
-                        aperture: meta.aperture,
-                        shutter: meta.shutter,
-                        culling,
+                        date,
+                        camera: None,
+                        lens: None,
+                        iso: None,
+                        aperture: None,
+                        shutter: None,
+                        culling: CullingState::default(),
                     });
                 }
             }
         }
     }
     
-    // Sort by name
-    files.sort_by(|a, b| a.path.cmp(&b.path));
+    // Read sidecars in parallel across all CPU cores using Rayon
+    files.par_iter_mut().for_each(|f| {
+        f.culling = read_sidecar(Path::new(&f.path));
+    });
+    
+    // Sort by name / path
+    files.par_sort_unstable_by(|a, b| a.path.cmp(&b.path));
     Ok(files)
 }

@@ -1,11 +1,95 @@
-import { LayoutGrid, Scan, PanelRight, Zap, Star, Trash2, ChevronLeft, ChevronRight, Check, Rocket, FolderOpen, Film } from "lucide-react";
+import React, { useEffect, useCallback, useState, useRef } from "react";
+import { LayoutGrid, Scan, PanelRight, Zap, Star, Trash2, ChevronLeft, ChevronRight, Check, Rocket, FolderOpen, Film, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useLibraryStore } from "../../../stores/libraryStore";
+import { useLibraryStore, LibraryImage } from "../../../stores/libraryStore";
 import { ZoomableImage } from "./ZoomableImage";
 import { HelpPopover } from "../../ui/HelpPopover";
-import { useEffect, useCallback, useState, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { ask } from "@tauri-apps/plugin-dialog";
+import { useVirtualizer } from "@tanstack/react-virtual";
+
+const GridThumbnailItem = React.memo(function GridThumbnailItem({
+  img,
+  isSelected,
+  onSelect,
+  onOpen,
+}: {
+  img: LibraryImage;
+  isSelected: boolean;
+  onSelect: () => void;
+  onOpen: () => void;
+}) {
+  return (
+    <div 
+      className={`aspect-[3/2] rounded-lg border cursor-pointer relative overflow-hidden group ${
+        isSelected ? 'border-accent ring-2 ring-accent' : 'border-app-border hover:border-app-border-hover'
+      }`}
+      onClick={onSelect}
+      onDoubleClick={onOpen}
+    >
+      <img src={`rr-image://localhost${img.path}`} className="w-full h-full object-cover" loading="lazy" alt={img.name} />
+      <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        {img.culling.flag === 1 && <div className="w-4 h-4 rounded-full bg-success flex items-center justify-center shadow"><Check className="w-3 h-3 text-white" /></div>}
+        {img.culling.flag === -1 && <div className="w-4 h-4 rounded-full bg-danger flex items-center justify-center text-[10px] font-bold text-white shadow">X</div>}
+      </div>
+      {img.culling.rating > 0 && (
+        <div className="absolute bottom-1 left-1 flex">
+          {Array.from({length: img.culling.rating}).map((_, i) => <Star key={i} className="w-3 h-3 text-warning fill-warning" />)}
+        </div>
+      )}
+      {img.culling.flag === -1 && <div className="absolute inset-0 bg-danger/20 pointer-events-none" />}
+    </div>
+  );
+});
+
+const FilmstripThumbnailItem = React.memo(function FilmstripThumbnailItem({
+  img,
+  isActive,
+  onSelect,
+}: {
+  img: LibraryImage;
+  isActive: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <div
+      onClick={onSelect}
+      className={`w-24 h-16 aspect-[3/2] rounded-lg border relative overflow-hidden flex-shrink-0 cursor-pointer transition-all duration-150 group ${
+        isActive 
+          ? 'border-accent ring-2 ring-accent shadow-md shadow-accent/20' 
+          : 'border-app-border hover:border-app-border-hover opacity-70 hover:opacity-100'
+      }`}
+    >
+      <img 
+        src={`rr-image://localhost${img.path}`} 
+        className="w-full h-full object-cover pointer-events-none" 
+        loading="lazy" 
+        alt={img.name} 
+      />
+      <div className="absolute top-1 right-1 flex gap-0.5 pointer-events-none">
+        {img.culling.flag === 1 && (
+          <div className="w-3.5 h-3.5 rounded-full bg-success flex items-center justify-center shadow">
+            <Check className="w-2.5 h-2.5 text-white" />
+          </div>
+        )}
+        {img.culling.flag === -1 && (
+          <div className="w-3.5 h-3.5 rounded-full bg-danger flex items-center justify-center text-[8px] font-bold text-white shadow">
+            X
+          </div>
+        )}
+      </div>
+      {img.culling.rating > 0 && (
+        <div className="absolute bottom-0.5 left-1 flex items-center gap-0.5 bg-black/60 px-1 py-0.2 rounded text-[9px] text-warning pointer-events-none font-bold">
+          <Star className="w-2.5 h-2.5 fill-warning text-warning" />
+          <span>{img.culling.rating}</span>
+        </div>
+      )}
+      {img.culling.flag === -1 && (
+        <div className="absolute inset-0 bg-danger/25 pointer-events-none" />
+      )}
+    </div>
+  );
+});
 
 interface LibraryCenterProps {
   viewMode: 'grid' | 'loupe';
@@ -18,14 +102,14 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
   const { 
     images, activeImageIndex, setActiveImageIndex, autoAdvance, 
     updateCullingState, activeFolderPath, filterMode, setFilterMode,
-    lastImportPaths, isViewingLastImport 
+    lastImportPaths, isViewingLastImport, isLoading 
   } = useLibraryStore();
 
   const toolbarRef = useRef<HTMLDivElement>(null);
   const [showActionIcons, setShowActionIcons] = useState(false);
   const [showFilmstrip, setShowFilmstrip] = useState(true);
+  const gridContainerRef = useRef<HTMLDivElement>(null);
   const filmstripContainerRef = useRef<HTMLDivElement>(null);
-  const activeThumbnailRef = useRef<HTMLDivElement>(null);
 
   // Measure toolbar container width directly (not screen width!)
   useEffect(() => {
@@ -50,17 +134,6 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
     return () => clearTimeout(timer);
   }, [activeImageIndex]);
 
-  // Auto-scroll active thumbnail in filmstrip into view
-  useEffect(() => {
-    if (viewMode === 'loupe' && showFilmstrip && activeThumbnailRef.current) {
-      activeThumbnailRef.current.scrollIntoView({
-        behavior: 'smooth',
-        block: 'nearest',
-        inline: 'center',
-      });
-    }
-  }, [activeImageIndex, viewMode, showFilmstrip]);
-
   const scopedImages = isViewingLastImport
     ? images.filter(img => lastImportPaths.includes(img.path))
     : activeFolderPath 
@@ -77,6 +150,78 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
     return true; // 'all'
   });
   const activeImage = displayedImages[activeImageIndex];
+
+  // Dynamic Grid Math: responsive column count & precise row height
+  const [containerWidth, setContainerWidth] = useState(1200);
+
+  useEffect(() => {
+    const el = gridContainerRef.current;
+    if (!el) return;
+
+    const updateSize = () => {
+      if (el.clientWidth > 0) {
+        setContainerWidth(el.clientWidth);
+      }
+    };
+
+    updateSize();
+
+    const observer = new ResizeObserver(() => {
+      updateSize();
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [viewMode]);
+
+  // Available width inside padding (p-6 = 24px left + 24px right = 48px)
+  const paddingX = 48;
+  const gap = 12; // gap-3 = 12px
+  const targetWidth = 190;
+  const availableWidth = Math.max(100, containerWidth - paddingX);
+
+  // Responsive number of columns based on container width
+  const numColumns = Math.max(1, Math.floor((availableWidth + gap) / (targetWidth + gap)));
+  const totalGaps = (numColumns - 1) * gap;
+  const itemWidth = (availableWidth - totalGaps) / numColumns;
+  const itemHeight = itemWidth * (2 / 3); // 3:2 aspect ratio
+
+  const rowCount = Math.ceil(displayedImages.length / numColumns);
+
+  const rowVirtualizer = useVirtualizer({
+    count: rowCount,
+    getScrollElement: () => gridContainerRef.current,
+    estimateSize: () => itemHeight,
+    gap,
+    overscan: 3,
+  });
+
+  // Re-measure virtualizer whenever container width, columns or itemHeight change
+  useEffect(() => {
+    rowVirtualizer.measure();
+  }, [itemHeight, numColumns]);
+
+  const filmstripVirtualizer = useVirtualizer({
+    count: displayedImages.length,
+    getScrollElement: () => filmstripContainerRef.current,
+    estimateSize: () => 104,
+    horizontal: true,
+    overscan: 5,
+  });
+
+  // Auto-scroll active thumbnail in filmstrip into view
+  useEffect(() => {
+    if (viewMode === 'loupe' && showFilmstrip && displayedImages.length > 0 && activeImageIndex >= 0) {
+      filmstripVirtualizer.scrollToIndex(activeImageIndex, { align: 'center', behavior: 'smooth' });
+    }
+  }, [activeImageIndex, viewMode, showFilmstrip, displayedImages.length]);
+
+  // Auto-scroll active thumbnail in grid into view
+  useEffect(() => {
+    if (viewMode === 'grid' && displayedImages.length > 0 && activeImageIndex >= 0) {
+      const activeRow = Math.floor(activeImageIndex / numColumns);
+      rowVirtualizer.scrollToIndex(activeRow, { align: 'auto', behavior: 'auto' });
+    }
+  }, [activeImageIndex, viewMode, numColumns, displayedImages.length]);
 
   const handleCulling = useCallback((flag: number | null, rating: number) => {
     if (!activeImage) return;
@@ -128,9 +273,11 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
       } else if (e.key === 'ArrowLeft' || e.key === 'k') {
         setActiveImageIndex(Math.max(0, activeImageIndex - 1));
       } else if (e.key === 'ArrowDown') {
-        setActiveImageIndex(Math.min(displayedImages.length - 1, activeImageIndex + 6));
+        const step = viewMode === 'grid' ? numColumns : 1;
+        setActiveImageIndex(Math.min(displayedImages.length - 1, activeImageIndex + step));
       } else if (e.key === 'ArrowUp') {
-        setActiveImageIndex(Math.max(0, activeImageIndex - 6));
+        const step = viewMode === 'grid' ? numColumns : 1;
+        setActiveImageIndex(Math.max(0, activeImageIndex - step));
       } else {
         switch (e.key) {
           case 'p':
@@ -178,16 +325,7 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeImage, activeImageIndex, displayedImages.length, handleCulling, viewMode, setViewMode]);
-
-  useEffect(() => {
-    if (viewMode === 'grid') {
-      const el = document.getElementById('active-grid-img');
-      if (el) {
-        el.scrollIntoView({ block: 'nearest' });
-      }
-    }
-  }, [activeImageIndex, viewMode]);
+  }, [activeImage, activeImageIndex, displayedImages.length, handleCulling, viewMode, setViewMode, numColumns]);
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden min-w-0">
@@ -336,33 +474,56 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
 
       {/* Content Area */}
       {viewMode === 'grid' ? (
-        <div className="flex-1 overflow-auto p-6">
-          <div className="grid grid-cols-6 gap-3">
-            {displayedImages.map((img, idx) => (
-              <div 
-                key={idx} 
-                id={activeImageIndex === idx ? 'active-grid-img' : undefined}
-                className={`aspect-[3/2] rounded-lg border cursor-pointer relative overflow-hidden group ${activeImageIndex === idx ? 'border-accent ring-2 ring-accent' : 'border-app-border hover:border-app-border-hover'}`}
-                onClick={() => setActiveImageIndex(idx)}
-                onDoubleClick={() => {
-                  setActiveImageIndex(idx);
-                  setViewMode('loupe');
-                }}
-              >
-                <img src={`rr-image://localhost${img.path}`} className="w-full h-full object-cover" loading="lazy" />
-                <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  {img.culling.flag === 1 && <div className="w-4 h-4 rounded-full bg-success flex items-center justify-center"><Check className="w-3 h-3 text-white" /></div>}
-                  {img.culling.flag === -1 && <div className="w-4 h-4 rounded-full bg-danger flex items-center justify-center text-[10px] font-bold text-white">X</div>}
-                </div>
-                {img.culling.rating > 0 && (
-                  <div className="absolute bottom-1 left-1 flex">
-                     {Array.from({length: img.culling.rating}).map((_, i) => <Star key={i} className="w-3 h-3 text-warning fill-warning" />)}
+        <div ref={gridContainerRef} className="flex-1 overflow-auto p-6 relative">
+          {displayedImages.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-txt-tertiary text-sm">
+              Keine Bilder gefunden
+            </div>
+          ) : (
+            <div
+              style={{
+                height: `${rowVirtualizer.getTotalSize()}px`,
+                width: '100%',
+                position: 'relative',
+              }}
+            >
+              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                const startIndex = virtualRow.index * numColumns;
+                const rowImages = displayedImages.slice(startIndex, startIndex + numColumns);
+
+                return (
+                  <div
+                    key={virtualRow.key}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      transform: `translateY(${virtualRow.start}px)`,
+                      gridTemplateColumns: `repeat(${numColumns}, minmax(0, 1fr))`,
+                    }}
+                    className="grid gap-3"
+                  >
+                    {rowImages.map((img, colIdx) => {
+                      const globalIdx = startIndex + colIdx;
+                      return (
+                        <GridThumbnailItem
+                          key={img.path}
+                          img={img}
+                          isSelected={activeImageIndex === globalIdx}
+                          onSelect={() => setActiveImageIndex(globalIdx)}
+                          onOpen={() => {
+                            setActiveImageIndex(globalIdx);
+                            setViewMode('loupe');
+                          }}
+                        />
+                      );
+                    })}
                   </div>
-                )}
-                {img.culling.flag === -1 && <div className="absolute inset-0 bg-danger/20 pointer-events-none" />}
-              </div>
-            ))}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       ) : (
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -395,54 +556,39 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
           {showFilmstrip && (
             <div 
               ref={filmstripContainerRef}
-              className="h-20 bg-app-card/60 border-t border-app-border flex items-center px-3 gap-2 overflow-x-auto overflow-y-hidden flex-shrink-0 select-none scrollbar-thin"
+              className="h-20 bg-app-card/60 border-t border-app-border flex items-center overflow-x-auto overflow-y-hidden flex-shrink-0 select-none scrollbar-thin px-3"
             >
-              {displayedImages.map((img, idx) => {
-                const isActive = activeImageIndex === idx;
-                return (
-                  <div
-                    key={img.path}
-                    ref={isActive ? activeThumbnailRef : undefined}
-                    onClick={() => setActiveImageIndex(idx)}
-                    className={`h-16 aspect-[3/2] rounded-lg border relative overflow-hidden flex-shrink-0 cursor-pointer transition-all duration-150 group ${
-                      isActive 
-                        ? 'border-accent ring-2 ring-accent shadow-md shadow-accent/20' 
-                        : 'border-app-border hover:border-app-border-hover opacity-70 hover:opacity-100'
-                    }`}
-                  >
-                    <img 
-                      src={`rr-image://localhost${img.path}`} 
-                      className="w-full h-full object-cover pointer-events-none" 
-                      loading="lazy" 
-                      alt={img.name} 
-                    />
-                    {/* Culling flags */}
-                    <div className="absolute top-1 right-1 flex gap-0.5 pointer-events-none">
-                      {img.culling.flag === 1 && (
-                        <div className="w-3.5 h-3.5 rounded-full bg-success flex items-center justify-center shadow">
-                          <Check className="w-2.5 h-2.5 text-white" />
-                        </div>
-                      )}
-                      {img.culling.flag === -1 && (
-                        <div className="w-3.5 h-3.5 rounded-full bg-danger flex items-center justify-center text-[8px] font-bold text-white shadow">
-                          X
-                        </div>
-                      )}
+              <div
+                style={{
+                  width: `${filmstripVirtualizer.getTotalSize()}px`,
+                  height: '64px',
+                  position: 'relative',
+                }}
+              >
+                {filmstripVirtualizer.getVirtualItems().map((virtualItem) => {
+                  const img = displayedImages[virtualItem.index];
+                  if (!img) return null;
+                  return (
+                    <div
+                      key={img.path}
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        transform: `translateX(${virtualItem.start}px)`,
+                        width: '96px',
+                        height: '64px',
+                      }}
+                    >
+                      <FilmstripThumbnailItem
+                        img={img}
+                        isActive={activeImageIndex === virtualItem.index}
+                        onSelect={() => setActiveImageIndex(virtualItem.index)}
+                      />
                     </div>
-                    {/* Rating stars */}
-                    {img.culling.rating > 0 && (
-                      <div className="absolute bottom-0.5 left-1 flex items-center gap-0.5 bg-black/60 px-1 py-0.2 rounded text-[9px] text-warning pointer-events-none font-bold">
-                        <Star className="w-2.5 h-2.5 fill-warning text-warning" />
-                        <span>{img.culling.rating}</span>
-                      </div>
-                    )}
-                    {/* Reject overlay */}
-                    {img.culling.flag === -1 && (
-                      <div className="absolute inset-0 bg-danger/25 pointer-events-none" />
-                    )}
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           )}
 
@@ -485,6 +631,15 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Loading Overlay when directory is being scanned */}
+      {isLoading && (
+        <div className="absolute inset-0 bg-app-deepest/80 backdrop-blur-xs z-50 flex flex-col items-center justify-center gap-3 animate-in fade-in duration-150">
+          <Loader2 className="w-8 h-8 text-accent animate-spin" />
+          <p className="text-sm font-semibold text-txt-primary">Archiv wird indexiert...</p>
+          <p className="text-xs text-txt-tertiary">Dateien werden geladen und Culling-Sidecars synchronisiert</p>
         </div>
       )}
     </div>

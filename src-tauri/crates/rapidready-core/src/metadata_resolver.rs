@@ -2,7 +2,9 @@ use std::fs::File;
 use std::path::Path;
 use chrono::NaiveDateTime;
 
-#[derive(Debug, Clone, Default)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ImageMetadata {
     pub date: Option<NaiveDateTime>,
     pub camera: Option<String>,
