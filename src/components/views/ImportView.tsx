@@ -7,20 +7,35 @@ import { useImportStore } from "../../stores/importStore";
 
 export function ImportView() {
   const [currentStep, setCurrentStep] = useState<number>(1);
-  const { scannedFiles, sourceDirectory, destinationDirectory } = useImportStore();
+  const { scannedFiles, sourceDirectory, destinationDirectory, isScanning } = useImportStore();
 
   const selectedCount = scannedFiles.filter(f => f.selected).length;
 
   const canProceed = () => {
-    if (currentStep === 1) return sourceDirectory !== null && destinationDirectory !== null;
+    if (isScanning) return false;
+    if (currentStep === 1) {
+      return (
+        sourceDirectory !== null && 
+        destinationDirectory !== null && 
+        scannedFiles.length > 0
+      );
+    }
     if (currentStep === 2) return selectedCount > 0;
     return false;
   };
 
-  const handleNext = () => setCurrentStep((prev) => Math.min(prev + 1, 3));
-  const handlePrev = () => setCurrentStep((prev) => Math.max(prev - 1, 1));
+  const handleNext = () => {
+    if (isScanning || !canProceed()) return;
+    setCurrentStep((prev) => Math.min(prev + 1, 3));
+  };
+
+  const handlePrev = () => {
+    if (isScanning) return;
+    setCurrentStep((prev) => Math.max(prev - 1, 1));
+  };
 
   const canGoToStep = (step: number) => {
+    if (isScanning) return false;
     if (step <= currentStep) return true;
     if (step === currentStep + 1) return canProceed();
     return false; // cannot skip steps forward
@@ -69,7 +84,7 @@ export function ImportView() {
         <div className="flex items-center justify-between px-6 py-3 border-t border-app-border bg-app-panel/80 flex-shrink-0" id="step-actions">
           <button 
             className="px-5 py-2 bg-app-card border border-app-border rounded-lg text-sm font-medium text-txt-secondary hover:bg-app-hover hover:border-app-border-hover transition-all duration-150 flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed" 
-            disabled={currentStep === 1} 
+            disabled={currentStep === 1 || isScanning} 
             onClick={handlePrev}
           >
             <ArrowLeft className="w-4 h-4" />
@@ -79,7 +94,7 @@ export function ImportView() {
             <button 
               className="px-6 py-2 bg-accent hover:bg-accent-hover rounded-lg text-sm font-semibold text-app-deepest transition-all duration-150 flex items-center gap-2 shadow-lg shadow-accent/20 disabled:opacity-30 disabled:cursor-not-allowed" 
               onClick={handleNext}
-              disabled={!canProceed()}
+              disabled={!canProceed() || isScanning}
             >
               <span>{currentStep === 1 ? 'Preview' : 'Start Import'}</span>
               <ArrowRight className="w-4 h-4" />

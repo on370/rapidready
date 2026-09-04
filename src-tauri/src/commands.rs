@@ -17,7 +17,15 @@ pub async fn scan_source_directory(app: AppHandle, path: String) -> Result<Vec<S
     }
 
     let import_index = get_import_index(&app)?;
-    scan_directory(&dir_path, &import_index).map_err(|e| e.to_string())
+    let app_clone = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        scan_directory(&dir_path, &import_index, move |progress| {
+            let _ = app_clone.emit("scan_progress", progress);
+        })
+        .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
 }
 
 #[tauri::command]
@@ -161,7 +169,11 @@ pub fn get_removable_drives() -> Vec<rapidready_core::drives::DriveInfo> {
 #[tauri::command]
 pub async fn scan_archive_directory(path: String) -> Result<Vec<rapidready_core::archive::ArchiveFile>, String> {
     let dir = PathBuf::from(path);
-    rapidready_core::archive::scan_archive_directory(&dir).map_err(|e| e.to_string())
+    tauri::async_runtime::spawn_blocking(move || {
+        rapidready_core::archive::scan_archive_directory(&dir).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
 }
 
 #[tauri::command]
@@ -223,4 +235,16 @@ pub fn show_in_finder(path: String) -> Result<(), String> {
         Ok(())
     }
 }
+
+#[tauri::command]
+pub fn check_path_exists(path: String) -> bool {
+    std::path::Path::new(&path).exists()
+}
+
+#[tauri::command]
+pub fn quit_app(app: AppHandle) {
+    app.exit(0);
+}
+
+
 

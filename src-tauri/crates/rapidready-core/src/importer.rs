@@ -68,14 +68,19 @@ where
         
         // VERIFY: Hash the copied file and compare with original hash
         let target_hash = crate::hasher::hash_file_head(&target_path)?;
-        if target_hash != file.hash {
+        let source_hash = if !file.hash.is_empty() {
+            file.hash.clone()
+        } else {
+            crate::hasher::hash_file_head(Path::new(&file.path))?
+        };
+        if target_hash != source_hash {
             fs::remove_file(&target_path).await?;
             return Err(anyhow::anyhow!("Hash mismatch after copy: {}", file.name));
         }
         
         // Mark as imported
         let _ = import_index.mark_imported(
-            &file.hash,
+            &source_hash,
             file.size,
             &file.name,
             &target_path_str

@@ -3,11 +3,13 @@ import { useLibraryStore } from "../../../stores/libraryStore";
 
 interface ZoomableImageProps {
   src: string;
+  previewSrc?: string;
   alt: string;
 }
 
-export function ZoomableImage({ src, alt }: ZoomableImageProps) {
+export function ZoomableImage({ src, previewSrc, alt }: ZoomableImageProps) {
   const { invertScrollZoom } = useLibraryStore();
+  const [currentSrc, setCurrentSrc] = useState(previewSrc || src);
   const [scale, setScale] = useState(1);
   const [isZoomed, setIsZoomed] = useState(false);
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -19,12 +21,21 @@ export function ZoomableImage({ src, alt }: ZoomableImageProps) {
   const minimapRef = useRef<HTMLDivElement>(null);
   const startDragPos = useRef({ x: 0, y: 0 });
 
-  // Reset state when image changes
+  // Reset state & progressive load: show preview immediately, load full-res in background
   useEffect(() => {
     setIsZoomed(false);
     setScale(1);
     setPosition({ x: 0, y: 0 });
-  }, [src]);
+
+    if (previewSrc) {
+      setCurrentSrc(previewSrc);
+    }
+    const img = new Image();
+    img.src = src;
+    img.onload = () => {
+      setCurrentSrc(src);
+    };
+  }, [src, previewSrc]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -252,7 +263,7 @@ export function ZoomableImage({ src, alt }: ZoomableImageProps) {
           onMouseDown={onMinimapMouseDown}
           className="absolute bottom-6 right-6 w-32 h-24 bg-black/50 border border-white/20 rounded shadow-lg overflow-hidden flex items-center justify-center z-50 cursor-crosshair"
         >
-          <img src={src} className="max-w-full max-h-full opacity-50 pointer-events-none" />
+          <img src={currentSrc} className="max-w-full max-h-full opacity-50 pointer-events-none" />
           <div 
             className="absolute border border-accent bg-accent/20 pointer-events-none"
             style={{
@@ -267,7 +278,7 @@ export function ZoomableImage({ src, alt }: ZoomableImageProps) {
 
       <img
         ref={imageRef}
-        src={src}
+        src={currentSrc}
         alt={alt}
         onMouseDown={onMouseDown}
         className={`select-none ${!isDragging ? "transition-transform duration-200" : ""}`}

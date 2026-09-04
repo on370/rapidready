@@ -21,6 +21,13 @@ export const DATE_FORMAT_OPTIONS = [
   { id: '{year}/{month}', label: 'YYYY / MM' },
 ];
 
+export interface ScanProgress {
+  current: number;
+  total: number;
+  percent: number;
+  current_file: string;
+}
+
 interface ImportState {
   sourceDirectory: string | null;
   destinationDirectory: string | null;
@@ -34,6 +41,7 @@ interface ImportState {
   directoryTemplate: string;
   scannedFiles: ScannedFile[];
   isScanning: boolean;
+  scanProgress: ScanProgress | null;
   hideImported: boolean;
   
   setSourceDirectory: (path: string | null) => void;
@@ -47,6 +55,7 @@ interface ImportState {
   setPresetModified: (modified: boolean) => void;
   setScannedFiles: (files: Omit<ScannedFile, 'selected'>[]) => void;
   setIsScanning: (scanning: boolean) => void;
+  setScanProgress: (progress: ScanProgress | null) => void;
   setHideImported: (hide: boolean) => void;
   toggleFileSelection: (path: string) => void;
   toggleGroupSelection: (paths: string[], forceState?: boolean) => void;
@@ -68,6 +77,7 @@ export const useImportStore = create<ImportState>()(
       directoryTemplate: '{year}/{year}-{month}-{day}',
       scannedFiles: [],
       isScanning: false,
+      scanProgress: null,
       hideImported: true,
 
       setSourceDirectory: (path) => set({ sourceDirectory: path }),
@@ -104,6 +114,7 @@ export const useImportStore = create<ImportState>()(
         scannedFiles: files.map(f => ({ ...f, selected: !f.already_imported })) 
       }),
       setIsScanning: (scanning) => set({ isScanning: scanning }),
+      setScanProgress: (progress) => set({ scanProgress: progress }),
       setHideImported: (hide) => set({ hideImported: hide }),
       toggleFileSelection: (path) => set((state) => ({
         scannedFiles: state.scannedFiles.map(f => 

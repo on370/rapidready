@@ -37,6 +37,16 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
     return () => observer.disconnect();
   }, []);
 
+  const [debouncedActiveIndex, setDebouncedActiveIndex] = useState(activeImageIndex);
+
+  // Debounce preloading so rapid key-navigation doesn't hammer QuickLook with full-res requests
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedActiveIndex(activeImageIndex);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [activeImageIndex]);
+
   const scopedImages = isViewingLastImport
     ? images.filter(img => lastImportPaths.includes(img.path))
     : activeFolderPath 
@@ -345,14 +355,22 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
           <div className="flex-1 flex items-center justify-center bg-app-deepest p-6 min-h-0 relative">
             {activeImage ? (
               <>
-                <ZoomableImage src={`rr-image://localhost${activeImage.path}?fullres=true`} alt={activeImage.name} />
+                <ZoomableImage 
+                  src={`rr-image://localhost${activeImage.path}?fullres=true`} 
+                  previewSrc={`rr-image://localhost${activeImage.path}`}
+                  alt={activeImage.name} 
+                />
                 
-                {/* Preloading Previous and Next Full-Res images to avoid loading lag */}
-                {activeImageIndex > 0 && (
-                  <img src={`rr-image://localhost${displayedImages[activeImageIndex - 1].path}?fullres=true`} className="hidden" />
-                )}
-                {activeImageIndex < displayedImages.length - 1 && (
-                  <img src={`rr-image://localhost${displayedImages[activeImageIndex + 1].path}?fullres=true`} className="hidden" />
+                {/* Preload Previous and Next Full-Res images when navigation pauses */}
+                {debouncedActiveIndex === activeImageIndex && (
+                  <>
+                    {activeImageIndex > 0 && (
+                      <img src={`rr-image://localhost${displayedImages[activeImageIndex - 1].path}?fullres=true`} className="hidden" />
+                    )}
+                    {activeImageIndex < displayedImages.length - 1 && (
+                      <img src={`rr-image://localhost${displayedImages[activeImageIndex + 1].path}?fullres=true`} className="hidden" />
+                    )}
+                  </>
                 )}
               </>
             ) : null}

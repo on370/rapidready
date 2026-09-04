@@ -20,6 +20,9 @@ pub fn get_removable_drives() -> Vec<DriveInfo> {
         // we might also want to explicitly check is_removable, but sometimes SD cards aren't marked as removable
         // depending on the card reader. On macOS, any mount under /Volumes that isn't Macintosh HD is often an external drive.
         let mount_path = disk.mount_point();
+        if !mount_path.exists() {
+            continue;
+        }
         
         let path_str = mount_path.to_string_lossy();
         

@@ -27,8 +27,9 @@ pub fn run() {
             });
             Ok(())
         })
-        .register_uri_scheme_protocol("rr-image", |_app, request| {
-            let uri_obj = request.uri();
+        .register_asynchronous_uri_scheme_protocol("rr-image", |_app, request, responder| {
+            tauri::async_runtime::spawn_blocking(move || {
+                let uri_obj = request.uri();
             let uri_path = uri_obj.path();
             let query = uri_obj.query().unwrap_or("");
             
@@ -67,11 +68,13 @@ pub fn run() {
                 if ["cr2", "cr3", "arw", "nef", "dng", "orf", "raf"].contains(&ext.as_str()) {
                     match rapidready_core::thumbnail::get_max_preview_jpeg(path) {
                         Ok(bytes) => {
-                            return Response::builder()
+                            let res = Response::builder()
                                 .header("Content-Type", "image/jpeg")
                                 .header("Access-Control-Allow-Origin", "*")
                                 .body(bytes)
                                 .unwrap();
+                            responder.respond(res);
+                            return;
                         }
                         Err(e) => {
                             println!("Preview error for {:?}: {:?}", path, e);
@@ -80,16 +83,18 @@ pub fn run() {
                 } else {
                     if let Ok(bytes) = std::fs::read(path) {
                         let content_type = if ext == "png" { "image/png" } else { "image/jpeg" };
-                        return Response::builder()
+                        let res = Response::builder()
                             .header("Content-Type", content_type)
                             .header("Access-Control-Allow-Origin", "*")
                             .body(bytes)
                             .unwrap();
+                        responder.respond(res);
+                        return;
                     }
                 }
             }
             
-            match rapidready_core::thumbnail::get_preview_jpeg(path, 2) {
+            let res = match rapidready_core::thumbnail::get_preview_jpeg(path, 2) {
                 Ok(bytes) => {
                     Response::builder()
                         .header("Content-Type", "image/jpeg")
@@ -104,7 +109,9 @@ pub fn run() {
                         .body(Vec::new())
                         .unwrap()
                 }
-            }
+            };
+            responder.respond(res);
+            });
         })
         .invoke_handler(tauri::generate_handler![
             commands::scan_source_directory,
@@ -114,7 +121,9 @@ pub fn run() {
             commands::set_culling_state,
             commands::delete_files,
             commands::open_in_rapidraw,
-            commands::show_in_finder
+            commands::show_in_finder,
+            commands::check_path_exists,
+            commands::quit_app
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

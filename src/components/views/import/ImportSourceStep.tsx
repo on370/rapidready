@@ -4,13 +4,21 @@ import {
   Folder, FolderSearch, Plus, Bookmark, BookmarkCheck, Edit2, 
   Trash2, Check, RefreshCw
 } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-dialog';
 
 import { useImportStore, ScannedFile, DATE_FORMAT_OPTIONS } from '../../../stores/importStore';
 import { useSettingsStore, ArchiveLocation, ImportPreset } from '../../../stores/settingsStore';
+
+interface ScanProgress {
+  current: number;
+  total: number;
+  percent: number;
+  current_file: string;
+}
 
 interface DriveInfo {
   name: string;
@@ -26,6 +34,7 @@ export function ImportSourceStep() {
   const { 
     setSourceDirectory, sourceDirectory,
     scannedFiles, setScannedFiles, isScanning, setIsScanning,
+    scanProgress, setScanProgress,
     destinationDirectory, setDestinationDirectory, selectedLocationId,
     structureMode, setStructureMode,
     dateFormat, setDateFormat,
@@ -59,15 +68,77 @@ export function ImportSourceStep() {
       try {
         const detectedDrives = await invoke<DriveInfo[]>('get_removable_drives');
         setDrives(detectedDrives);
+
+        // Auto-Reset: If currently selected source was an external drive/volume that is now unplugged
+        if (sourceDirectory && (sourceDirectory.startsWith('/Volumes/') || detectedDrives.some(d => sourceDirectory.startsWith(d.path)))) {
+          const exists = await invoke<boolean>('check_path_exists', { path: sourceDirectory }).catch(() => false);
+          if (!exists) {
+            setSourceDirectory(null);
+            setScannedFiles([]);
+            setScanProgress(null);
+            setIsScanning(false);
+          }
+        }
       } catch (error) {
         console.error("Failed to get drives:", error);
       }
     };
     
     fetchDrives();
-    const interval = setInterval(fetchDrives, 2000);
+    const interval = setInterval(fetchDrives, 1500);
     return () => clearInterval(interval);
-  }, []);
+  }, [sourceDirectory, setSourceDirectory, setScannedFiles, setIsScanning]);
+
+  // Central scan function with watchdog inactivity protection
+  const scanPath = async (path: string) => {
+    if (isScanning) return;
+    setSourceDirectory(path);
+    setScannedFiles([]);
+    setScanProgress(null);
+    setIsScanning(true);
+
+    let watchdogTimer: any = null;
+    let unlistenFn: any = null;
+
+    // Reset inactivity watchdog: triggers only if 20 seconds pass without ANY progress event
+    const resetWatchdog = (reject: (reason?: any) => void) => {
+      if (watchdogTimer) clearTimeout(watchdogTimer);
+      watchdogTimer = setTimeout(() => {
+        reject(new Error(t('source.scanTimeout')));
+      }, 20000);
+    };
+
+    try {
+      const scanPromise = new Promise<ScannedFile[]>(async (resolve, reject) => {
+        resetWatchdog(reject);
+
+        try {
+          unlistenFn = await listen<ScanProgress>('scan_progress', (event) => {
+            setScanProgress(event.payload);
+            resetWatchdog(reject);
+          });
+
+          const result = await invoke<ScannedFile[]>('scan_source_directory', { path });
+          resolve(result);
+        } catch (err) {
+          reject(err);
+        }
+      });
+
+      const files = await scanPromise;
+      setScannedFiles(files);
+    } catch (error: any) {
+      console.error("Failed to scan directory:", error);
+      alert(error.message || String(error));
+      setSourceDirectory(null);
+      setScannedFiles([]);
+    } finally {
+      if (watchdogTimer) clearTimeout(watchdogTimer);
+      if (unlistenFn) unlistenFn();
+      setIsScanning(false);
+      setScanProgress(null);
+    }
+  };
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -86,6 +157,7 @@ export function ImportSourceStep() {
   }, []);
 
   const handleSelectFolder = async () => {
+    if (isScanning) return;
     try {
       const selectedPath = await open({
         directory: true,
@@ -93,15 +165,10 @@ export function ImportSourceStep() {
       });
 
       if (selectedPath && typeof selectedPath === 'string') {
-        setSourceDirectory(selectedPath);
-        setIsScanning(true);
-        const files: ScannedFile[] = await invoke('scan_source_directory', { path: selectedPath });
-        setScannedFiles(files);
+        scanPath(selectedPath);
       }
     } catch (error) {
-      console.error("Failed to select or scan directory:", error);
-    } finally {
-      setIsScanning(false);
+      console.error("Failed to select folder:", error);
     }
   };
 
@@ -212,6 +279,30 @@ export function ImportSourceStep() {
   const newFiles = scannedFiles.filter(f => !f.already_imported);
   const alreadyImportedFiles = scannedFiles.filter(f => f.already_imported);
 
+  const pairStats = useMemo(() => {
+    const RAW_EXTS = new Set(["cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2"]);
+    const JPG_EXTS = new Set(["jpg", "jpeg"]);
+    const stems = new Map<string, { raw: boolean; jpg: boolean }>();
+    for (const f of newFiles) {
+      const lastSlash = Math.max(f.path.lastIndexOf('/'), f.path.lastIndexOf('\\'));
+      const dir = lastSlash !== -1 ? f.path.substring(0, lastSlash) : '';
+      const dotIdx = f.name.lastIndexOf('.');
+      const stem = dotIdx !== -1 ? f.name.substring(0, dotIdx) : f.name;
+      const ext = dotIdx !== -1 ? f.name.substring(dotIdx + 1).toLowerCase() : '';
+      const key = `${dir}:::${stem.toLowerCase()}`;
+      if (!stems.has(key)) stems.set(key, { raw: false, jpg: false });
+      const e = stems.get(key)!;
+      if (RAW_EXTS.has(ext)) e.raw = true;
+      if (JPG_EXTS.has(ext)) e.jpg = true;
+    }
+    let pairs = 0;
+    for (const e of stems.values()) {
+      if (e.raw && e.jpg) pairs++;
+    }
+    const totalPhotos = stems.size;
+    return { pairs, totalPhotos };
+  }, [newFiles]);
+
   // Dynamic preview generator
   const generatePreview = () => {
     if (!destinationDirectory) {
@@ -303,6 +394,9 @@ export function ImportSourceStep() {
   const activePreset = presets.find(p => p.id === activePresetId);
   const activeLocation = locations.find(l => l.id === selectedLocationId || l.path === destinationDirectory);
   const isBookmarked = !!activeLocation;
+  const isRemovableSource = sourceDirectory ? (
+    drives.some(d => sourceDirectory.startsWith(d.path)) || sourceDirectory.startsWith('/Volumes/')
+  ) : false;
 
   return (
     <div className="flex-1 overflow-hidden p-6 flex gap-6">
@@ -316,7 +410,7 @@ export function ImportSourceStep() {
 
         {/* Source Cards */}
         {sourceDirectory ? (
-          <div className="bg-app-card border border-app-border rounded-xl p-4 hover:border-app-border-hover transition-colors cursor-pointer ring-1 ring-accent/30 shadow-[0_0_15px_rgba(var(--accent-color-rgb),0.1)] relative overflow-hidden">
+          <div className="bg-app-card border border-app-border rounded-xl p-4 ring-1 ring-accent/30 shadow-[0_0_15px_rgba(var(--accent-color-rgb),0.1)] relative overflow-hidden">
             <div className="absolute top-0 right-0 w-16 h-16 bg-accent/5 rounded-bl-full"></div>
             
             <div className="flex items-start justify-between relative z-10">
@@ -325,34 +419,89 @@ export function ImportSourceStep() {
                   <h3 className="font-semibold text-txt-primary text-base truncate">
                     {sourceDirectory.split(/[/\\]/).pop() || sourceDirectory}
                   </h3>
-                  <span className="w-2 h-2 rounded-full bg-success animate-pulse"></span>
+                  <span className={`w-2 h-2 rounded-full ${isScanning ? 'bg-warning animate-ping' : 'bg-success animate-pulse'}`}></span>
                 </div>
                 <div className="flex items-center gap-2 mb-2">
-                  <Folder className="w-3.5 h-3.5 text-txt-tertiary" />
+                  {isRemovableSource ? <HardDrive className="w-3.5 h-3.5 text-txt-tertiary" /> : <Folder className="w-3.5 h-3.5 text-txt-tertiary" />}
                   <span className="text-sm font-medium text-txt-secondary truncate" title={sourceDirectory}>
                     {sourceDirectory}
                   </span>
                 </div>
-                <div className="flex items-center gap-3 text-xs text-txt-tertiary">
-                  <span className="flex items-center gap-1 font-medium text-txt-primary">
-                    <File className="w-3 h-3 text-accent" /> 
-                    {newFiles.length} {t('source.newFiles')}
-                  </span>
-                  <span>·</span>
-                  <span className="flex items-center gap-1">
-                    <Database className="w-3 h-3" /> 
-                    {(newFiles.reduce((acc, f) => acc + f.size, 0) / (1024 * 1024 * 1024)).toFixed(2)} GB
-                  </span>
-                </div>
-                <div className="text-xs text-txt-tertiary mt-1.5 flex items-center gap-1">
-                  <Calendar className="w-3 h-3" />
-                  {newFiles.length > 0
-                    ? `${newFiles[0]?.formatted_date?.split(' ')[0] || ''} – ${newFiles[newFiles.length - 1]?.formatted_date?.split(' ')[0] || ''}`
-                    : 'No dates found'}
-                </div>
+
+                {isScanning ? (
+                  <div className="space-y-2 py-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2 text-accent font-semibold">
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin flex-shrink-0" />
+                        <span>
+                          {scanProgress && scanProgress.total > 0
+                            ? `${scanProgress.current} von ${scanProgress.total} Dateien`
+                            : t('source.readingCard')}
+                        </span>
+                      </div>
+                      {scanProgress && scanProgress.total > 0 && (
+                        <span className="font-mono text-[11px] text-accent font-bold">
+                          {Math.round(scanProgress.percent)}%
+                        </span>
+                      )}
+                    </div>
+
+                    {/* True live moving progress bar */}
+                    <div className="w-full bg-app-deepest h-2 rounded-full overflow-hidden border border-app-border">
+                      <div 
+                        className="bg-accent h-full rounded-full transition-all duration-150 ease-out shadow-[0_0_8px_rgba(var(--accent-color-rgb),0.5)]"
+                        style={{ width: `${Math.max(3, Math.min(100, scanProgress?.percent ?? 0))}%` }}
+                      ></div>
+                    </div>
+
+                    <div className="text-[11px] text-txt-tertiary flex items-center justify-between gap-2">
+                      <span className="truncate max-w-[260px] font-mono text-[10px]">
+                        {scanProgress?.current_file ? scanProgress.current_file : t('source.readingCardDesc')}
+                      </span>
+                      {scanProgress && scanProgress.total > 0 && (
+                        <span className="flex-shrink-0 text-[10px] opacity-75">
+                          {scanProgress.total - scanProgress.current} verbleibend
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-3 text-xs text-txt-tertiary">
+                      <span className="flex items-center gap-1 font-medium text-txt-primary">
+                        <File className="w-3 h-3 text-accent" /> 
+                        {pairStats.pairs > 0 ? (
+                          <span>
+                            {pairStats.totalPhotos} Fotos ({newFiles.length} Dateien · {pairStats.pairs} Paare)
+                          </span>
+                        ) : (
+                          <span>
+                            {newFiles.length} {t('source.newFiles')}
+                          </span>
+                        )}
+                      </span>
+                      <span>·</span>
+                      <span className="flex items-center gap-1">
+                        <Database className="w-3 h-3" /> 
+                        {(newFiles.reduce((acc, f) => acc + f.size, 0) / (1024 * 1024 * 1024)).toFixed(2)} GB
+                      </span>
+                    </div>
+                    <div className="text-xs text-txt-tertiary mt-1.5 flex items-center gap-1">
+                      <Calendar className="w-3 h-3" />
+                      {newFiles.length > 0
+                        ? `${newFiles[0]?.formatted_date?.split(' ')[0] || ''} – ${newFiles[newFiles.length - 1]?.formatted_date?.split(' ')[0] || ''}`
+                        : 'No dates found'}
+                    </div>
+                  </>
+                )}
               </div>
               <div className="flex-shrink-0">
-                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-accent/10 text-accent text-[10px] font-semibold uppercase tracking-wide">FOLDER</span>
+                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-semibold tracking-wide ${
+                  isRemovableSource ? 'bg-warning/15 text-warning border border-warning/30' : 'bg-accent/15 text-accent border border-accent/30'
+                }`}>
+                  {isRemovableSource ? <HardDrive className="w-3 h-3" /> : <Folder className="w-3 h-3" />}
+                  <span>{isRemovableSource ? t('source.badgeSdCard') : t('source.badgeFolder')}</span>
+                </span>
               </div>
             </div>
           </div>
@@ -360,26 +509,24 @@ export function ImportSourceStep() {
           drives.length > 0 ? (
             <div className="grid grid-cols-2 gap-3">
               {drives.map((drive, idx) => (
-                <div 
+                <button 
                   key={idx}
-                  onClick={() => {
-                    setSourceDirectory(drive.path);
-                    setIsScanning(true);
-                    invoke('scan_source_directory', { path: drive.path })
-                      .then((files: any) => setScannedFiles(files))
-                      .catch(e => console.error(e))
-                      .finally(() => setIsScanning(false));
-                  }}
-                  className="bg-app-card border border-app-border rounded-xl p-4 flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-accent hover:bg-accent/5 transition-all text-center group ring-1 ring-transparent hover:ring-accent/30"
+                  disabled={isScanning}
+                  onClick={() => scanPath(drive.path)}
+                  className="bg-app-card border border-app-border rounded-xl p-4 flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-accent hover:bg-accent/5 transition-all text-center group ring-1 ring-transparent hover:ring-accent/30 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <div className="w-10 h-10 rounded-full bg-app-deepest flex items-center justify-center group-hover:scale-110 transition-transform">
-                    <HardDrive className="w-5 h-5 text-txt-secondary group-hover:text-accent transition-colors" />
+                    {isScanning && sourceDirectory === drive.path ? (
+                      <RefreshCw className="w-5 h-5 text-accent animate-spin" />
+                    ) : (
+                      <HardDrive className="w-5 h-5 text-txt-secondary group-hover:text-accent transition-colors" />
+                    )}
                   </div>
                   <div>
                     <h3 className="text-sm font-semibold text-txt-primary truncate max-w-[140px]" title={drive.name}>{drive.name || 'SD Card'}</h3>
                     <p className="text-[10px] text-txt-tertiary">{(drive.available_space / (1024*1024*1024)).toFixed(1)} GB free</p>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           ) : (
@@ -402,7 +549,7 @@ export function ImportSourceStep() {
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs text-txt-tertiary">{t('source.hideImported')}</span>
-              <div className={`toggle-track ${hideImported ? 'on' : ''}`} onClick={() => setHideImported(!hideImported)}>
+              <div className={`toggle-track ${hideImported ? 'on' : ''} ${isScanning ? 'opacity-40 pointer-events-none' : ''}`} onClick={() => !isScanning && setHideImported(!hideImported)}>
                 <div className="toggle-knob"></div>
               </div>
             </div>
@@ -423,12 +570,23 @@ export function ImportSourceStep() {
           </div>
           <div className="mt-2 flex items-center gap-1.5">
             <Sparkles className="w-4 h-4 text-accent" />
-            <span className="text-sm font-semibold text-accent">
-              {newFiles.length} {t('source.newFiles')}
-            </span>
-            <span className="text-sm text-txt-tertiary">
-              ({(newFiles.reduce((acc, f) => acc + f.size, 0) / (1024 * 1024 * 1024)).toFixed(2)} GB)
-            </span>
+            {isScanning ? (
+              <span className="text-sm font-medium text-txt-tertiary italic flex items-center gap-1.5">
+                <RefreshCw className="w-3 h-3 animate-spin" />
+                {scanProgress && scanProgress.total > 0
+                  ? `${scanProgress.current} / ${scanProgress.total} (${Math.round(scanProgress.percent)}%)`
+                  : t('source.scanning')}
+              </span>
+            ) : (
+              <>
+                <span className="text-sm font-semibold text-accent">
+                  {pairStats.pairs > 0 ? `${pairStats.totalPhotos} Fotos (${pairStats.pairs} Paare)` : `${newFiles.length} ${t('source.newFiles')}`}
+                </span>
+                <span className="text-sm text-txt-tertiary">
+                  ({(newFiles.reduce((acc, f) => acc + f.size, 0) / (1024 * 1024 * 1024)).toFixed(2)} GB)
+                </span>
+              </>
+            )}
           </div>
         </div>
 
@@ -436,7 +594,7 @@ export function ImportSourceStep() {
         <button 
           onClick={handleSelectFolder}
           disabled={isScanning}
-          className="flex items-center justify-center gap-2 py-3 px-4 border border-dashed border-app-border rounded-xl text-sm text-txt-secondary hover:border-accent hover:text-accent transition-all duration-200 hover:bg-accent/5 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex items-center justify-center gap-2 py-3 px-4 border border-dashed border-app-border rounded-xl text-sm text-txt-secondary hover:border-accent hover:text-accent transition-all duration-200 hover:bg-accent/5 disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none"
         >
           <FolderPlus className="w-4 h-4" />
           <span>{isScanning ? t('source.scanning') : t('source.selectFolder')}</span>
@@ -444,7 +602,7 @@ export function ImportSourceStep() {
       </div>
 
       {/* Right Panel: Destination & Settings */}
-      <div className="flex-1 flex flex-col gap-4 min-w-0 min-h-0 overflow-y-auto pl-1">
+      <fieldset disabled={isScanning} className="flex-1 flex flex-col gap-4 min-w-0 min-h-0 overflow-y-auto pl-1 border-0 m-0 p-0 disabled:opacity-40 disabled:pointer-events-none transition-opacity">
         <div className="flex items-center gap-2 mb-1">
           <FolderOutput className="w-4 h-4 text-txt-secondary" />
           <h2 className="text-sm font-semibold text-txt-primary uppercase tracking-wider">{t('destination.title')}</h2>
@@ -834,7 +992,7 @@ export function ImportSourceStep() {
           <label className="block text-xs font-medium text-txt-tertiary mb-1.5">{t('destination.preview')}</label>
           {generatePreview()}
         </div>
-      </div>
+      </fieldset>
     </div>
   );
 }

@@ -16,30 +16,52 @@ pub struct ImageMetadata {
 pub fn get_image_metadata(path: &Path) -> ImageMetadata {
     let mut meta = ImageMetadata::default();
 
-    // 1. Resolve date via date_resolver
-    meta.date = crate::date_resolver::get_creation_date(path).ok();
-
-    // 2. Extract EXIF tags using kamadak-exif
+    // Single-pass: Open file ONCE and extract date + EXIF tags simultaneously
+    let mut exif_date = None;
     if let Ok(file) = File::open(path) {
         let mut bufreader = std::io::BufReader::new(&file);
         let exifreader = exif::Reader::new();
         
         if let Ok(exif) = exifreader.read_from_container(&mut bufreader) {
-            // Camera Model
+            // 1. Date extraction from EXIF
+            let tags_to_try = [
+                exif::Tag::DateTimeOriginal,
+                exif::Tag::DateTimeDigitized,
+                exif::Tag::DateTime,
+                exif::Tag::GPSDateStamp,
+            ];
+            for tag in tags_to_try {
+                if let Some(field) = exif.get_field(tag, exif::In::PRIMARY) {
+                    if let exif::Value::Ascii(ref vec) = field.value {
+                        if let Some(val) = vec.first() {
+                            if let Ok(dt_str) = std::str::from_utf8(val) {
+                                if let Ok(dt) = NaiveDateTime::parse_from_str(dt_str.trim(), "%Y:%m:%d %H:%M:%S") {
+                                    exif_date = Some(dt);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 2. Camera Model
             if let Some(field) = exif.get_field(exif::Tag::Model, exif::In::PRIMARY) {
                 let model = field.display_value().to_string().trim().trim_matches('"').to_string();
                 if !model.is_empty() {
                     meta.camera = Some(model);
                 }
             }
-            // Lens Model
+
+            // 3. Lens Model
             if let Some(field) = exif.get_field(exif::Tag::LensModel, exif::In::PRIMARY) {
                 let lens = field.display_value().to_string().trim().trim_matches('"').to_string();
                 if !lens.is_empty() {
                     meta.lens = Some(lens);
                 }
             }
-            // ISO
+
+            // 4. ISO
             let iso_tag = exif.get_field(exif::Tag::PhotographicSensitivity, exif::In::PRIMARY)
                 .or_else(|| exif.get_field(exif::Tag::ISOSpeed, exif::In::PRIMARY));
             if let Some(field) = iso_tag {
@@ -48,7 +70,8 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
                     meta.iso = Some(iso);
                 }
             }
-            // Aperture (FNumber)
+
+            // 5. Aperture (FNumber)
             if let Some(field) = exif.get_field(exif::Tag::FNumber, exif::In::PRIMARY) {
                 let f_str = field.display_value().to_string().trim().to_string();
                 if !f_str.is_empty() {
@@ -60,7 +83,8 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
                     meta.aperture = Some(formatted);
                 }
             }
-            // Shutter Speed (ExposureTime)
+
+            // 6. Shutter Speed (ExposureTime)
             if let Some(field) = exif.get_field(exif::Tag::ExposureTime, exif::In::PRIMARY) {
                 let exp_str = field.display_value().to_string().trim().to_string();
                 if !exp_str.is_empty() {
@@ -72,7 +96,8 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
                     meta.shutter = Some(formatted);
                 }
             }
-            // Focal Length
+
+            // 7. Focal Length
             if let Some(field) = exif.get_field(exif::Tag::FocalLength, exif::In::PRIMARY) {
                 let fl = field.display_value().with_unit(&exif).to_string();
                 if !fl.is_empty() {
@@ -80,6 +105,13 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
                 }
             }
         }
+    }
+
+    if let Some(d) = exif_date {
+        meta.date = Some(d);
+    } else {
+        // Fallback to filename/fs timestamp only if EXIF didn't have a date
+        meta.date = crate::date_resolver::get_creation_date(path).ok();
     }
 
     meta
