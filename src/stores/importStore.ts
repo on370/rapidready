@@ -1,5 +1,15 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { ImportPreset } from './settingsStore';
+
+export const normalizeDateFormat = (df?: string): string => {
+  if (!df) return '{year}/{year}-{month}-{day}';
+  if (df === 'YYYY/YYYY-MM-DD' || df === 'YYYY / YYYY-MM-DD') return '{year}/{year}-{month}-{day}';
+  if (df === 'YYYY/MM/DD' || df === 'YYYY / MM / DD') return '{year}/{month}/{day}';
+  if (df === 'YYYY-MM-DD') return '{year}-{month}-{day}';
+  if (df === 'YYYY/MM' || df === 'YYYY / MM') return '{year}/{month}';
+  return df;
+};
 
 export interface ScannedFile {
   path: string;
@@ -45,7 +55,7 @@ interface ImportState {
   hideImported: boolean;
   
   setSourceDirectory: (path: string | null) => void;
-  setDestinationDirectory: (path: string | null, locationId?: string | null) => void;
+  setDestinationDirectory: (path: string | null, locationId?: string | null, markModified?: boolean) => void;
   setStructureMode: (mode: StructureMode) => void;
   setDateFormat: (format: string) => void;
   setCustomPattern: (pattern: string) => void;
@@ -53,6 +63,7 @@ interface ImportState {
   setDirectoryTemplate: (template: string) => void;
   setActivePreset: (presetId: string | null, isModified?: boolean) => void;
   setPresetModified: (modified: boolean) => void;
+  applyPreset: (preset: ImportPreset, resolvedPath?: string | null, resolvedLocationId?: string | null) => void;
   setScannedFiles: (files: Omit<ScannedFile, 'selected'>[]) => void;
   setIsScanning: (scanning: boolean) => void;
   setScanProgress: (progress: ScanProgress | null) => void;
@@ -81,27 +92,37 @@ export const useImportStore = create<ImportState>()(
       hideImported: true,
 
       setSourceDirectory: (path) => set({ sourceDirectory: path }),
-      setDestinationDirectory: (path, locationId = null) => {
-        set({ destinationDirectory: path, selectedLocationId: locationId, isPresetModified: true });
+      setDestinationDirectory: (path, locationId = null, markModified = true) => {
+        const current = get();
+        if (current.destinationDirectory === path && current.selectedLocationId === locationId) return;
+        set((state) => ({
+          destinationDirectory: path,
+          selectedLocationId: locationId,
+          isPresetModified: markModified ? true : state.isPresetModified,
+        }));
       },
       setStructureMode: (mode) => {
+        if (get().structureMode === mode) return;
         set({ structureMode: mode, isPresetModified: true });
         const template = get().getEffectiveTemplate();
         set({ directoryTemplate: template });
       },
       setDateFormat: (format) => {
+        if (get().dateFormat === format) return;
         set({ dateFormat: format, isPresetModified: true });
         if (get().structureMode === 'date') {
           set({ directoryTemplate: format });
         }
       },
       setCustomPattern: (pattern) => {
+        if (get().customPattern === pattern) return;
         set({ customPattern: pattern, isPresetModified: true });
         if (get().structureMode === 'custom') {
           set({ directoryTemplate: pattern });
         }
       },
       setProjectName: (name) => {
+        if (get().projectName === name) return;
         set({ projectName: name, isPresetModified: true });
         if (get().structureMode === 'project') {
           set({ directoryTemplate: name });
@@ -110,6 +131,49 @@ export const useImportStore = create<ImportState>()(
       setDirectoryTemplate: (template) => set({ directoryTemplate: template }),
       setActivePreset: (presetId, isModified = false) => set({ activePresetId: presetId, isPresetModified: isModified }),
       setPresetModified: (modified) => set({ isPresetModified: modified }),
+      applyPreset: (preset, resolvedPath = null, resolvedLocationId = null) => {
+        const normalizedDateFormat = normalizeDateFormat(preset.dateFormat);
+        const normalizedCustomPattern = preset.customPattern || '{year}/{year}-{month}-{day}';
+        const normalizedProjectName = preset.projectName || '';
+
+        let template = normalizedDateFormat;
+        if (preset.structureMode === 'custom') {
+          template = normalizedCustomPattern;
+        } else if (preset.structureMode === 'project') {
+          template = normalizedProjectName.trim() || 'Project';
+        } else if (preset.structureMode === 'flat') {
+          template = '';
+        }
+
+        let newDest = get().destinationDirectory;
+        let newLocId = get().selectedLocationId;
+
+        if (resolvedLocationId !== null && resolvedPath !== null) {
+          newDest = resolvedPath;
+          newLocId = resolvedLocationId;
+        } else if (resolvedPath !== null) {
+          newDest = resolvedPath;
+          newLocId = null;
+        } else if (preset.locationId) {
+          newLocId = preset.locationId;
+          if (resolvedPath) newDest = resolvedPath;
+        } else if (preset.destinationPath) {
+          newDest = preset.destinationPath;
+          newLocId = null;
+        }
+
+        set({
+          activePresetId: preset.id,
+          isPresetModified: false,
+          structureMode: preset.structureMode,
+          dateFormat: normalizedDateFormat,
+          customPattern: normalizedCustomPattern,
+          projectName: normalizedProjectName,
+          destinationDirectory: newDest,
+          selectedLocationId: newLocId,
+          directoryTemplate: template,
+        });
+      },
       setScannedFiles: (files) => set({ 
         scannedFiles: files.map(f => ({ ...f, selected: !f.already_imported })) 
       }),

@@ -5,7 +5,11 @@
     "stepImport": "Importieren",
     "btnBack": "Zurück",
     "btnPreview": "Vorschau",
-    "btnStartImport": "Import starten"
+    "btnStartImport": "Import starten",
+    "hintSelectSource": "Bitte wähle eine Quelle (SD-Karte oder Ordner) aus",
+    "hintSelectDestination": "Bitte wähle rechts einen Zielordner aus",
+    "hintNoFiles": "Keine Mediendateien auf der Quelle gefunden",
+    "hintSelectFiles": "Bitte mindestens ein Foto zum Import auswählen"
   },
   "source": {
     "title": "Quelle",
@@ -35,7 +39,10 @@
     "saveProfile": "Speichern",
     "saveAsNewProfile": "Als neu...",
     "saveProfilePrompt": "Name für das neue Profil eingeben:",
+    "newProfilePlaceholder": "Profilname...",
     "targetPath": "Ziel-Verzeichnis",
+    "required": "Erforderlich",
+    "defaultPicturesName": "Bilder",
     "selectDestination": "Zielordner auswählen...",
     "bookmarkLocation": "Als Location speichern",
     "locationSaved": "Location gespeichert!",

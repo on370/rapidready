@@ -40,7 +40,7 @@ export function ImportSourceStep() {
     dateFormat, setDateFormat,
     customPattern, setCustomPattern,
     projectName, setProjectName,
-    activePresetId, setActivePreset,
+    activePresetId, setActivePreset, applyPreset,
     isPresetModified, setPresetModified,
     hideImported, setHideImported
   } = useImportStore();
@@ -88,6 +88,32 @@ export function ImportSourceStep() {
     const interval = setInterval(fetchDrives, 1500);
     return () => clearInterval(interval);
   }, [sourceDirectory, setSourceDirectory, setScannedFiles, setIsScanning]);
+
+  // Auto-initialize default destination to user's Pictures directory on fresh install
+  useEffect(() => {
+    if (!destinationDirectory) {
+      if (locations.length > 0) {
+        setDestinationDirectory(locations[0].path, locations[0].id, false);
+      } else {
+        invoke<string>('get_default_pictures_dir')
+          .then(picDir => {
+            if (picDir) {
+              const defaultName = t('destination.defaultPicturesName', 'Pictures');
+              const defaultLoc: ArchiveLocation = {
+                id: 'default-pictures',
+                name: defaultName,
+                path: picDir,
+              };
+              addLocation(defaultLoc);
+              setDestinationDirectory(picDir, defaultLoc.id, false);
+            }
+          })
+          .catch(err => {
+            console.error("Failed to get default pictures dir:", err);
+          });
+      }
+    }
+  }, [destinationDirectory, locations, setDestinationDirectory, addLocation, t]);
 
   // Central scan function with watchdog inactivity protection
   const scanPath = async (path: string) => {
@@ -226,21 +252,39 @@ export function ImportSourceStep() {
   };
 
   const handleSelectPreset = (preset: ImportPreset) => {
-    setActivePreset(preset.id, false);
-    setStructureMode(preset.structureMode);
-    setDateFormat(preset.dateFormat);
-    setCustomPattern(preset.customPattern);
-    setProjectName(preset.projectName);
-    
+    let resolvedPath: string | null = null;
+    let resolvedLocId: string | null = null;
+
     if (preset.locationId) {
       const loc = locations.find(l => l.id === preset.locationId);
       if (loc) {
-        setDestinationDirectory(loc.path, loc.id);
+        resolvedPath = loc.path;
+        resolvedLocId = loc.id;
+      } else if (preset.destinationPath) {
+        resolvedPath = preset.destinationPath;
+        resolvedLocId = null;
       }
     } else if (preset.destinationPath) {
-      setDestinationDirectory(preset.destinationPath, null);
+      resolvedPath = preset.destinationPath;
+      resolvedLocId = null;
     }
+
+    applyPreset(preset, resolvedPath, resolvedLocId);
     setIsPresetDropdownOpen(false);
+    setIsCreatingPreset(false);
+    setNewPresetName('');
+  };
+
+  const handleRemovePreset = (presetId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    removePreset(presetId);
+    if (activePresetId === presetId) {
+      const remaining = presets.filter(p => p.id !== presetId);
+      const fallback = remaining.find(p => p.id === 'default-std') || remaining[0];
+      if (fallback) {
+        handleSelectPreset(fallback);
+      }
+    }
   };
 
   const handleSavePresetChanges = () => {
@@ -610,12 +654,44 @@ export function ImportSourceStep() {
 
         {/* 1. Import Profile Selector */}
         <div className="relative" ref={presetDropdownRef}>
-          <div className="flex items-center justify-between mb-1.5">
+          <div className="flex items-center justify-between mb-1.5 min-h-[24px]">
             <label className="block text-xs font-medium text-txt-tertiary">{t('destination.profile')}</label>
-            {isPresetModified && (
+            {isCreatingPreset && !isPresetDropdownOpen ? (
+              <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                <input 
+                  type="text"
+                  value={newPresetName}
+                  onChange={(e) => setNewPresetName(e.target.value)}
+                  placeholder={t('destination.newProfilePlaceholder', 'Profilname...')}
+                  autoFocus
+                  onKeyDown={(e) => { 
+                    if (e.key === 'Enter') handleCreateNewPreset(); 
+                    if (e.key === 'Escape') { 
+                      setIsCreatingPreset(false); 
+                      setNewPresetName(''); 
+                    } 
+                  }}
+                  className="bg-app-deepest border border-accent rounded px-2 py-0.5 text-xs text-txt-primary outline-none focus:ring-1 focus:ring-accent w-36 placeholder:text-txt-tertiary"
+                />
+                <button 
+                  onClick={handleCreateNewPreset}
+                  disabled={!newPresetName.trim()}
+                  className="text-[10px] px-2 py-0.5 bg-accent hover:bg-accent-hover text-app-deepest font-semibold rounded transition-colors disabled:opacity-40 cursor-pointer"
+                >
+                  {t('destination.saveProfile')}
+                </button>
+                <button 
+                  onClick={() => { setIsCreatingPreset(false); setNewPresetName(''); }}
+                  className="text-[10px] px-1.5 py-0.5 text-txt-tertiary hover:text-txt-primary rounded transition-colors cursor-pointer"
+                  title="Cancel"
+                >
+                  ✕
+                </button>
+              </div>
+            ) : isPresetModified ? (
               <div className="flex items-center gap-2">
                 <span className="text-[10px] text-accent font-medium">{t('destination.profileModified')}</span>
-                {activePresetId && (
+                {activePresetId && activePreset && (
                   <button 
                     onClick={handleSavePresetChanges}
                     className="text-[10px] px-2 py-0.5 bg-accent/15 text-accent hover:bg-accent/25 rounded font-medium transition-colors"
@@ -624,13 +700,16 @@ export function ImportSourceStep() {
                   </button>
                 )}
                 <button 
-                  onClick={() => setIsCreatingPreset(true)}
+                  onClick={() => {
+                    setIsPresetDropdownOpen(false);
+                    setIsCreatingPreset(true);
+                  }}
                   className="text-[10px] px-2 py-0.5 bg-app-card border border-app-border hover:border-accent text-txt-secondary hover:text-txt-primary rounded transition-colors"
                 >
                   {t('destination.saveAsNewProfile')}
                 </button>
               </div>
-            )}
+            ) : null}
           </div>
 
           <div 
@@ -663,7 +742,7 @@ export function ImportSourceStep() {
                     </div>
                     {preset.id !== 'default-std' && (
                       <button 
-                        onClick={(e) => { e.stopPropagation(); removePreset(preset.id); }}
+                        onClick={(e) => handleRemovePreset(preset.id, e)}
                         className="p-1 rounded text-txt-tertiary hover:text-danger hover:bg-danger/10 transition-colors"
                       >
                         <Trash2 className="w-3 h-3" />
@@ -680,22 +759,40 @@ export function ImportSourceStep() {
                       type="text"
                       value={newPresetName}
                       onChange={e => setNewPresetName(e.target.value)}
-                      placeholder={t('destination.saveProfilePrompt')}
+                      placeholder={t('destination.newProfilePlaceholder', 'Profilname...')}
                       autoFocus
-                      onKeyDown={e => { if (e.key === 'Enter') handleCreateNewPreset(); if (e.key === 'Escape') setIsCreatingPreset(false); }}
-                      className="flex-1 bg-app-deepest border border-app-border rounded px-2 py-1 text-xs text-txt-primary outline-none focus:border-accent"
+                      onKeyDown={e => { 
+                        if (e.key === 'Enter') handleCreateNewPreset(); 
+                        if (e.key === 'Escape') {
+                          setIsCreatingPreset(false);
+                          setNewPresetName('');
+                        }
+                      }}
+                      className="flex-1 bg-app-deepest border border-accent rounded px-2 py-1 text-xs text-txt-primary outline-none focus:ring-1 focus:ring-accent placeholder:text-txt-tertiary"
                     />
                     <button 
                       onClick={handleCreateNewPreset}
-                      className="px-2.5 py-1 bg-accent hover:bg-accent-hover text-app-deepest font-semibold text-xs rounded transition-colors"
+                      disabled={!newPresetName.trim()}
+                      className="px-2.5 py-1 bg-accent hover:bg-accent-hover text-app-deepest font-semibold text-xs rounded transition-colors disabled:opacity-40"
                     >
                       {t('destination.saveProfile')}
+                    </button>
+                    <button 
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        setIsCreatingPreset(false); 
+                        setNewPresetName(''); 
+                      }}
+                      className="px-1.5 py-1 text-txt-tertiary hover:text-txt-primary text-xs rounded transition-colors"
+                      title="Cancel"
+                    >
+                      ✕
                     </button>
                   </div>
                 ) : (
                   <button 
                     onClick={(e) => { e.stopPropagation(); setIsCreatingPreset(true); }}
-                    className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs text-txt-secondary hover:text-accent transition-colors"
+                    className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs text-txt-secondary hover:text-accent transition-colors cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     {t('destination.saveAsNewProfile')}
@@ -709,7 +806,14 @@ export function ImportSourceStep() {
         {/* 2. Unified Destination Selector (In-Place Locations) */}
         <div className="relative" ref={destDropdownRef}>
           <label className="block text-xs font-medium text-txt-tertiary mb-1.5 flex items-center justify-between">
-            <span>{t('destination.targetPath')}</span>
+            <span className="flex items-center gap-1.5">
+              <span>{t('destination.targetPath')}</span>
+              {!destinationDirectory && (
+                <span className="text-[10px] text-warning bg-warning/10 px-1.5 py-0.2 rounded font-semibold border border-warning/20">
+                  {t('destination.required', 'Erforderlich')}
+                </span>
+              )}
+            </span>
             {destinationDirectory && (
               <button 
                 onClick={handleBookmarkCurrentPath}
@@ -724,7 +828,11 @@ export function ImportSourceStep() {
 
           <div 
             onClick={() => setIsDestDropdownOpen(!isDestDropdownOpen)}
-            className="w-full flex items-center justify-between px-3 py-2 bg-app-card border border-app-border hover:border-app-border-hover rounded-lg transition-colors cursor-pointer text-xs text-txt-primary"
+            className={`w-full flex items-center justify-between px-3 py-2 bg-app-card border rounded-lg transition-colors cursor-pointer text-xs text-txt-primary ${
+              !destinationDirectory 
+                ? 'border-warning/60 ring-1 ring-warning/30 hover:border-warning' 
+                : 'border-app-border hover:border-app-border-hover'
+            }`}
           >
             <div className="flex items-center gap-2 truncate min-w-0 pr-2">
               <Folder className="w-4 h-4 text-warning/80 flex-shrink-0" />

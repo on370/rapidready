@@ -94,9 +94,20 @@ export function ImportView() {
           </button>
           <div className="flex items-center gap-3">
             <button 
-              className="px-6 py-2 bg-accent hover:bg-accent-hover rounded-lg text-sm font-semibold text-app-deepest transition-all duration-150 flex items-center gap-2 shadow-lg shadow-accent/20 disabled:opacity-30 disabled:cursor-not-allowed" 
+              className="px-6 py-2 bg-accent hover:bg-accent-hover rounded-lg text-sm font-semibold text-app-deepest transition-all duration-150 flex items-center gap-2 shadow-lg shadow-accent/20 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer" 
               onClick={handleNext}
               disabled={!canProceed() || isScanning}
+              title={
+                !canProceed() && !isScanning ? (
+                  currentStep === 1 ? (
+                    !sourceDirectory ? t('wizard.hintSelectSource') :
+                    !destinationDirectory ? t('wizard.hintSelectDestination') :
+                    scannedFiles.length === 0 ? t('wizard.hintNoFiles') : ''
+                  ) : (
+                    selectedCount === 0 ? t('wizard.hintSelectFiles') : ''
+                  )
+                ) : ''
+              }
             >
               <span>{currentStep === 1 ? t('wizard.btnPreview') : t('wizard.btnStartImport')}</span>
               <ArrowRight className="w-4 h-4" />

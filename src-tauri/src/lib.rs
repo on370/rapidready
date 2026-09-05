@@ -147,7 +147,8 @@ pub fn run() {
             commands::close_window,
             commands::minimize_window,
             commands::toggle_maximize_window,
-            commands::get_image_metadata
+            commands::get_image_metadata,
+            commands::get_default_pictures_dir
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

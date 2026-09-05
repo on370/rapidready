@@ -64,7 +64,7 @@ export const useSettingsStore = create<SettingsState>()(
           name: 'Standard',
           locationId: null,
           structureMode: 'date',
-          dateFormat: 'YYYY/YYYY-MM-DD',
+          dateFormat: '{year}/{year}-{month}-{day}',
           customPattern: '{year}/{year}-{month}-{day}',
           projectName: '',
         }

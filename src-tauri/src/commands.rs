@@ -357,5 +357,14 @@ pub async fn get_image_metadata(path: String) -> Result<rapidready_core::metadat
     .map_err(|e| e.to_string())?
 }
 
+#[tauri::command]
+pub fn get_default_pictures_dir(app: AppHandle) -> Result<String, String> {
+    app.path()
+        .picture_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .map_err(|e| e.to_string())
+}
+
+
 
 

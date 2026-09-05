@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="RapidReady-icon.png" alt="RapidReady Logo" width="220" />
+  <img src="RapidReady-icon2r1-apple-1024.png" alt="RapidReady Logo" width="220" />
   
   <h1>RapidReady</h1>
   <p><strong>The blazingly fast companion app for RapidRaw.</strong></p>
@@ -66,6 +66,10 @@ Photographers often shoot thousands of photos on a single job. RapidReady is bui
    ```bash
    npm run tauri dev
    ```
+
+## 📋 Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for a detailed history of changes and releases.
 
 ## 📝 License
 MIT License. Created by Ole N

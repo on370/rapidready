@@ -18,6 +18,12 @@ i18n
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
+    detection: {
+      order: ['localStorage', 'navigator'],
+      caches: ['localStorage'],
+      lookupLocalStorage: 'i18nextLng',
+    },
+    supportedLngs: ['en', 'de'],
     resources: {
       en: {
         common: commonEN,

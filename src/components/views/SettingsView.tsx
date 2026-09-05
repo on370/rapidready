@@ -189,7 +189,7 @@ export function SettingsView() {
                   name: "New Workflow", 
                   locationId: null,
                   structureMode: 'date',
-                  dateFormat: 'YYYY/YYYY-MM-DD',
+                  dateFormat: '{year}/{year}-{month}-{day}',
                   customPattern: '{year}/{year}-{month}-{day}',
                   projectName: '',
                 });
