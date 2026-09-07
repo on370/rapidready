@@ -24,16 +24,23 @@ pub fn get_removable_drives() -> Vec<DriveInfo> {
             continue;
         }
         
-        let path_str = mount_path.to_string_lossy();
-        
-        #[cfg(target_os = "macos")]
-        let is_external = path_str.starts_with("/Volumes/") && !path_str.ends_with("Macintosh HD");
-        
-        #[cfg(not(target_os = "macos"))]
-        let is_external = disk.is_removable();
-
         // Heuristic: Camera SD cards almost always have a DCIM folder at the root.
         let has_dcim = mount_path.join("DCIM").exists() || mount_path.join("dcim").exists();
+
+        #[cfg(target_os = "macos")]
+        let is_external = {
+            let path_str = mount_path.to_string_lossy();
+            path_str.starts_with("/Volumes/") && !path_str.ends_with("Macintosh HD")
+        };
+        
+        #[cfg(target_os = "windows")]
+        let is_external = {
+            let path_str = mount_path.to_string_lossy();
+            !path_str.starts_with("C:") && (disk.is_removable() || has_dcim)
+        };
+
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        let is_external = disk.is_removable();
 
         // We only show it as a quick-select "SD Card" if it's an external drive AND has a DCIM folder.
         // Otherwise, large external SSDs would clutter the UI.

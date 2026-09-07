@@ -29,8 +29,18 @@ Photographers often shoot thousands of photos on a single job. RapidReady is bui
 - **Media Decoding:** Custom Rust image & thumbnail decoders (`thumb_rs`, `exif`, `kamadak-exif`)
 - **Database (Planned):** SQLite for lightning-fast Collections and Metadata querying
 
-## 📥 Download & Installation (macOS)
+## 📥 Download & Installation
 
+### Windows (x64)
+1. Download the latest installer (`RapidReady_0.1.1-beta_x64-setup.exe`) from the **[Releases](https://github.com/on370/rapidready/releases)** page.
+2. Run the setup file to install RapidReady for your current user (no admin privileges required).
+3. Launch **RapidReady** from your Start Menu or Desktop shortcut.
+
+> [!NOTE]
+> **Windows SmartScreen Note:**  
+> As RapidReady is an open-source project without an expensive commercial code-signing certificate, Windows SmartScreen may show a prompt (*"Windows protected your PC"*). Click **More info** and then **Run anyway** to proceed with installation.
+
+### macOS
 1. Download the latest `.dmg` installer from the **[Releases](https://github.com/on370/rapidready/releases)** page.
 2. Open the `.dmg` file and drag **RapidReady** into your **Applications** folder.
 
@@ -47,9 +57,11 @@ Photographers often shoot thousands of photos on a single job. RapidReady is bui
 ## 💻 Development & Building from Source
 
 ### Prerequisites
-- [Node.js](https://nodejs.org/) (v18+)
-- [Rust](https://www.rust-lang.org/tools/install)
-- [Tauri CLI](https://v2.tauri.app/start/)
+- [Node.js](https://nodejs.org/) (v18+ or v20+)
+- [Rust](https://www.rust-lang.org/tools/install) (stable toolchain)
+- **Windows additional requirement:**
+  - [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) (e.g. Visual Studio 2022 Community with "Desktop development with C++")
+  - [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) (pre-installed on Windows 10/11)
 
 ### Development
 
@@ -62,10 +74,19 @@ Photographers often shoot thousands of photos on a single job. RapidReady is bui
    ```bash
    npm install
    ```
-3. Run the development server:
+3. Run the development server (starts Vite dev server and native Tauri window):
    ```bash
    npm run tauri dev
    ```
+
+### Building Release Installers
+
+To build the production binary and release installer for your current platform:
+```bash
+npm run tauri build
+```
+- **On Windows:** Produces an NSIS installer: `src-tauri/target/release/bundle/nsis/RapidReady_<version>_x64-setup.exe`
+- **On macOS:** Produces a `.dmg` disk image: `src-tauri/target/release/bundle/dmg/RapidReady_<version>_<arch>.dmg`
 
 ## 📋 Changelog
 

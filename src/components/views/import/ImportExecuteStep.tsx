@@ -114,7 +114,9 @@ export function ImportExecuteStep({ onReset }: ImportExecuteStepProps) {
   const createdFolders = useMemo(() => {
     const map = new Map<string, number>();
     for (const p of importedPaths) {
-      const parent = p.substring(0, p.lastIndexOf('/'));
+      const norm = p.replace(/\\/g, '/');
+      const lastSlash = norm.lastIndexOf('/');
+      const parent = lastSlash > 0 ? norm.substring(0, lastSlash) : norm;
       map.set(parent, (map.get(parent) || 0) + 1);
     }
     return Array.from(map.entries()).map(([path, count]) => ({ path, count }));

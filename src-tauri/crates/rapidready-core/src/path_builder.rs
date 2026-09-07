@@ -16,8 +16,11 @@ pub fn build_target_path(template: &str, dt: &NaiveDateTime) -> String {
     result = result.replace("{month}", &month);
     result = result.replace("{day}", &day);
     
-    // Normalize slashes
-    result = result.replace("\\", "/");
+    // Normalize slashes on Windows
+    #[cfg(target_os = "windows")]
+    {
+        result = result.replace('\\', "/");
+    }
     if !result.ends_with('/') {
         result.push('/');
     }

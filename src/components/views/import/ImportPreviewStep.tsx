@@ -2,6 +2,7 @@ import { GitBranch, Folder, ChevronDown, MousePointerClick, Camera, CheckCircle2
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useImportStore, ScannedFile } from '../../../stores/importStore';
+import { getRrImageUrl } from '../../../utils/image';
 
 const RAW_EXTENSIONS = new Set(["cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2"]);
 const JPG_EXTENSIONS = new Set(["jpg", "jpeg"]);
@@ -413,7 +414,7 @@ export function ImportPreviewStep() {
                 onClick={() => setIsZoomed(!isZoomed)}
               >
                 <img 
-                  src={`rr-image://localhost${selectedPair.previewFile.path}`} 
+                  src={getRrImageUrl(selectedPair.previewFile.path)} 
                   alt={selectedPair.stem}
                   className={`${isZoomed ? 'w-full h-full object-contain' : 'max-w-full max-h-full object-contain'} ${selectedPair.allImported ? 'opacity-50' : ''} transition-all duration-200`}
                   loading="lazy"

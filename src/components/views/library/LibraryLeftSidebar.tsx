@@ -5,6 +5,7 @@ import { Bookmark, ChevronDown, Plus, HardDrive, Folder, ChevronRight, FolderOpe
 import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from "@tauri-apps/api/core";
 import { useLibraryStore, LibraryImage } from "../../../stores/libraryStore";
+import { normalizePath, normalizeSlash } from "../../../utils/image";
 
 // Folder Tree node definition (folders only, no leaf file clutter)
 type TreeNode = {
@@ -16,20 +17,23 @@ type TreeNode = {
 
 // Helper to build a clean folder tree from flat image paths
 function buildTree(images: LibraryImage[], rootPath: string): TreeNode {
-  const root: TreeNode = { name: "Root", path: rootPath, fileCount: 0, children: {} };
+  const normRoot = normalizeSlash(rootPath);
+  const normRootLower = normRoot.toLowerCase();
+  const root: TreeNode = { name: "Root", path: normRoot, fileCount: 0, children: {} };
   
   images.forEach(img => {
-    if (!img.path.startsWith(rootPath)) return;
+    const normImgPath = normalizeSlash(img.path);
+    if (!normImgPath.toLowerCase().startsWith(normRootLower)) return;
     root.fileCount++;
     
-    let relPath = img.path.substring(rootPath.length);
+    let relPath = normImgPath.substring(normRoot.length);
     if (relPath.startsWith('/')) relPath = relPath.substring(1);
     
     const parts = relPath.split('/');
     if (parts.length <= 1) return; // File directly in root folder
     
     let current = root;
-    let currentPath = rootPath;
+    let currentPath = normRoot;
     for (let i = 0; i < parts.length - 1; i++) {
       const part = parts[i];
       currentPath = currentPath + '/' + part;
@@ -54,9 +58,13 @@ function TreeView({ node, depth = 0, rootFolder }: { node: TreeNode, depth?: num
   const { activeFolderPath, setActiveFolderPath, activeImageFolder } = useLibraryStore();
   const nodeRef = useRef<HTMLDivElement>(null);
   
-  const isSelected = activeFolderPath === node.path;
-  const isImageLocation = activeImageFolder === node.path;
-  const isAncestorOfImage = activeImageFolder ? (activeImageFolder === node.path || activeImageFolder.startsWith(node.path + '/')) : false;
+  const normNodePath = normalizePath(node.path);
+  const normActiveFolder = normalizePath(activeFolderPath);
+  const normImageFolder = normalizePath(activeImageFolder);
+
+  const isSelected = !!normActiveFolder && normActiveFolder === normNodePath;
+  const isImageLocation = !!normImageFolder && normImageFolder === normNodePath;
+  const isAncestorOfImage = normImageFolder ? (normImageFolder === normNodePath || normImageFolder.startsWith(normNodePath + '/')) : false;
 
   // Auto-expand tree branch leading to the active photo
   useEffect(() => {
@@ -259,7 +267,7 @@ export function LibraryLeftSidebar() {
               <div className="flex items-center gap-2 truncate">
                 <HardDrive className="w-3.5 h-3.5 text-accent flex-shrink-0" />
                 <span className="truncate font-medium" title={rootPath || undefined}>
-                  {rootPath ? (locations.find(l => l.path === rootPath)?.name || rootPath.split('/').pop()) : t("sidebar.noFolder")}
+                  {rootPath ? (locations.find(l => normalizePath(l.path) === normalizePath(rootPath))?.name || normalizeSlash(rootPath).split('/').pop()) : t("sidebar.noFolder")}
                 </span>
               </div>
               <ChevronDown className="w-3.5 h-3.5 text-txt-tertiary flex-shrink-0" />
@@ -295,7 +303,7 @@ export function LibraryLeftSidebar() {
                       setDropdownOpen(false);
                       const selected = await open({ directory: true });
                       if (selected && typeof selected === 'string') {
-                        const defaultName = selected.split('/').pop() || selected;
+                        const defaultName = normalizeSlash(selected).split('/').pop() || selected;
                         addLocation({ id: Date.now().toString(), name: defaultName, path: selected });
                         loadFolder(selected);
                       }

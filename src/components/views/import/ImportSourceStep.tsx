@@ -12,6 +12,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 
 import { useImportStore, ScannedFile, DATE_FORMAT_OPTIONS } from '../../../stores/importStore';
 import { useSettingsStore, ArchiveLocation, ImportPreset } from '../../../stores/settingsStore';
+import { normalizePath } from '../../../utils/image';
 
 interface ScanProgress {
   current: number;
@@ -70,13 +71,16 @@ export function ImportSourceStep() {
         setDrives(detectedDrives);
 
         // Auto-Reset: If currently selected source was an external drive/volume that is now unplugged
-        if (sourceDirectory && (sourceDirectory.startsWith('/Volumes/') || detectedDrives.some(d => sourceDirectory.startsWith(d.path)))) {
-          const exists = await invoke<boolean>('check_path_exists', { path: sourceDirectory }).catch(() => false);
-          if (!exists) {
-            setSourceDirectory(null);
-            setScannedFiles([]);
-            setScanProgress(null);
-            setIsScanning(false);
+        if (sourceDirectory) {
+          const isDrivePath = sourceDirectory.startsWith('/Volumes/') || /^[A-Za-z]:[\\/]/.test(sourceDirectory);
+          if (isDrivePath || detectedDrives.some(d => sourceDirectory.startsWith(d.path))) {
+            const exists = await invoke<boolean>('check_path_exists', { path: sourceDirectory }).catch(() => false);
+            if (!exists) {
+              setSourceDirectory(null);
+              setScannedFiles([]);
+              setScanProgress(null);
+              setIsScanning(false);
+            }
           }
         }
       } catch (error) {
@@ -89,23 +93,38 @@ export function ImportSourceStep() {
     return () => clearInterval(interval);
   }, [sourceDirectory, setSourceDirectory, setScannedFiles, setIsScanning]);
 
+  const uniqueLocations = useMemo(() => {
+    const seen = new Set<string>();
+    return locations.filter(loc => {
+      const key = normalizePath(loc.path);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [locations]);
+
   // Auto-initialize default destination to user's Pictures directory on fresh install
   useEffect(() => {
     if (!destinationDirectory) {
-      if (locations.length > 0) {
-        setDestinationDirectory(locations[0].path, locations[0].id, false);
+      if (uniqueLocations.length > 0) {
+        setDestinationDirectory(uniqueLocations[0].path, uniqueLocations[0].id, false);
       } else {
         invoke<string>('get_default_pictures_dir')
           .then(picDir => {
             if (picDir) {
-              const defaultName = t('destination.defaultPicturesName', 'Pictures');
-              const defaultLoc: ArchiveLocation = {
-                id: 'default-pictures',
-                name: defaultName,
-                path: picDir,
-              };
-              addLocation(defaultLoc);
-              setDestinationDirectory(picDir, defaultLoc.id, false);
+              const existing = uniqueLocations.find(l => normalizePath(l.path) === normalizePath(picDir));
+              if (existing) {
+                setDestinationDirectory(existing.path, existing.id, false);
+              } else {
+                const defaultName = t('destination.defaultPicturesName', 'Pictures');
+                const defaultLoc: ArchiveLocation = {
+                  id: 'default-pictures',
+                  name: defaultName,
+                  path: picDir,
+                };
+                addLocation(defaultLoc);
+                setDestinationDirectory(picDir, defaultLoc.id, false);
+              }
             }
           })
           .catch(err => {
@@ -113,7 +132,7 @@ export function ImportSourceStep() {
           });
       }
     }
-  }, [destinationDirectory, locations, setDestinationDirectory, addLocation, t]);
+  }, [destinationDirectory, uniqueLocations, setDestinationDirectory, addLocation, t]);
 
   // Central scan function with watchdog inactivity protection
   const scanPath = async (path: string) => {
@@ -238,7 +257,7 @@ export function ImportSourceStep() {
 
   const handleBookmarkCurrentPath = () => {
     if (!destinationDirectory) return;
-    const isAlreadyLocation = locations.some(l => l.path === destinationDirectory);
+    const isAlreadyLocation = uniqueLocations.some(l => normalizePath(l.path) === normalizePath(destinationDirectory));
     if (!isAlreadyLocation) {
       const folderName = destinationDirectory.split(/[/\\]/).pop() || destinationDirectory;
       const newLoc: ArchiveLocation = {
@@ -436,7 +455,7 @@ export function ImportSourceStep() {
   };
 
   const activePreset = presets.find(p => p.id === activePresetId);
-  const activeLocation = locations.find(l => l.id === selectedLocationId || l.path === destinationDirectory);
+  const activeLocation = uniqueLocations.find(l => l.id === selectedLocationId || (destinationDirectory && normalizePath(l.path) === normalizePath(destinationDirectory)));
   const isBookmarked = !!activeLocation;
   const isRemovableSource = sourceDirectory ? (
     drives.some(d => sourceDirectory.startsWith(d.path)) || sourceDirectory.startsWith('/Volumes/')
@@ -853,13 +872,13 @@ export function ImportSourceStep() {
             <div className="absolute top-full left-0 right-0 mt-1 bg-app-card border border-app-border rounded-lg shadow-2xl z-50 overflow-hidden text-xs py-1">
               
               {/* Saved Locations */}
-              {locations.length > 0 && (
+              {uniqueLocations.length > 0 && (
                 <div>
                   <div className="px-3 py-1.5 text-[10px] font-bold text-txt-tertiary uppercase tracking-wider bg-app-panel/50">
                     {t('destination.locationsHeader')}
                   </div>
                   <div className="max-h-40 overflow-y-auto divide-y divide-app-border/30">
-                    {locations.map(loc => (
+                    {uniqueLocations.map(loc => (
                       <div 
                         key={loc.id}
                         className="flex items-center justify-between px-3 py-2 hover:bg-app-hover cursor-pointer transition-colors group"

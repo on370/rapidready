@@ -19,6 +19,7 @@ function App() {
 
   useEffect(() => {
     setActiveView(startupView);
+    invoke("show_main_window").catch(() => {});
   }, []);
 
   // Real-time synchronization for RapidRAW / external sidecar changes

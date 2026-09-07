@@ -38,17 +38,17 @@ pub fn get_preview_jpeg(path: &Path, scale: u32) -> Result<Vec<u8>> {
         }
     }
     
-    // Performance boost: If RAW has a companion JPEG, use the JPEG for thumbnails (10x faster)
+    // Performance boost: If RAW has a companion JPEG, use the JPEG for thumbnail extraction
     let target_path = find_companion_jpeg(path).unwrap_or_else(|| path.to_path_buf());
+
     let thumb = get_thumbnail(&target_path, ThumbnailScale(scale))
         .map_err(|e| anyhow::anyhow!("thumb_rs error: {:?}", e))?;
         
     let img = RgbaImage::from_raw(thumb.width, thumb.height, thumb.rgba)
         .context("Failed to construct RgbaImage from raw bytes")?;
+    let rgb_img = image::DynamicImage::ImageRgba8(img).into_rgb8();
         
     let mut buffer = Cursor::new(Vec::new());
-    let rgb_img = image::DynamicImage::ImageRgba8(img).into_rgb8();
-    
     rgb_img.write_to(&mut buffer, ImageFormat::Jpeg)
         .context("Failed to encode JPEG")?;
         
@@ -84,7 +84,13 @@ pub fn get_max_preview_jpeg(path: &Path) -> Result<Vec<u8>> {
     // if the requested scale is larger than the embedded preview.
     // We try descending scales to find the largest actual preview (scale 10 is ~2560px, ideal for fast 2K/4K display)
     let mut best_thumb = None;
-    for scale in [10, 8, 4, 2] {
+
+    #[cfg(target_os = "windows")]
+    let scales = [4, 2];
+    #[cfg(not(target_os = "windows"))]
+    let scales = [10, 8, 4, 2];
+
+    for scale in scales {
         if let Ok(thumb) = get_thumbnail(path, ThumbnailScale(scale)) {
             if thumb.rgba.len() >= 4 && thumb.rgba[3] == 0 {
                 continue;
@@ -139,5 +145,31 @@ mod tests {
         let _ = std::fs::remove_file(&raw_path);
         let _ = std::fs::remove_file(&jpg_path);
         let _ = std::fs::remove_dir(&temp_dir);
+    }
+
+    #[test]
+    fn test_get_preview_jpeg_real_files() {
+        let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let workspace_root = manifest_dir.parent().unwrap().parent().unwrap().parent().unwrap().parent().unwrap();
+        
+        let jpg_path = workspace_root.join("testdata").join("dest").join("2014").join("2014-08-25").join("DSC03058.JPG");
+        assert!(jpg_path.exists(), "Test JPG file must exist: {:?}", jpg_path);
+        let res = get_preview_jpeg(&jpg_path, 1);
+        assert!(res.is_ok(), "JPG thumbnail failed: {:?}", res.err());
+        assert!(!res.unwrap().is_empty());
+
+        let arw_path = workspace_root.join("testdata").join("dest").join("2015").join("2015-03-24").join("DSC06201.ARW");
+        if arw_path.exists() {
+            let res = get_preview_jpeg(&arw_path, 1);
+            assert!(res.is_ok(), "ARW thumbnail failed: {:?}", res.err());
+            assert!(!res.unwrap().is_empty());
+        }
+
+        let cr2_path = workspace_root.join("testdata").join("dest").join("2014").join("2014-05-01").join("IMG_2978.CR2");
+        if cr2_path.exists() {
+            let res = get_preview_jpeg(&cr2_path, 1);
+            assert!(res.is_ok(), "CR2 thumbnail failed: {:?}", res.err());
+            assert!(!res.unwrap().is_empty());
+        }
     }
 }

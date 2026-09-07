@@ -73,10 +73,22 @@ pub fn run() {
                 path_str
             };
             
-            let decoded_path = match urlencoding::decode(path_str) {
+            let mut decoded_path = match urlencoding::decode(path_str) {
                 Ok(p) => p.into_owned(),
                 Err(_) => path_str.to_string(),
             };
+
+            #[cfg(target_os = "windows")]
+            {
+                // Konvertiert "/C:/Photos/..." oder "\C:\Photos\..." in "C:\Photos\..."
+                if (decoded_path.starts_with('/') || decoded_path.starts_with('\\'))
+                    && decoded_path.chars().nth(2) == Some(':')
+                {
+                    decoded_path.remove(0);
+                }
+                // Backslashes normalisieren
+                decoded_path = decoded_path.replace('/', "\\");
+            }
 
             let path = Path::new(&decoded_path);
             
@@ -89,14 +101,13 @@ pub fn run() {
                             let res = Response::builder()
                                 .header("Content-Type", "image/jpeg")
                                 .header("Access-Control-Allow-Origin", "*")
+                                .header("Cache-Control", "public, max-age=86400, immutable")
                                 .body(bytes)
                                 .unwrap();
                             responder.respond(res);
                             return;
                         }
-                        Err(e) => {
-                            println!("Preview error for {:?}: {:?}", path, e);
-                        }
+                        Err(_) => {}
                     }
                 } else {
                     if let Ok(bytes) = std::fs::read(path) {
@@ -104,6 +115,7 @@ pub fn run() {
                         let res = Response::builder()
                             .header("Content-Type", content_type)
                             .header("Access-Control-Allow-Origin", "*")
+                            .header("Cache-Control", "public, max-age=86400, immutable")
                             .body(bytes)
                             .unwrap();
                         responder.respond(res);
@@ -112,20 +124,33 @@ pub fn run() {
                 }
             }
             
-            let res = match rapidready_core::thumbnail::get_preview_jpeg(path, 2) {
+            let scale = if query.contains("scale=2") { 2 } else { 1 };
+            let res = match rapidready_core::thumbnail::get_preview_jpeg(path, scale) {
                 Ok(bytes) => {
                     Response::builder()
                         .header("Content-Type", "image/jpeg")
                         .header("Access-Control-Allow-Origin", "*")
+                        .header("Cache-Control", "public, max-age=86400, immutable")
                         .body(bytes)
                         .unwrap()
                 }
-                Err(e) => {
-                    println!("Preview error for {:?}: {:?}", path, e);
-                    Response::builder()
-                        .status(404)
-                        .body(Vec::new())
-                        .unwrap()
+                Err(_) => {
+                    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+                    if ["jpg", "jpeg", "png"].contains(&ext.as_str()) {
+                        if let Ok(bytes) = std::fs::read(path) {
+                            let content_type = if ext == "png" { "image/png" } else { "image/jpeg" };
+                            Response::builder()
+                                .header("Content-Type", content_type)
+                                .header("Access-Control-Allow-Origin", "*")
+                                .header("Cache-Control", "public, max-age=86400, immutable")
+                                .body(bytes)
+                                .unwrap()
+                        } else {
+                            Response::builder().status(404).body(Vec::new()).unwrap()
+                        }
+                    } else {
+                        Response::builder().status(404).body(Vec::new()).unwrap()
+                    }
                 }
             };
             responder.respond(res);
@@ -148,7 +173,8 @@ pub fn run() {
             commands::minimize_window,
             commands::toggle_maximize_window,
             commands::get_image_metadata,
-            commands::get_default_pictures_dir
+            commands::get_default_pictures_dir,
+            commands::show_main_window
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

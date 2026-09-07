@@ -7,36 +7,43 @@ import { HelpPopover } from "../../ui/HelpPopover";
 import { invoke } from "@tauri-apps/api/core";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { getRrImageUrl, normalizePath, normalizeSlash } from "../../../utils/image";
 
 const loadedThumbnailCache = new Set<string>();
 
 const GridThumbnailItem = React.memo(function GridThumbnailItem({
   img,
   isSelected,
-  isScrolling,
+  isScrolling = false,
   onSelect,
   onOpen,
 }: {
   img: LibraryImage;
   isSelected: boolean;
-  isScrolling: boolean;
+  isScrolling?: boolean;
   onSelect: () => void;
   onOpen: () => void;
 }) {
-  const isLoaded = loadedThumbnailCache.has(img.path);
-  const [shouldLoad, setShouldLoad] = useState(isLoaded || !isScrolling);
+  const isCached = loadedThumbnailCache.has(img.path);
+  const [shouldLoad, setShouldLoad] = useState(isCached || !isScrolling);
+  const [isLoaded, setIsLoaded] = useState(isCached);
+  const imgRef = useRef<HTMLImageElement>(null);
 
+  // When scrolling settles, start loading immediately (no redundant timer)
   useEffect(() => {
-    if (shouldLoad) return;
-    if (isScrolling) return;
-
-    // When user pauses scrubbing for 150ms, load visible thumbnails
-    const timer = setTimeout(() => {
+    if (!shouldLoad && !isScrolling) {
       setShouldLoad(true);
-    }, 150);
-
-    return () => clearTimeout(timer);
+    }
   }, [isScrolling, shouldLoad]);
+
+  // Cancel in-flight HTTP request if tile scrolls off-screen before completing
+  useEffect(() => {
+    return () => {
+      if (imgRef.current && !loadedThumbnailCache.has(img.path)) {
+        imgRef.current.src = "";
+      }
+    };
+  }, [img.path]);
 
   return (
     <div 
@@ -46,16 +53,20 @@ const GridThumbnailItem = React.memo(function GridThumbnailItem({
       onClick={onSelect}
       onDoubleClick={onOpen}
     >
-      {shouldLoad ? (
+      {shouldLoad && (
         <img 
-          src={`rr-image://localhost${img.path}`} 
-          className="w-full h-full object-cover" 
-          loading="lazy" 
+          ref={imgRef}
+          src={getRrImageUrl(img.path)} 
+          className={`w-full h-full object-cover transition-opacity duration-150 ${isLoaded ? 'opacity-100' : 'opacity-0'}`} 
           alt={img.name} 
-          onLoad={() => loadedThumbnailCache.add(img.path)}
+          onLoad={() => {
+            loadedThumbnailCache.add(img.path);
+            setIsLoaded(true);
+          }}
         />
-      ) : (
-        <div className="w-full h-full bg-[#161619] flex items-center justify-center">
+      )}
+      {!isLoaded && (
+        <div className="absolute inset-0 bg-[#161619] flex items-center justify-center pointer-events-none">
           <div className="w-6 h-6 rounded-md bg-white/[0.03]" />
         </div>
       )}
@@ -99,7 +110,7 @@ const FilmstripThumbnailItem = React.memo(function FilmstripThumbnailItem({
       }`}
     >
       <img 
-        src={`rr-image://localhost${img.path}`} 
+        src={getRrImageUrl(img.path)} 
         className={`w-full h-full object-cover pointer-events-none transition-opacity duration-150 ${
           loaded ? 'opacity-100' : 'opacity-0'
         }`} 
@@ -312,7 +323,7 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
   const { 
     images, activeImageIndex, setActiveImageIndex, autoAdvance, 
     updateCullingState, activeFolderPath, filterMode, setFilterMode,
-    lastImportPaths, isViewingLastImport, isLoading,
+    lastImportPaths, isViewingLastImport, isLoading, rootPath,
     gridThumbnailSize, setGridThumbnailSize, loupeScale, setLoupeScale
   } = useLibraryStore();
 
@@ -345,10 +356,25 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
     return () => clearTimeout(timer);
   }, [activeImageIndex, viewMode]);
 
+  const normLastImport = React.useMemo(() => {
+    return new Set(lastImportPaths.map(p => normalizePath(p)));
+  }, [lastImportPaths]);
+
+  const normActiveFolder = React.useMemo(() => {
+    return activeFolderPath ? normalizePath(activeFolderPath) : null;
+  }, [activeFolderPath]);
+
+  const normRoot = React.useMemo(() => {
+    return rootPath ? normalizePath(rootPath) : null;
+  }, [rootPath]);
+
   const scopedImages = isViewingLastImport
-    ? images.filter(img => lastImportPaths.includes(img.path))
-    : activeFolderPath 
-      ? images.filter(img => img.path.startsWith(activeFolderPath)) 
+    ? images.filter(img => normLastImport.has(normalizePath(img.path)))
+    : normActiveFolder && normActiveFolder !== normRoot
+      ? images.filter(img => {
+          const p = normalizePath(img.path);
+          return p.startsWith(normActiveFolder + '/') || p === normActiveFolder;
+        })
       : images;
 
   const displayedImages = scopedImages.filter(img => {
@@ -365,8 +391,9 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
   // Sync active photo folder with libraryStore so sidebar tree highlights and scrolls to location
   useEffect(() => {
     if (activeImage?.path) {
-      const lastSlash = activeImage.path.lastIndexOf('/');
-      const folder = lastSlash > 0 ? activeImage.path.substring(0, lastSlash) : null;
+      const norm = normalizeSlash(activeImage.path);
+      const lastSlash = norm.lastIndexOf('/');
+      const folder = lastSlash > 0 ? norm.substring(0, lastSlash) : null;
       useLibraryStore.getState().setActiveImageFolder(folder);
     } else {
       useLibraryStore.getState().setActiveImageFolder(null);
@@ -542,7 +569,7 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
       <div className="px-6 py-4 border-b border-app-border flex items-center justify-between flex-shrink-0">
         <div>
           <h2 className="text-lg font-bold text-txt-primary truncate max-w-[400px]">
-            {isViewingLastImport ? t('header.lastImport') : activeFolderPath ? activeFolderPath.split('/').pop() : t('header.allImages')}
+            {isViewingLastImport ? t('header.lastImport') : activeFolderPath ? normalizeSlash(activeFolderPath).split('/').pop() : t('header.allImages')}
           </h2>
           <p className="text-xs text-txt-tertiary mt-0.5">{displayedImages.length} {t('previewFiles', 'files')} · {(displayedImages.reduce((acc, img) => acc + img.size, 0) / (1024*1024)).toFixed(1)} MB</p>
         </div>
@@ -808,8 +835,8 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
             {activeImage ? (
               <>
                 <ZoomableImage 
-                  src={`rr-image://localhost${activeImage.path}?fullres=true`} 
-                  previewSrc={`rr-image://localhost${activeImage.path}`}
+                  src={getRrImageUrl(activeImage.path, true)} 
+                  previewSrc={getRrImageUrl(activeImage.path)}
                   alt={activeImage.name} 
                 />
                 
@@ -817,10 +844,10 @@ export function LibraryCenter({ viewMode, setViewMode, toggleInspector }: Librar
                 {debouncedActiveIndex === activeImageIndex && (
                   <>
                     {debouncedActiveIndex > 0 && (
-                      <img src={`rr-image://localhost${displayedImages[debouncedActiveIndex - 1].path}?fullres=true`} className="hidden" />
+                      <img src={getRrImageUrl(displayedImages[debouncedActiveIndex - 1].path, true)} className="hidden" />
                     )}
                     {debouncedActiveIndex < displayedImages.length - 1 && (
-                      <img src={`rr-image://localhost${displayedImages[debouncedActiveIndex + 1].path}?fullres=true`} className="hidden" />
+                      <img src={getRrImageUrl(displayedImages[debouncedActiveIndex + 1].path, true)} className="hidden" />
                     )}
                   </>
                 )}

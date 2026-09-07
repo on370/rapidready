@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { normalizePath } from '../utils/image';
 
 export interface ArchiveLocation {
   id: string;
@@ -77,7 +78,12 @@ export const useSettingsStore = create<SettingsState>()(
       setOpenRapidRaw: (openRapidRaw) => set({ openRapidRaw }),
       setStartupView: (startupView) => set({ startupView }),
       setLastLibraryPath: (lastLibraryPath) => set({ lastLibraryPath }),
-      addLocation: (location) => set((state) => ({ locations: [...state.locations, location] })),
+      addLocation: (location) => set((state) => {
+        if (state.locations.some(l => l.id === location.id || normalizePath(l.path) === normalizePath(location.path))) {
+          return state;
+        }
+        return { locations: [...state.locations, location] };
+      }),
       removeLocation: (id) => set((state) => ({ locations: state.locations.filter(l => l.id !== id) })),
       updateLocation: (id, name, path) => set((state) => ({
         locations: state.locations.map(l => l.id === id ? { ...l, name, ...(path ? { path } : {}) } : l)

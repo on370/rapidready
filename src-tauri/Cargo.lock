@@ -3499,10 +3499,11 @@ dependencies = [
 
 [[package]]
 name = "rapid-ready"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cc",
  "notify",
+ "open",
  "rapidready-core",
  "serde",
  "serde_json",
@@ -3517,7 +3518,7 @@ dependencies = [
 
 [[package]]
 name = "rapidready-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "blake3",
@@ -4760,8 +4761,7 @@ dependencies = [
 [[package]]
 name = "thumb-rs"
 version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2940b765ef749d0593538727e7a822ca675406c2fa7310604295cedfdb9efe0d"
+source = "git+https://github.com/iamzubin/thumb-rs.git#2a929c28d3a630627159858deb5433ad9ffb8d11"
 dependencies = [
  "block2",
  "dispatch2",

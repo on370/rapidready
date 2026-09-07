@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Windows OS files & local scripts
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+dev.bat

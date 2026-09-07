@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { normalizePath } from '../utils/image';
 
 export interface CullingState {
   flag: number | null; // 1 = Pick, -1 = Reject, null = Unrated
@@ -81,7 +82,8 @@ export const useLibraryStore = create<LibraryStore>((set) => ({
   isLoading: false,
   setIsLoading: (loading) => set({ isLoading: loading }),
   updateImageMetadata: (path, meta) => set((state) => {
-    const idx = state.images.findIndex(img => img.path === path);
+    const norm = normalizePath(path);
+    const idx = state.images.findIndex(img => normalizePath(img.path) === norm);
     if (idx === -1) return state;
     const newImages = [...state.images];
     newImages[idx] = { ...newImages[idx], ...meta };
@@ -121,7 +123,8 @@ export const useLibraryStore = create<LibraryStore>((set) => ({
     return { images: newImages };
   }),
   updateImageCullingByPath: (path, culling) => set((state) => {
-    const idx = state.images.findIndex((img) => img.path === path);
+    const norm = normalizePath(path);
+    const idx = state.images.findIndex((img) => normalizePath(img.path) === norm);
     if (idx === -1) return state;
     const cur = state.images[idx].culling;
     if (

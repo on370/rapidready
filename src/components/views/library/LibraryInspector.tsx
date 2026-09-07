@@ -1,10 +1,11 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { 
   Info, X, MousePointerClick, Star, Check 
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useLibraryStore } from "../../../stores/libraryStore";
 import { invoke } from "@tauri-apps/api/core";
+import { getRrImageUrl, normalizePath } from "../../../utils/image";
 
 interface LibraryInspectorProps {
   close: () => void;
@@ -15,13 +16,28 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
   const { 
     images, activeImageIndex, 
     updateCullingState, updateImageMetadata, activeFolderPath, 
-    lastImportPaths, isViewingLastImport 
+    lastImportPaths, isViewingLastImport, rootPath 
   } = useLibraryStore();
 
+  const normLastImport = useMemo(() => {
+    return new Set(lastImportPaths.map(p => normalizePath(p)));
+  }, [lastImportPaths]);
+
+  const normActiveFolder = useMemo(() => {
+    return activeFolderPath ? normalizePath(activeFolderPath) : null;
+  }, [activeFolderPath]);
+
+  const normRoot = useMemo(() => {
+    return rootPath ? normalizePath(rootPath) : null;
+  }, [rootPath]);
+
   const scopedImages = isViewingLastImport
-    ? images.filter(img => lastImportPaths.includes(img.path))
-    : activeFolderPath 
-      ? images.filter(img => img.path.startsWith(activeFolderPath)) 
+    ? images.filter(img => normLastImport.has(normalizePath(img.path)))
+    : normActiveFolder && normActiveFolder !== normRoot
+      ? images.filter(img => {
+          const p = normalizePath(img.path);
+          return p.startsWith(normActiveFolder + '/') || p === normActiveFolder;
+        })
       : images;
 
   const activeImage = scopedImages[activeImageIndex];
@@ -99,7 +115,7 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
             {/* Live Thumbnail Preview */}
             <div className="relative w-full aspect-[3/2] rounded-xl overflow-hidden border border-app-border bg-app-deepest group">
               <img 
-                src={`rr-image://localhost${activeImage.path}`} 
+                src={getRrImageUrl(activeImage.path)} 
                 alt={activeImage.name} 
                 className="w-full h-full object-cover" 
               />

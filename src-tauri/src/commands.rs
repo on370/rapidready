@@ -88,6 +88,7 @@ fn find_first_image_in_path(path_str: &str) -> String {
     path_str.to_string()
 }
 
+#[cfg(target_os = "macos")]
 fn find_rapidraw_binary() -> Option<std::path::PathBuf> {
     let p1 = std::path::PathBuf::from("/Applications/RapidRAW.app/Contents/MacOS/RapidRAW");
     if p1.exists() {
@@ -157,7 +158,32 @@ pub fn open_in_rapidraw(path: String) -> Result<(), String> {
 
         Ok(())
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        let file_to_open = find_first_image_in_path(&path);
+        
+        let candidate_paths = [
+            // User-Installation (Standard bei Tauri / Squirrel / NSIS)
+            std::env::var("LOCALAPPDATA").map(|p| format!("{}\\Programs\\RapidRaw\\RapidRaw.exe", p)).ok(),
+            std::env::var("LOCALAPPDATA").map(|p| format!("{}\\RapidRaw\\RapidRaw.exe", p)).ok(),
+            // Systemweite Installation
+            std::env::var("ProgramFiles").map(|p| format!("{}\\RapidRaw\\RapidRaw.exe", p)).ok(),
+            std::env::var("ProgramFiles(x86)").map(|p| format!("{}\\RapidRaw\\RapidRaw.exe", p)).ok(),
+        ];
+
+        for candidate in candidate_paths.into_iter().flatten() {
+            if std::path::Path::new(&candidate).exists() {
+                let _ = std::process::Command::new(&candidate)
+                    .arg(&file_to_open)
+                    .spawn();
+                return Ok(());
+            }
+        }
+
+        // Fallback: systemweites Öffnen
+        open::that(&file_to_open).map_err(|e| e.to_string())
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         open::that(&path).map_err(|e| e.to_string())
     }
@@ -311,8 +337,18 @@ pub fn show_in_finder(path: String) -> Result<(), String> {
             .map_err(|e| format!("Failed to reveal in Finder: {}", e))?;
         Ok(())
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
     {
+        let win_path = path.replace('/', "\\");
+        std::process::Command::new("explorer")
+            .arg(format!("/select,{}", win_path))
+            .spawn()
+            .map_err(|e| format!("Failed to reveal in Explorer: {}", e))?;
+        Ok(())
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let _ = path;
         Ok(())
     }
 }
@@ -363,6 +399,12 @@ pub fn get_default_pictures_dir(app: AppHandle) -> Result<String, String> {
         .picture_dir()
         .map(|p| p.to_string_lossy().to_string())
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn show_main_window(window: tauri::WebviewWindow) {
+    let _ = window.show();
+    let _ = window.set_focus();
 }
 
 
