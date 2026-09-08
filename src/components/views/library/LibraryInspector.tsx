@@ -117,7 +117,7 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
               <img 
                 src={getRrImageUrl(activeImage.path)} 
                 alt={activeImage.name} 
-                className="w-full h-full object-cover" 
+                className="w-full h-full object-contain" 
               />
               <div className="absolute top-2 right-2 flex gap-1.5">
                 {activeImage.culling.flag === 1 && (

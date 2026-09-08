@@ -73,6 +73,7 @@ pub fn run() {
                 path_str
             };
             
+            #[allow(unused_mut)]
             let mut decoded_path = match urlencoding::decode(path_str) {
                 Ok(p) => p.into_owned(),
                 Err(_) => path_str.to_string(),
@@ -95,7 +96,7 @@ pub fn run() {
             if is_fullres {
                 let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
                 
-                if ["cr2", "cr3", "arw", "nef", "dng", "orf", "raf"].contains(&ext.as_str()) {
+                if ["cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2"].contains(&ext.as_str()) {
                     match rapidready_core::thumbnail::get_max_preview_jpeg(path) {
                         Ok(bytes) => {
                             let res = Response::builder()

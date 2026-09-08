@@ -245,9 +245,14 @@ export function ZoomableImage({ src, previewSrc, alt }: ZoomableImageProps) {
         <div 
           ref={minimapRef}
           onMouseDown={onMinimapMouseDown}
-          className="absolute bottom-6 right-6 w-32 h-24 bg-black/50 border border-white/20 rounded shadow-lg overflow-hidden flex items-center justify-center z-50 cursor-crosshair"
+          className="absolute bottom-6 right-6 h-24 bg-black/60 border border-white/20 rounded shadow-lg overflow-hidden flex items-center justify-center z-50 cursor-crosshair"
+          style={{
+            aspectRatio: imageRef.current?.naturalWidth && imageRef.current?.naturalHeight 
+              ? `${imageRef.current.naturalWidth} / ${imageRef.current.naturalHeight}` 
+              : '3/2',
+          }}
         >
-          <img src={currentSrc} className="max-w-full max-h-full opacity-50 pointer-events-none" />
+          <img src={currentSrc} className="w-full h-full object-fill opacity-50 pointer-events-none" />
           <div 
             className="absolute border border-accent bg-accent/20 pointer-events-none"
             style={{

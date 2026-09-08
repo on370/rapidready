@@ -57,7 +57,7 @@ const GridThumbnailItem = React.memo(function GridThumbnailItem({
         <img 
           ref={imgRef}
           src={getRrImageUrl(img.path)} 
-          className={`w-full h-full object-cover transition-opacity duration-150 ${isLoaded ? 'opacity-100' : 'opacity-0'}`} 
+          className={`w-full h-full object-contain transition-opacity duration-150 ${isLoaded ? 'opacity-100' : 'opacity-0'}`} 
           alt={img.name} 
           onLoad={() => {
             loadedThumbnailCache.add(img.path);
@@ -111,7 +111,7 @@ const FilmstripThumbnailItem = React.memo(function FilmstripThumbnailItem({
     >
       <img 
         src={getRrImageUrl(img.path)} 
-        className={`w-full h-full object-cover pointer-events-none transition-opacity duration-150 ${
+        className={`w-full h-full object-contain pointer-events-none transition-opacity duration-150 ${
           loaded ? 'opacity-100' : 'opacity-0'
         }`} 
         alt={img.name} 

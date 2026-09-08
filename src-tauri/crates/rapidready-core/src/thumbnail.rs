@@ -29,6 +29,40 @@ pub fn find_companion_jpeg(raw_path: &Path) -> Option<std::path::PathBuf> {
     None
 }
 
+pub fn read_exif_orientation(path: &Path) -> Option<u32> {
+    let file = std::fs::File::open(path).ok()?;
+    let mut bufreader = std::io::BufReader::new(file);
+    let exifreader = exif::Reader::new();
+    let exif = exifreader.read_from_container(&mut bufreader).ok()?;
+    let field = exif.get_field(exif::Tag::Orientation, exif::In::PRIMARY)?;
+    field.value.get_uint(0)
+}
+
+pub fn apply_orientation(mut img: image::DynamicImage, orientation: Option<u32>) -> image::DynamicImage {
+    match orientation {
+        Some(6) => {
+            // Orientation 6: 90 deg CW. Rotate if not already rotated (height > width).
+            if img.width() > img.height() {
+                img = img.rotate90();
+            }
+        }
+        Some(8) => {
+            // Orientation 8: 270 deg CW (90 CCW). Rotate if not already rotated.
+            if img.width() > img.height() {
+                img = img.rotate270();
+            }
+        }
+        Some(3) => {
+            #[cfg(target_os = "windows")]
+            {
+                img = img.rotate180();
+            }
+        }
+        _ => {}
+    }
+    img
+}
+
 pub fn get_preview_jpeg(path: &Path, scale: u32) -> Result<Vec<u8>> {
     let cache_key = format!("{}:{}", path.to_string_lossy(), scale);
     
@@ -46,7 +80,11 @@ pub fn get_preview_jpeg(path: &Path, scale: u32) -> Result<Vec<u8>> {
         
     let img = RgbaImage::from_raw(thumb.width, thumb.height, thumb.rgba)
         .context("Failed to construct RgbaImage from raw bytes")?;
-    let rgb_img = image::DynamicImage::ImageRgba8(img).into_rgb8();
+    let mut dyn_img = image::DynamicImage::ImageRgba8(img);
+    
+    let orient = read_exif_orientation(&target_path).or_else(|| read_exif_orientation(path));
+    dyn_img = apply_orientation(dyn_img, orient);
+    let rgb_img = dyn_img.into_rgb8();
         
     let mut buffer = Cursor::new(Vec::new());
     rgb_img.write_to(&mut buffer, ImageFormat::Jpeg)
@@ -105,9 +143,12 @@ pub fn get_max_preview_jpeg(path: &Path) -> Result<Vec<u8>> {
     let img = RgbaImage::from_raw(thumb.width, thumb.height, thumb.rgba)
         .context("Failed to construct RgbaImage from raw bytes")?;
         
-    let mut buffer = Cursor::new(Vec::new());
-    let rgb_img = image::DynamicImage::ImageRgba8(img).into_rgb8();
+    let mut dyn_img = image::DynamicImage::ImageRgba8(img);
+    let orient = read_exif_orientation(path);
+    dyn_img = apply_orientation(dyn_img, orient);
+    let rgb_img = dyn_img.into_rgb8();
     
+    let mut buffer = Cursor::new(Vec::new());
     rgb_img.write_to(&mut buffer, ImageFormat::Jpeg)
         .context("Failed to encode JPEG")?;
         
@@ -171,5 +212,82 @@ mod tests {
             assert!(res.is_ok(), "CR2 thumbnail failed: {:?}", res.err());
             assert!(!res.unwrap().is_empty());
         }
+
+        let cr2_portrait = workspace_root.join("testdata").join("dest").join("2014").join("2014-05-01").join("IMG_3126.CR2");
+        if cr2_portrait.exists() {
+            let thumb = get_thumbnail(&cr2_portrait, ThumbnailScale(1)).unwrap();
+            println!("CR2 portrait thumb: width={}, height={}", thumb.width, thumb.height);
+            let res = get_max_preview_jpeg(&cr2_portrait).unwrap();
+            let img = image::load_from_memory(&res).unwrap();
+            println!("CR2 max preview: width={}, height={}", img.width(), img.height());
+            let dng_portrait = workspace_root.join("testdata").join("dest").join("2023").join("2023-10-03").join("DSC02298.ARW");
+            if dng_portrait.exists() {
+                let thumb2 = get_thumbnail(&dng_portrait, ThumbnailScale(1)).unwrap();
+                println!("ARW portrait thumb: width={}, height={}", thumb2.width, thumb2.height);
+                let res2 = get_max_preview_jpeg(&dng_portrait).unwrap();
+                let img2 = image::load_from_memory(&res2).unwrap();
+                println!("ARW max preview: width={}, height={}", img2.width(), img2.height());
+            }
+        }
+    }
+
+    #[test]
+    fn test_check_exif_orientations() {
+        let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let workspace_root = manifest_dir.parent().unwrap().parent().unwrap().parent().unwrap().parent().unwrap();
+        
+        let test_files = [
+            workspace_root.join("testdata/dest/2014/2014-05-01/IMG_3126.CR2"),
+            workspace_root.join("testdata/dest/2014/2014-05-01/IMG_3191.CR2"),
+            workspace_root.join("testdata/dest/2023/2023-10-03/DSC02298.ARW"),
+            workspace_root.join("testdata/src/Bilder/R0002008.DNG"),
+            workspace_root.join("testdata/dest/2014/2014-08-25/DSC03058.JPG"),
+        ];
+
+        for p in &test_files {
+            if !p.exists() { continue; }
+            let mut file = std::fs::File::open(p).unwrap();
+            let mut bufreader = std::io::BufReader::new(&mut file);
+            let exifreader = exif::Reader::new();
+            let orient = if let Ok(exif) = exifreader.read_from_container(&mut bufreader) {
+                if let Some(f) = exif.get_field(exif::Tag::Orientation, exif::In::PRIMARY) {
+                    f.value.get_uint(0)
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            println!("FILE {:?}: EXIF orientation = {:?}", p.file_name().unwrap(), orient);
+        }
+    }
+
+    #[test]
+    fn test_apply_orientation_logic() {
+        use image::{Rgba, ImageBuffer};
+        // Create 300x200 landscape test image
+        let img = image::DynamicImage::ImageRgba8(ImageBuffer::from_pixel(300, 200, Rgba([255, 0, 0, 255])));
+        assert_eq!(img.width(), 300);
+        assert_eq!(img.height(), 200);
+
+        // Orientation 6: Should rotate to 200x300 portrait
+        let rot6 = apply_orientation(img.clone(), Some(6));
+        assert_eq!(rot6.width(), 200);
+        assert_eq!(rot6.height(), 300);
+
+        // Orientation 6 on already-rotated portrait: Should NOT rotate again (idempotent)
+        let rot6_again = apply_orientation(rot6.clone(), Some(6));
+        assert_eq!(rot6_again.width(), 200);
+        assert_eq!(rot6_again.height(), 300);
+
+        // Orientation 8: Should rotate to 200x300 portrait
+        let rot8 = apply_orientation(img.clone(), Some(8));
+        assert_eq!(rot8.width(), 200);
+        assert_eq!(rot8.height(), 300);
+
+        // Orientation 1: Should remain 300x200
+        let rot1 = apply_orientation(img.clone(), Some(1));
+        assert_eq!(rot1.width(), 300);
+        assert_eq!(rot1.height(), 200);
     }
 }
