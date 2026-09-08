@@ -5,6 +5,35 @@ All notable changes to RapidReady will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0-beta] - 2026-09-08
+
+Major feature release introducing Color Labels, Tag Management with live Autocomplete, modular Filter Bar dropdowns, enhanced Culling Toolbar ergonomics, and complete sidecar tag persistence.
+
+### Added
+- **Color Labels (Farblabels):**
+  - 5 industry-standard color labels (Red, Yellow, Green, Blue, Purple) for enhanced visual sorting.
+  - Dedicated numeric keyboard shortcuts: `6` (Red), `7` (Yellow), `8` (Green), `9` (Blue).
+  - Dynamic multi-color palette popup in Culling Toolbar and permanent color picker in Inspector.
+  - Color badge indicators rendered on thumbnails in both Grid and Filmstrip views.
+  - Color label selection integrated into thumbnail right-click Context Menu.
+- **Tag Management & Autocomplete:**
+  - Keyword/tag management in Inspector with non-destructive `.rrdata` sidecar persistence.
+  - Interactive suggestions dropdown with live filtering, folder usage frequency counts, and full keyboard navigation (`↓`, `↑`, `Enter`, `Esc`).
+- **Consolidated Filter Bar:**
+  - Modular dropdown menus for Ratings (`≥1★`–`≥5★`), Colors, and Tags with image frequency counters and active checkmarks.
+  - Selected filters displayed as active accent pills with instant one-click reset (`✕`).
+  - Completely orthogonal filtering: combine flags (Picks/Rejects), ratings, colors, and tags seamlessly.
+- **Right-Aligned Share / Export Popover:**
+  - Replaced bulky action buttons with a clean, right-aligned "Teilen" (Share) popover menu with responsive label collapse (`[ 📤 Teilen ▾ ]` on wide screens, compact icon `[ 📤 ]` on narrow widths).
+  - Direct actions to edit in RapidRAW (`R`) or reveal in macOS Finder / Windows Explorer (`Cmd+Shift+F` / `Ctrl+Shift+F`).
+- **Help & Shortcut Synchronization:**
+  - Updated global help modal (`Cmd+/` / `F1`) and contextual info popovers with color labels, arrow navigation (`←` / `→`), `J` / `K` keys, and platform-specific Finder/Explorer actions.
+
+### Changed & Fixed
+- **Culling Toolbar Ergonomics:** Relocated the Delete Rejected button (`[ 🗑 (count) ]`) immediately adjacent to the `P / U / X` decision controls with live count indicator, preventing misclicks via confirmation modal.
+- **Sidecar Tag Persistence & Deletion:** Fixed `.rrdata` sidecar writer in `rapidready-core` to ensure deleted tags are properly removed from sidecars on disk.
+- **Non-Destructive EXIF & Orientation:** Preserved custom orientation and existing EXIF/adjustments across sidecar updates.
+
 ## [0.1.1-beta] - 2026-09-06
 
 Windows port stabilization, thumbnail performance optimizations, and QA audit fixes.

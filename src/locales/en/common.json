@@ -22,5 +22,11 @@
     "viewLibrary": "Library & Culling",
     "viewTools": "Tools & Dashboard",
     "viewSettings": "Settings"
+  },
+  "textMenu": {
+    "cut": "Cut",
+    "copy": "Copy",
+    "paste": "Paste",
+    "selectAll": "Select All"
   }
 }

@@ -13,6 +13,8 @@ pub struct CullingState {
     pub color: Option<String>,
     #[serde(default)]
     pub tags: Vec<String>,
+    #[serde(default)]
+    pub orientation: Option<u32>,
 }
 
 pub fn get_sidecar_path(original_path: &Path) -> PathBuf {
@@ -41,7 +43,12 @@ pub fn parse_sidecar_json(contents: &str) -> CullingState {
             state.color = Some(c.to_string());
         }
 
-        // 3. Tags & Flag Adapter (rr:pick and rr:reject)
+        // 3. Orientation override (1, 3, 6, 8)
+        if let Some(o) = val.get("orientation").and_then(|v| v.as_u64()) {
+            state.orientation = Some(o as u32);
+        }
+
+        // 4. Tags & Flag Adapter (rr:pick and rr:reject)
         if let Some(tags_arr) = val.get("tags").and_then(|v| v.as_array()) {
             let mut clean_tags = Vec::new();
             for item in tags_arr {
@@ -72,6 +79,34 @@ pub fn parse_sidecar_json(contents: &str) -> CullingState {
         return state;
     }
     CullingState::default()
+}
+
+/// Cycles orientation:
+/// CW: 1 (0°) -> 6 (90° CW) -> 3 (180°) -> 8 (270° CW) -> 1
+/// CCW: 1 (0°) -> 8 (270° CW) -> 3 (180°) -> 6 (90° CW) -> 1
+pub fn next_orientation(current: u32, direction: &str) -> u32 {
+    let current_norm = match current {
+        1 | 3 | 6 | 8 => current,
+        _ => 1,
+    };
+    if direction == "ccw" || direction == "left" {
+        match current_norm {
+            1 => 8,
+            8 => 3,
+            3 => 6,
+            6 => 1,
+            _ => 1,
+        }
+    } else {
+        // default "cw" / "right"
+        match current_norm {
+            1 => 6,
+            6 => 3,
+            3 => 8,
+            8 => 1,
+            _ => 1,
+        }
+    }
 }
 
 pub fn write_sidecar(original_path: &Path, state: &CullingState) -> anyhow::Result<()> {
@@ -105,22 +140,12 @@ pub fn write_sidecar(original_path: &Path, state: &CullingState) -> anyhow::Resu
 
     // 4. Update tags with flag adapter (rr:pick, rr:reject)
     let had_tags_array = matches!(obj.get("tags"), Some(serde_json::Value::Array(_)));
-    let mut updated_tags: Vec<String> = match obj.get("tags") {
-        Some(serde_json::Value::Array(arr)) => arr
-            .iter()
-            .filter_map(|v| v.as_str())
-            .filter(|s| *s != TAG_PICK && *s != TAG_REJECT)
-            .map(|s| s.to_string())
-            .collect(),
-        _ => Vec::new(),
-    };
-
-    // Retain any existing tags from state
-    for tag in &state.tags {
-        if tag != TAG_PICK && tag != TAG_REJECT && !updated_tags.contains(tag) {
-            updated_tags.push(tag.clone());
-        }
-    }
+    let mut updated_tags: Vec<String> = state
+        .tags
+        .iter()
+        .filter(|s| *s != TAG_PICK && *s != TAG_REJECT)
+        .cloned()
+        .collect();
 
     // Add pick / reject flag
     match state.flag {
@@ -146,7 +171,14 @@ pub fn write_sidecar(original_path: &Path, state: &CullingState) -> anyhow::Resu
         obj.remove("color");
     }
 
-    // 6. Write back formatted JSON
+    // 6. Update orientation if provided
+    if let Some(o) = state.orientation {
+        obj.insert("orientation".to_string(), serde_json::json!(o));
+    } else if obj.contains_key("orientation") {
+        obj.remove("orientation");
+    }
+
+    // 7. Write back formatted JSON
     let json = serde_json::to_string_pretty(&root)?;
     fs::write(&sidecar_path, json)?;
 
@@ -231,6 +263,7 @@ mod tests {
             rating: 5,
             color: None,
             tags: vec![],
+            orientation: None,
         };
         write_sidecar(&img_path, &state).unwrap();
 
@@ -269,6 +302,7 @@ mod tests {
             rating: 2,
             color: None,
             tags: vec!["vacation".to_string()],
+            orientation: None,
         };
         write_sidecar(&img_path, &state).unwrap();
 
@@ -306,12 +340,81 @@ mod tests {
     }
 
     #[test]
-    fn test_read_real_user_testdata() {
-        let test_file = Path::new("/Volumes/eMion2T/Ole/projects/soft/RapidReady/testdata/dest/2014/2014-05-01/IMG_3163.CR2");
-        if test_file.exists() {
-            let state = read_sidecar(test_file);
-            // In Ole's file, rating was set to 3 in RapidRAW
-            assert_eq!(state.rating, 3);
-        }
+    fn test_sidecar_orientation_cycle_and_persistence() {
+        assert_eq!(next_orientation(1, "cw"), 6);
+        assert_eq!(next_orientation(6, "cw"), 3);
+        assert_eq!(next_orientation(3, "cw"), 8);
+        assert_eq!(next_orientation(8, "cw"), 1);
+
+        assert_eq!(next_orientation(1, "ccw"), 8);
+        assert_eq!(next_orientation(8, "ccw"), 3);
+        assert_eq!(next_orientation(3, "ccw"), 6);
+        assert_eq!(next_orientation(6, "ccw"), 1);
+
+        let temp_dir = std::env::temp_dir().join(format!("rr_orient_test_{}", std::process::id()));
+        let _ = fs::create_dir_all(&temp_dir);
+        let img_path = temp_dir.join("photo.jpg");
+        let sidecar_path = temp_dir.join("photo.jpg.rrdata");
+
+        let mut state = CullingState {
+            orientation: Some(6),
+            ..Default::default()
+        };
+        write_sidecar(&img_path, &state).unwrap();
+
+        let read = read_sidecar(&img_path);
+        assert_eq!(read.orientation, Some(6));
+
+        state.orientation = Some(next_orientation(read.orientation.unwrap(), "cw"));
+        assert_eq!(state.orientation, Some(3));
+        write_sidecar(&img_path, &state).unwrap();
+
+        let read2 = read_sidecar(&img_path);
+        assert_eq!(read2.orientation, Some(3));
+
+        let _ = fs::remove_file(&sidecar_path);
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_tags_and_color_persistence_and_deletion() {
+        let temp_dir = std::env::temp_dir().join(format!("rr_tags_color_{}", std::process::id()));
+        let _ = fs::create_dir_all(&temp_dir);
+        let img_path = temp_dir.join("sample.arw");
+
+        // 1. Initial write with tags and color
+        let mut state = CullingState {
+            flag: Some(1),
+            rating: 4,
+            color: Some("red".to_string()),
+            tags: vec!["Portrait".to_string(), "Studio".to_string()],
+            orientation: None,
+        };
+        write_sidecar(&img_path, &state).unwrap();
+
+        let read1 = read_sidecar(&img_path);
+        assert_eq!(read1.color, Some("red".to_string()));
+        assert_eq!(read1.tags, vec!["Portrait", "Studio"]);
+        assert_eq!(read1.flag, Some(1));
+
+        // 2. Delete one tag and change color
+        state.tags = vec!["Portrait".to_string()];
+        state.color = Some("blue".to_string());
+        write_sidecar(&img_path, &state).unwrap();
+
+        let read2 = read_sidecar(&img_path);
+        assert_eq!(read2.color, Some("blue".to_string()));
+        assert_eq!(read2.tags, vec!["Portrait"]);
+
+        // 3. Clear all tags and color
+        state.tags = vec![];
+        state.color = None;
+        write_sidecar(&img_path, &state).unwrap();
+
+        let read3 = read_sidecar(&img_path);
+        assert_eq!(read3.color, None);
+        assert!(read3.tags.is_empty());
+
+        let _ = fs::remove_dir_all(&temp_dir);
     }
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { X, Command, ArrowBigUp } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { listen } from '@tauri-apps/api/event';
+import { isMac } from '../../utils/platform';
 
 export function HelpModal() {
   const [isOpen, setIsOpen] = useState(false);
@@ -48,49 +49,55 @@ export function HelpModal() {
         </div>
         
         <div className="flex-1 overflow-y-auto p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
             
             {/* Navigation & View */}
             <div>
-              <h3 className="text-sm font-semibold text-txt-secondary mb-4 uppercase tracking-wider">{t('shortcuts.sections.navigation')}</h3>
+              <h3 className="text-xs font-semibold text-txt-secondary mb-3 uppercase tracking-wider flex items-center h-5">{t('shortcuts.sections.navigation')}</h3>
               <div className="space-y-3">
-                <ShortcutRow description={t('shortcuts.actions.next')} keys={['Space']} />
-                <ShortcutRow description={t('shortcuts.actions.prev')} keys={['Shift', 'Space']} />
-                <ShortcutRow description={t('shortcuts.actions.loupe')} keys={['E', 'Enter']} />
-                <ShortcutRow description={t('shortcuts.actions.grid')} keys={['G', 'Esc']} />
+                <ShortcutRow description={t('shortcuts.actions.next')} keys={['→', '|', 'J', '|', 'Space']} />
+                <ShortcutRow description={t('shortcuts.actions.prev')} keys={['←', '|', 'K', '|', 'Shift', 'Space']} />
+                <ShortcutRow description={t('shortcuts.actions.loupe')} keys={['E', '|', 'Enter']} />
+                <ShortcutRow description={t('shortcuts.actions.grid')} keys={['G', '|', 'Esc']} />
+                <ShortcutRow description={t('shortcuts.actions.selectAll')} keys={['Cmd', 'A']} />
                 <ShortcutRow description={t('shortcuts.actions.fullscreen')} keys={['Cmd', 'F']} />
               </div>
             </div>
 
             {/* Zoom & Pan */}
             <div>
-              <h3 className="text-sm font-semibold text-txt-secondary mb-4 uppercase tracking-wider">{t('shortcuts.sections.zoomPan')}</h3>
+              <h3 className="text-xs font-semibold text-txt-secondary mb-3 uppercase tracking-wider flex items-center h-5">{t('shortcuts.sections.zoomPan')}</h3>
               <div className="space-y-3">
-                <ShortcutRow description={t('shortcuts.actions.zoom')} keys={['Z', 'Click']} />
-                <ShortcutRow description={t('shortcuts.actions.zoomIn')} keys={['+', 'Scroll Up']} />
-                <ShortcutRow description={t('shortcuts.actions.zoomOut')} keys={['-', 'Scroll Down']} />
+                <ShortcutRow description={t('shortcuts.actions.zoom')} keys={['Z', '|', 'Click']} />
+                <ShortcutRow description={t('shortcuts.actions.zoomIn')} keys={['+', '|', 'Scroll Up']} />
+                <ShortcutRow description={t('shortcuts.actions.zoomOut')} keys={['-', '|', 'Scroll Down']} />
                 <ShortcutRow description={t('shortcuts.actions.pan')} keys={['Drag']} />
               </div>
             </div>
 
             {/* Culling */}
             <div>
-              <h3 className="text-sm font-semibold text-txt-secondary mb-4 uppercase tracking-wider">{t('shortcuts.sections.culling')}</h3>
+              <h3 className="text-xs font-semibold text-txt-secondary mb-3 uppercase tracking-wider flex items-center h-5">{t('shortcuts.sections.culling')}</h3>
               <div className="space-y-3">
                 <ShortcutRow description={t('shortcuts.actions.rate15')} keys={['1', '-', '5']} />
                 <ShortcutRow description={t('shortcuts.actions.removeRate')} keys={['0']} />
                 <ShortcutRow description={t('shortcuts.actions.pick')} keys={['P']} />
                 <ShortcutRow description={t('shortcuts.actions.reject')} keys={['X']} />
                 <ShortcutRow description={t('shortcuts.actions.removeFlag')} keys={['U']} />
+                <ShortcutRow description={t('shortcuts.actions.colorLabels')} keys={['6', '-', '9']} />
+                <ShortcutRow description={t('shortcuts.actions.rotateCw')} keys={['Cmd', 'R', '|', '.']} />
+                <ShortcutRow description={t('shortcuts.actions.rotateCcw')} keys={['Cmd', 'L', '|', ',']} />
               </div>
             </div>
 
             {/* System */}
             <div>
-              <h3 className="text-sm font-semibold text-txt-secondary mb-4 uppercase tracking-wider">{t('shortcuts.sections.system')}</h3>
+              <h3 className="text-xs font-semibold text-txt-secondary mb-3 uppercase tracking-wider flex items-center h-5">{t('shortcuts.sections.system')}</h3>
               <div className="space-y-3">
+                <ShortcutRow description={t('shortcuts.actions.openRapidRaw')} keys={['R']} />
+                <ShortcutRow description={isMac ? t('shortcuts.actions.showInFinder') : t('shortcuts.actions.showInExplorer')} keys={['Cmd', 'Shift', 'F']} />
                 <ShortcutRow description={t('shortcuts.actions.settings')} keys={['Cmd', ',']} />
-                <ShortcutRow description={t('shortcuts.actions.help')} keys={['Cmd', '/']} />
+                <ShortcutRow description={t('shortcuts.actions.help')} keys={['Cmd', '/', '|', 'F1']} />
                 <ShortcutRow description={t('shortcuts.actions.quit')} keys={['Cmd', 'Q']} />
               </div>
             </div>
@@ -111,10 +118,14 @@ function ShortcutRow({ description, keys }: { description: string, keys: string[
       <span className="text-txt-primary">{description}</span>
       <div className="flex items-center gap-1">
         {keys.map((k, i) => (
-          <span key={i} className="min-w-[24px] text-center px-1.5 py-0.5 rounded bg-app-deepest border border-app-border text-xs font-mono text-txt-secondary shadow-sm">
-            {k === 'Cmd' ? <Command className="w-3 h-3 inline" /> : 
-             k === 'Shift' ? <ArrowBigUp className="w-3 h-3 inline" /> : k}
-          </span>
+          k === '|' ? (
+            <span key={i} className="text-txt-tertiary text-xs px-0.5">/</span>
+          ) : (
+            <span key={i} className="min-w-[24px] text-center px-1.5 py-0.5 rounded bg-app-deepest border border-app-border text-xs font-mono text-txt-secondary shadow-sm">
+              {k === 'Cmd' ? (isMac ? <Command className="w-3 h-3 inline" /> : 'Ctrl') : 
+               k === 'Shift' ? (isMac ? <ArrowBigUp className="w-3 h-3 inline" /> : 'Shift') : k}
+            </span>
+          )
         ))}
       </div>
     </div>

@@ -17,9 +17,11 @@
     "allImages": "Alle Bilder"
   },
   "toolbar": {
-    "showInFinder": "Im Finder",
+    "showInFinder": "Im Finder öffnen",
     "showInFinderTooltip": "Im macOS Finder anzeigen (⌘⇧F)",
-    "openInRapidRaw": "In RapidRAW",
+    "showInExplorer": "Im Explorer öffnen",
+    "showInExplorerTooltip": "Im Windows Explorer anzeigen (Ctrl+Shift+F)",
+    "openInRapidRaw": "In RapidRAW öffnen",
     "openInRapidRawTooltip": "In RapidRAW bearbeiten (R)",
     "viewGrid": "Raster",
     "viewLoupe": "Lupe",
@@ -32,13 +34,42 @@
     "smallerThumbnails": "Kleinere Thumbnails",
     "largerThumbnails": "Größere Thumbnails",
     "zoomOut": "Verkleinern",
-    "zoomIn": "Vergrößern"
+    "zoomIn": "Vergrößern",
+    "rotateCw": "90° im UZS drehen",
+    "rotateCwTooltip": "Im Uhrzeigersinn drehen (⌘R oder .)",
+    "rotateCcw": "90° gegen UZS drehen",
+    "rotateCcwTooltip": "Gegen den Uhrzeigersinn drehen (⌘L oder ,)",
+    "rotateLabel": "Drehen:",
+    "share": "Teilen",
+    "shareTooltip": "Aktionen für dieses Bild (R / ⌘⇧F)",
+    "colorLabel": "Farblabel",
+    "colorLabelTooltip": "Farblabel zuweisen (6=Rot, 7=Gelb, 8=Grün, 9=Blau)"
+  },
+  "contextMenu": {
+    "selectedCount": "{{count}} Bilder ausgewählt",
+    "zoomFit": "Einpassen (Fit)",
+    "zoom100": "100% (1:1)",
+    "zoom200": "200% (2:1)",
+    "rotateCw": "Im Uhrzeigersinn drehen",
+    "rotateCcw": "Gegen den Uhrzeigersinn drehen",
+    "pick": "Als Auswahl markieren",
+    "reject": "Als verworfen markieren",
+    "unrated": "Markierung aufheben",
+    "rating": "Bewertung:"
   },
   "filters": {
     "label": "Filter:",
     "all": "Alle",
     "picks": "Auswahl",
-    "rejected": "Verworfen"
+    "rejected": "Verworfen",
+    "allRatings": "Alle Bewertungen",
+    "ratingFilter": "Bewertung",
+    "allColors": "Alle Farblabels",
+    "colorFilter": "Farblabel",
+    "noColorsInFolder": "Keine Farblabels im Ordner",
+    "allTags": "Alle Schlagwörter",
+    "tagFilter": "Schlagwort",
+    "noTagsInFolder": "Keine Schlagwörter im Ordner"
   },
   "filmstrip": {
     "title": "Filmstreifen",
@@ -49,6 +80,8 @@
   },
   "delete": {
     "button": "Verworfene löschen ({{count}})",
+    "buttonTooltip": "{{count}} verworfene(s) Bild(er) in den Papierkorb verschieben",
+    "noRejectedTooltip": "Keine verworfenen Bilder vorhanden",
     "confirmMessage": "Möchtest du {{count}} verworfene Bilder in den macOS Papierkorb verschieben?",
     "confirmTitle": "Löschen bestätigen",
     "okLabel": "In den Papierkorb",
@@ -78,11 +111,25 @@
     "path": "Pfad",
     "openInRapidRaw": "In RapidRAW bearbeiten",
     "showInFinder": "Im Finder anzeigen",
-    "pick": "Auswahl (P)",
-    "unflag": "Keine Markierung (U)",
-    "reject": "Verwerfen (X)",
-    "pickBtn": "Auswahl",
-    "unflagBtn": "Aufheben",
-    "rejectBtn": "Verwerfen"
+    "pick": "Als Auswahl markieren (Taste P)",
+    "unflag": "Markierung aufheben (Taste U)",
+    "reject": "Als verworfen markieren (Taste X)",
+    "pickBtn": "Pick",
+    "unflagBtn": "Unflag",
+    "rejectBtn": "Reject",
+    "tags": "Schlagwörter",
+    "addTag": "Schlagwort hinzufügen...",
+    "noTags": "Keine Schlagwörter",
+    "removeTagTooltip": "Schlagwort '{{tag}}' entfernen",
+    "createTag": "'{{tag}}' neu erstellen",
+    "suggestions": "Vorhandene Schlagwörter"
+  },
+  "colors": {
+    "none": "Keine Farbe",
+    "red": "Rot",
+    "yellow": "Gelb",
+    "green": "Grün",
+    "blue": "Blau",
+    "purple": "Lila"
   }
 }

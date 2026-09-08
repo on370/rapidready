@@ -8,15 +8,17 @@
     "zoomInOut": "Zoom in/out",
     "panImage": "Pan image",
     "rateImage": "Rate image",
-    "pickReject": "Pick / Reject"
+    "pickReject": "Pick / Reject",
+    "colorLabels": "Assign color label",
+    "navigate": "Navigate images"
   },
   "shortcuts": {
     "title": "Global Keyboard Shortcuts",
     "sections": {
       "navigation": "Navigation & Views",
-      "zoomPan": "Zoom & Pan (Loupe)",
+      "zoomPan": "Zoom & Pan",
       "culling": "Culling & Rating",
-      "system": "System"
+      "system": "System & Integration"
     },
     "actions": {
       "next": "Next Image",
@@ -24,6 +26,7 @@
       "loupe": "Loupe View",
       "grid": "Grid View",
       "fullscreen": "Toggle Fullscreen",
+      "selectAll": "Select All Images",
       "zoom": "Toggle Zoom",
       "zoomIn": "Zoom In",
       "zoomOut": "Zoom Out",
@@ -33,6 +36,12 @@
       "pick": "Pick (Flag)",
       "reject": "Reject",
       "removeFlag": "Remove Flag",
+      "colorLabels": "Color labels (6=Red, 7=Yellow, 8=Green, 9=Blue)",
+      "rotateCw": "Rotate Clockwise",
+      "rotateCcw": "Rotate Counter-Clockwise",
+      "openRapidRaw": "Edit in RapidRAW",
+      "showInFinder": "Show in Finder",
+      "showInExplorer": "Show in Explorer",
       "settings": "Open Settings",
       "help": "Show this Help",
       "quit": "Quit Application"

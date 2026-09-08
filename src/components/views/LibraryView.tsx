@@ -23,17 +23,13 @@ export function LibraryView() {
       const rect = containerRef.current.getBoundingClientRect();
       
       if (isDraggingLeft) {
-        const newWidth = e.clientX - rect.left;
-        if (newWidth >= 150 && newWidth <= 450) {
-          setLeftWidth(newWidth);
-        }
+        const newWidth = Math.max(160, Math.min(400, e.clientX - rect.left));
+        setLeftWidth(newWidth);
       }
       
       if (isDraggingRight) {
-        const newWidth = rect.right - e.clientX;
-        if (newWidth >= 200 && newWidth <= 500) {
-          setRightWidth(newWidth);
-        }
+        const newWidth = Math.max(260, Math.min(450, rect.right - e.clientX));
+        setRightWidth(newWidth);
       }
     };
     

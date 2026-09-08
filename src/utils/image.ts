@@ -6,18 +6,23 @@ import { convertFileSrc } from '@tauri-apps/api/core';
  * On macOS, Tauri maps them to <protocol>://localhost/<path>.
  * convertFileSrc automatically selects the correct format for the current OS!
  */
-export function getRrImageUrl(path: string | undefined | null, fullres = false): string {
+export function getRrImageUrl(path: string | undefined | null, fullres = false, orientation?: number | null): string {
   if (!path) return '';
+  const params: string[] = [];
+  if (fullres) params.push('fullres=true');
+  if (orientation) params.push(`orient=${orientation}`);
+  const queryString = params.length > 0 ? `?${params.join('&')}` : '';
+
   try {
     const base = convertFileSrc(path, 'rr-image');
-    return `${base}${fullres ? '?fullres=true' : ''}`;
+    return `${base}${queryString}`;
   } catch (e) {
     // Fallback if convertFileSrc fails (e.g. unit tests or standalone browser)
     const safePath = path.replace(/\\/g, '/');
     const normalized = safePath.startsWith('/') ? safePath.slice(1) : safePath;
     const isWindows = typeof navigator !== 'undefined' && navigator.userAgent.includes('Windows');
     const base = isWindows ? `http://rr-image.localhost/${normalized}` : `rr-image://localhost/${normalized}`;
-    return `${base}${fullres ? '?fullres=true' : ''}`;
+    return `${base}${queryString}`;
   }
 }
 

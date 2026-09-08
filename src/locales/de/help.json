@@ -8,15 +8,17 @@
     "zoomInOut": "Vergrößern / Verkleinern",
     "panImage": "Bild verschieben",
     "rateImage": "Bild bewerten",
-    "pickReject": "Auswählen / Verwerfen"
+    "pickReject": "Auswählen / Verwerfen",
+    "colorLabels": "Farblabel zuweisen",
+    "navigate": "Bild wechseln"
   },
   "shortcuts": {
     "title": "Globale Tastaturkürzel",
     "sections": {
       "navigation": "Navigation & Ansichten",
-      "zoomPan": "Zoom & Bewegen (Lupe)",
+      "zoomPan": "Zoom & Bewegen",
       "culling": "Culling & Bewertung",
-      "system": "System"
+      "system": "System & Integration"
     },
     "actions": {
       "next": "Nächstes Bild",
@@ -24,6 +26,7 @@
       "loupe": "Lupe-Ansicht",
       "grid": "Raster-Ansicht",
       "fullscreen": "Vollbild umschalten",
+      "selectAll": "Alle Bilder auswählen",
       "zoom": "Zoom an/aus",
       "zoomIn": "Vergrößern",
       "zoomOut": "Verkleinern",
@@ -33,6 +36,12 @@
       "pick": "Auswählen (Pick)",
       "reject": "Verwerfen (Reject)",
       "removeFlag": "Markierung aufheben",
+      "colorLabels": "Farblabels (6=Rot, 7=Gelb, 8=Grün, 9=Blau)",
+      "rotateCw": "Im UZS drehen",
+      "rotateCcw": "Gegen UZS drehen",
+      "openRapidRaw": "In RapidRAW bearbeiten",
+      "showInFinder": "Im Finder anzeigen",
+      "showInExplorer": "Im Explorer anzeigen",
       "settings": "Einstellungen öffnen",
       "help": "Diese Hilfe anzeigen",
       "quit": "RapidReady beenden"

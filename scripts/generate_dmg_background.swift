@@ -6,15 +6,15 @@ let height = 400
 let image = NSImage(size: NSSize(width: width, height: height))
 image.lockFocus()
 
-// Background fill (sleek dark aesthetic matching RapidReady)
-let bgColor = NSColor(red: 0.11, green: 0.12, blue: 0.14, alpha: 1.0)
+// Clean white background (Finder icon label text is dark, perfectly readable)
+let bgColor = NSColor.white
 bgColor.setFill()
 NSRect(x: 0, y: 0, width: width, height: height).fill()
 
 // Subtle border / inner stroke
 let innerBorder = NSBezierPath(roundedRect: NSRect(x: 1, y: 1, width: width - 2, height: height - 2), xRadius: 8, yRadius: 8)
-NSColor(white: 1.0, alpha: 0.08).setStroke()
-innerBorder.lineWidth = 1.5
+NSColor(white: 0.90, alpha: 1.0).setStroke()
+innerBorder.lineWidth = 1.0
 innerBorder.stroke()
 
 // Draw sleek arrow between icons
@@ -39,7 +39,7 @@ arrowPath.lineWidth = 4.0
 arrowPath.lineCapStyle = .round
 arrowPath.lineJoinStyle = .round
 
-let arrowColor = NSColor(red: 0.40, green: 0.60, blue: 0.95, alpha: 0.75) // subtle accent tint
+let arrowColor = NSColor(red: 0.10, green: 0.50, blue: 0.98, alpha: 0.9) // vibrant modern system blue
 arrowColor.setStroke()
 arrowPath.stroke()
 

@@ -5,9 +5,10 @@ interface ZoomableImageProps {
   src: string;
   previewSrc?: string;
   alt: string;
+  onContextMenu?: (e: ReactMouseEvent) => void;
 }
 
-export function ZoomableImage({ src, previewSrc, alt }: ZoomableImageProps) {
+export function ZoomableImage({ src, previewSrc, alt, onContextMenu }: ZoomableImageProps) {
   const { invertScrollZoom, loupeScale, setLoupeScale } = useLibraryStore();
   const [currentSrc, setCurrentSrc] = useState(previewSrc || src);
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -115,6 +116,7 @@ export function ZoomableImage({ src, previewSrc, alt }: ZoomableImageProps) {
   }, [toggleZoom, performZoomIn, performZoomOut]);
 
   const onMouseDown = (e: ReactMouseEvent) => {
+    if (e.button !== 0) return;
     if (!isZoomed) {
       toggleZoom(e);
       return;
@@ -128,6 +130,7 @@ export function ZoomableImage({ src, previewSrc, alt }: ZoomableImageProps) {
   };
 
   const onMinimapMouseDown = (e: ReactMouseEvent) => {
+    if (e.button !== 0) return;
     e.stopPropagation();
     e.preventDefault();
     setIsMinimapDragging(true);
@@ -240,6 +243,7 @@ export function ZoomableImage({ src, previewSrc, alt }: ZoomableImageProps) {
       onMouseUp={onMouseUp}
       onMouseLeave={onMouseUp}
       onWheel={onWheel}
+      onContextMenu={onContextMenu}
     >
       {isZoomed && (
         <div 

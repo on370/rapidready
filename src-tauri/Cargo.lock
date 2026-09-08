@@ -3499,7 +3499,7 @@ dependencies = [
 
 [[package]]
 name = "rapid-ready"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "cc",
  "notify",
@@ -3518,7 +3518,7 @@ dependencies = [
 
 [[package]]
 name = "rapidready-core"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "blake3",

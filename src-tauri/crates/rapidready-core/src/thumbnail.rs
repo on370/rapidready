@@ -38,33 +38,65 @@ pub fn read_exif_orientation(path: &Path) -> Option<u32> {
     field.value.get_uint(0)
 }
 
-pub fn apply_orientation(mut img: image::DynamicImage, orientation: Option<u32>) -> image::DynamicImage {
-    match orientation {
-        Some(6) => {
-            // Orientation 6: 90 deg CW. Rotate if not already rotated (height > width).
-            if img.width() > img.height() {
-                img = img.rotate90();
-            }
-        }
-        Some(8) => {
-            // Orientation 8: 270 deg CW (90 CCW). Rotate if not already rotated.
-            if img.width() > img.height() {
-                img = img.rotate270();
-            }
-        }
-        Some(3) => {
-            #[cfg(target_os = "windows")]
-            {
-                img = img.rotate180();
-            }
-        }
-        _ => {}
+pub fn get_effective_orientation(path: &Path) -> Option<u32> {
+    // 1. Check sidecar .rrdata first
+    let sidecar_state = crate::culling::read_sidecar(path);
+    if let Some(o) = sidecar_state.orientation {
+        return Some(o);
     }
-    img
+    // 2. Fall back to companion JPEG EXIF
+    if let Some(companion) = find_companion_jpeg(path) {
+        if let Some(o) = read_exif_orientation(&companion) {
+            return Some(o);
+        }
+    }
+    // 3. Fall back to image file EXIF
+    read_exif_orientation(path)
+}
+
+pub fn orientation_to_degrees(tag: u32) -> u32 {
+    match tag {
+        1 => 0,
+        6 => 90,
+        3 => 180,
+        8 => 270,
+        _ => 0,
+    }
+}
+
+pub fn rotate_by_degrees(img: image::DynamicImage, deg: u32) -> image::DynamicImage {
+    match deg % 360 {
+        90 => img.rotate90(),
+        180 => img.rotate180(),
+        270 => img.rotate270(),
+        _ => img,
+    }
+}
+
+pub fn apply_effective_orientation(
+    img: image::DynamicImage,
+    target_orient: Option<u32>,
+    file_orient: Option<u32>,
+) -> image::DynamicImage {
+    let target_deg = orientation_to_degrees(target_orient.unwrap_or(1));
+    let file_deg = orientation_to_degrees(file_orient.unwrap_or(1));
+
+    // Determine what orientation thumb_rs already produced:
+    // If file_deg was 90 or 270 (portrait), but img is landscape (width > height),
+    // then thumb_rs did NOT apply file_deg (it left it at 0 deg).
+    let current_deg = if (file_deg == 90 || file_deg == 270) && img.width() > img.height() {
+        0
+    } else {
+        file_deg
+    };
+
+    let delta = (target_deg + 360 - (current_deg % 360)) % 360;
+    rotate_by_degrees(img, delta)
 }
 
 pub fn get_preview_jpeg(path: &Path, scale: u32) -> Result<Vec<u8>> {
-    let cache_key = format!("{}:{}", path.to_string_lossy(), scale);
+    let target_orient = get_effective_orientation(path);
+    let cache_key = format!("{}:{}:{}", path.to_string_lossy(), scale, target_orient.unwrap_or(1));
     
     if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
         if let Some(cached) = cache.get(&cache_key) {
@@ -80,11 +112,11 @@ pub fn get_preview_jpeg(path: &Path, scale: u32) -> Result<Vec<u8>> {
         
     let img = RgbaImage::from_raw(thumb.width, thumb.height, thumb.rgba)
         .context("Failed to construct RgbaImage from raw bytes")?;
-    let mut dyn_img = image::DynamicImage::ImageRgba8(img);
+    let dyn_img = image::DynamicImage::ImageRgba8(img);
     
-    let orient = read_exif_orientation(&target_path).or_else(|| read_exif_orientation(path));
-    dyn_img = apply_orientation(dyn_img, orient);
-    let rgb_img = dyn_img.into_rgb8();
+    let file_orient = read_exif_orientation(&target_path).or_else(|| read_exif_orientation(path));
+    let rotated_img = apply_effective_orientation(dyn_img, target_orient, file_orient);
+    let rgb_img = rotated_img.into_rgb8();
         
     let mut buffer = Cursor::new(Vec::new());
     rgb_img.write_to(&mut buffer, ImageFormat::Jpeg)
@@ -100,7 +132,8 @@ pub fn get_preview_jpeg(path: &Path, scale: u32) -> Result<Vec<u8>> {
 }
 
 pub fn get_max_preview_jpeg(path: &Path) -> Result<Vec<u8>> {
-    let cache_key = format!("{}:fullres", path.to_string_lossy());
+    let target_orient = get_effective_orientation(path);
+    let cache_key = format!("{}:fullres:{}", path.to_string_lossy(), target_orient.unwrap_or(1));
     
     if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
         if let Some(cached) = cache.get(&cache_key) {
@@ -108,13 +141,15 @@ pub fn get_max_preview_jpeg(path: &Path) -> Result<Vec<u8>> {
         }
     }
 
-    // Performance boost: If RAW has a companion JPEG, directly return the JPEG bytes
-    if let Some(companion) = find_companion_jpeg(path) {
-        if let Ok(bytes) = std::fs::read(&companion) {
-            if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
-                cache.put(cache_key, bytes.clone());
+    // Performance boost: If RAW has a companion JPEG and NO sidecar orientation override, directly return the JPEG bytes
+    if crate::culling::read_sidecar(path).orientation.is_none() {
+        if let Some(companion) = find_companion_jpeg(path) {
+            if let Ok(bytes) = std::fs::read(&companion) {
+                if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
+                    cache.put(cache_key, bytes.clone());
+                }
+                return Ok(bytes);
             }
-            return Ok(bytes);
         }
     }
 
@@ -143,10 +178,10 @@ pub fn get_max_preview_jpeg(path: &Path) -> Result<Vec<u8>> {
     let img = RgbaImage::from_raw(thumb.width, thumb.height, thumb.rgba)
         .context("Failed to construct RgbaImage from raw bytes")?;
         
-    let mut dyn_img = image::DynamicImage::ImageRgba8(img);
-    let orient = read_exif_orientation(path);
-    dyn_img = apply_orientation(dyn_img, orient);
-    let rgb_img = dyn_img.into_rgb8();
+    let dyn_img = image::DynamicImage::ImageRgba8(img);
+    let file_orient = read_exif_orientation(path);
+    let rotated_img = apply_effective_orientation(dyn_img, target_orient, file_orient);
+    let rgb_img = rotated_img.into_rgb8();
     
     let mut buffer = Cursor::new(Vec::new());
     rgb_img.write_to(&mut buffer, ImageFormat::Jpeg)
@@ -270,23 +305,23 @@ mod tests {
         assert_eq!(img.width(), 300);
         assert_eq!(img.height(), 200);
 
-        // Orientation 6: Should rotate to 200x300 portrait
-        let rot6 = apply_orientation(img.clone(), Some(6));
+        // Orientation 6 on unrotated landscape: Should rotate to 200x300 portrait
+        let rot6 = apply_effective_orientation(img.clone(), Some(6), Some(1));
         assert_eq!(rot6.width(), 200);
         assert_eq!(rot6.height(), 300);
 
-        // Orientation 6 on already-rotated portrait: Should NOT rotate again (idempotent)
-        let rot6_again = apply_orientation(rot6.clone(), Some(6));
+        // Orientation 6 when thumb_rs already rotated to portrait: Should NOT rotate again
+        let rot6_again = apply_effective_orientation(rot6.clone(), Some(6), Some(6));
         assert_eq!(rot6_again.width(), 200);
         assert_eq!(rot6_again.height(), 300);
 
-        // Orientation 8: Should rotate to 200x300 portrait
-        let rot8 = apply_orientation(img.clone(), Some(8));
+        // Orientation 8 on unrotated landscape: Should rotate to 200x300 portrait
+        let rot8 = apply_effective_orientation(img.clone(), Some(8), Some(1));
         assert_eq!(rot8.width(), 200);
         assert_eq!(rot8.height(), 300);
 
         // Orientation 1: Should remain 300x200
-        let rot1 = apply_orientation(img.clone(), Some(1));
+        let rot1 = apply_effective_orientation(img.clone(), Some(1), Some(1));
         assert_eq!(rot1.width(), 300);
         assert_eq!(rot1.height(), 200);
     }

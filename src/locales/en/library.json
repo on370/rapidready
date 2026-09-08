@@ -17,9 +17,11 @@
     "allImages": "All Images"
   },
   "toolbar": {
-    "showInFinder": "In Finder",
+    "showInFinder": "Open in Finder",
     "showInFinderTooltip": "Show in macOS Finder (⌘⇧F)",
-    "openInRapidRaw": "In RapidRAW",
+    "showInExplorer": "Open in Explorer",
+    "showInExplorerTooltip": "Show in File Explorer (Ctrl+Shift+F)",
+    "openInRapidRaw": "Open in RapidRAW",
     "openInRapidRawTooltip": "Edit in RapidRAW (R)",
     "viewGrid": "Grid",
     "viewLoupe": "Loupe",
@@ -32,13 +34,42 @@
     "smallerThumbnails": "Smaller Thumbnails",
     "largerThumbnails": "Larger Thumbnails",
     "zoomOut": "Zoom Out",
-    "zoomIn": "Zoom In"
+    "zoomIn": "Zoom In",
+    "rotateCw": "Rotate 90° CW",
+    "rotateCwTooltip": "Rotate clockwise (⌘R or .)",
+    "rotateCcw": "Rotate 90° CCW",
+    "rotateCcwTooltip": "Rotate counter-clockwise (⌘L or ,)",
+    "rotateLabel": "Rotate:",
+    "share": "Share",
+    "shareTooltip": "Actions for this image (R / ⌘⇧F)",
+    "colorLabel": "Color Label",
+    "colorLabelTooltip": "Assign color label (6=Red, 7=Yellow, 8=Green, 9=Blue)"
+  },
+  "contextMenu": {
+    "selectedCount": "{{count}} images selected",
+    "zoomFit": "Fit to Window",
+    "zoom100": "100% (1:1)",
+    "zoom200": "200% (2:1)",
+    "rotateCw": "Rotate Clockwise",
+    "rotateCcw": "Rotate Counter-Clockwise",
+    "pick": "Set as Pick",
+    "reject": "Set as Rejected",
+    "unrated": "Unflag",
+    "rating": "Rating:"
   },
   "filters": {
     "label": "Filters:",
     "all": "All",
     "picks": "Picks",
-    "rejected": "Rejected"
+    "rejected": "Rejected",
+    "allRatings": "All Ratings",
+    "ratingFilter": "Rating",
+    "allColors": "All Colors",
+    "colorFilter": "Color",
+    "noColorsInFolder": "No color labels in folder",
+    "allTags": "All Tags",
+    "tagFilter": "Tag",
+    "noTagsInFolder": "No tags in folder"
   },
   "filmstrip": {
     "title": "Filmstrip",
@@ -49,6 +80,8 @@
   },
   "delete": {
     "button": "Delete Rejected ({{count}})",
+    "buttonTooltip": "Move {{count}} rejected image(s) to Trash",
+    "noRejectedTooltip": "No rejected images",
     "confirmMessage": "Move {{count}} rejected images to the macOS Trash?",
     "confirmTitle": "Confirm Delete",
     "okLabel": "Move to Trash",
@@ -78,11 +111,25 @@
     "path": "Path",
     "openInRapidRaw": "Edit in RapidRAW",
     "showInFinder": "Show in Finder",
-    "pick": "Pick (P)",
-    "unflag": "Unflag (U)",
-    "reject": "Reject (X)",
+    "pick": "Mark as Pick (Key P)",
+    "unflag": "Remove Flag (Key U)",
+    "reject": "Mark as Rejected (Key X)",
     "pickBtn": "Pick",
     "unflagBtn": "Unflag",
-    "rejectBtn": "Reject"
+    "rejectBtn": "Reject",
+    "tags": "Tags",
+    "addTag": "Add tag...",
+    "noTags": "No tags",
+    "removeTagTooltip": "Remove tag '{{tag}}'",
+    "createTag": "Create '{{tag}}'",
+    "suggestions": "Existing tags"
+  },
+  "colors": {
+    "none": "No Color",
+    "red": "Red",
+    "yellow": "Yellow",
+    "green": "Green",
+    "blue": "Blue",
+    "purple": "Purple"
   }
 }

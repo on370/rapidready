@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { AppShell } from "./components/layout/AppShell";
@@ -8,6 +8,7 @@ import { ToolsView } from "./components/views/ToolsView";
 import { SettingsView } from "./components/views/SettingsView";
 import { HelpModal } from "./components/ui/HelpModal";
 import { AboutModal } from "./components/ui/AboutModal";
+import { TextContextMenu } from "./components/ui/TextContextMenu";
 import { useSettingsStore } from "./stores/settingsStore";
 import { useNavigationStore } from "./stores/navigationStore";
 import { CullingState, useLibraryStore } from "./stores/libraryStore";
@@ -61,6 +62,31 @@ function App() {
     return () => window.removeEventListener('keydown', handleGlobalQuit, { capture: true });
   }, []);
 
+  const [textMenu, setTextMenu] = useState<{
+    x: number;
+    y: number;
+    target: HTMLInputElement | HTMLTextAreaElement;
+  } | null>(null);
+
+  // Global context menu suppression (suppress browser context menu, custom text menu for inputs)
+  useEffect(() => {
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+        setTextMenu({
+          x: e.clientX,
+          y: e.clientY,
+          target: target as HTMLInputElement | HTMLTextAreaElement,
+        });
+      } else {
+        setTextMenu(null);
+      }
+    };
+    window.addEventListener('contextmenu', handleContextMenu);
+    return () => window.removeEventListener('contextmenu', handleContextMenu);
+  }, []);
+
   return (
     <AppShell activeView={activeView} onViewChange={setActiveView}>
       <div className={`flex-1 flex flex-col h-full min-h-0 ${activeView === "import" ? "" : "hidden"}`}>
@@ -77,6 +103,14 @@ function App() {
       </div>
       <HelpModal />
       <AboutModal />
+      {textMenu && (
+        <TextContextMenu
+          x={textMenu.x}
+          y={textMenu.y}
+          target={textMenu.target}
+          onClose={() => setTextMenu(null)}
+        />
+      )}
     </AppShell>
   );
 }

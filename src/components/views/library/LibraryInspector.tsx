@@ -1,11 +1,12 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { 
-  Info, X, MousePointerClick, Star, Check 
+  X, MousePointerClick, Star, Check, RotateCw, RotateCcw, Tag, CircleSlash 
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useLibraryStore } from "../../../stores/libraryStore";
 import { invoke } from "@tauri-apps/api/core";
 import { getRrImageUrl, normalizePath } from "../../../utils/image";
+import { COLOR_PALETTE } from "../../../constants/culling";
 
 interface LibraryInspectorProps {
   close: () => void;
@@ -15,9 +16,26 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
   const { t } = useTranslation('library');
   const { 
     images, activeImageIndex, 
-    updateCullingState, updateImageMetadata, activeFolderPath, 
+    updateCullingState, updateBatchCullingState, updateImageCullings, selectedPaths,
+    updateImageMetadata, activeFolderPath, 
     lastImportPaths, isViewingLastImport, rootPath 
   } = useLibraryStore();
+
+  const [tagInput, setTagInput] = useState('');
+  const [isSuggestOpen, setIsSuggestOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const tagInputContainerRef = useRef<HTMLDivElement>(null);
+
+  // Close tag suggestions on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (tagInputContainerRef.current && !tagInputContainerRef.current.contains(e.target as Node)) {
+        setIsSuggestOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const normLastImport = useMemo(() => {
     return new Set(lastImportPaths.map(p => normalizePath(p)));
@@ -75,25 +93,217 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
 
   const handleCulling = (flag: number | null, rating: number) => {
     if (!activeImage) return;
-    const globalIndex = images.findIndex(img => img.path === activeImage.path);
-    if (globalIndex !== -1) updateCullingState(globalIndex, { flag, rating });
-    invoke('set_culling_state', { 
-      path: activeImage.path, 
-      flag, 
-      rating, 
-      color: activeImage.culling.color 
-    }).catch(console.error);
+    const pathsToUpdate = selectedPaths.has(activeImage.path) && selectedPaths.size > 1
+      ? Array.from(selectedPaths)
+      : [activeImage.path];
+
+    if (pathsToUpdate.length > 1) {
+      updateBatchCullingState(pathsToUpdate, { flag, rating });
+      invoke('set_culling_state_batch', { 
+        paths: pathsToUpdate, 
+        flag: flag === null ? 0 : flag, 
+        rating, 
+        color: null 
+      }).catch(console.error);
+    } else {
+      const globalIndex = images.findIndex(img => img.path === activeImage.path);
+      if (globalIndex !== -1) updateCullingState(globalIndex, { flag, rating });
+      invoke('set_culling_state', { 
+        path: activeImage.path, 
+        flag, 
+        rating, 
+        color: activeImage.culling.color,
+        tags: activeImage.culling.tags,
+      }).catch(console.error);
+    }
+  };
+
+  const handleSetColor = (color: string | null) => {
+    if (!activeImage) return;
+    const pathsToUpdate = selectedPaths.has(activeImage.path) && selectedPaths.size > 1
+      ? Array.from(selectedPaths)
+      : [activeImage.path];
+
+    if (pathsToUpdate.length > 1) {
+      updateBatchCullingState(pathsToUpdate, { color });
+      invoke('set_culling_state_batch', {
+        paths: pathsToUpdate,
+        color: color || 'none',
+      }).catch(console.error);
+    } else {
+      const globalIndex = images.findIndex(img => img.path === activeImage.path);
+      if (globalIndex !== -1) updateCullingState(globalIndex, { color });
+      invoke('set_culling_state', { 
+        path: activeImage.path, 
+        flag: activeImage.culling.flag, 
+        rating: activeImage.culling.rating, 
+        color,
+        tags: activeImage.culling.tags,
+      }).catch(console.error);
+    }
+  };
+
+  const allFolderTags = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const img of scopedImages) {
+      for (const t of img.culling.tags) {
+        counts.set(t, (counts.get(t) || 0) + 1);
+      }
+    }
+    return Array.from(counts.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  }, [scopedImages]);
+
+  const suggestions = useMemo(() => {
+    if (!activeImage) return [];
+    const lowerInput = tagInput.trim().toLowerCase();
+    const assignedSet = new Set(activeImage.culling.tags.map(t => t.toLowerCase()));
+    
+    return allFolderTags.filter(item => {
+      if (assignedSet.has(item.name.toLowerCase())) return false;
+      if (lowerInput) {
+        return item.name.toLowerCase().includes(lowerInput);
+      }
+      return true;
+    });
+  }, [allFolderTags, activeImage, tagInput]);
+
+  const handleAddSpecificTag = (tagToAdd: string) => {
+    if (!activeImage) return;
+    const trimmed = tagToAdd.trim();
+    if (!trimmed) return;
+    if (activeImage.culling.tags.some(t => t.toLowerCase() === trimmed.toLowerCase())) {
+      setTagInput('');
+      setIsSuggestOpen(false);
+      return;
+    }
+    const newTags = [...activeImage.culling.tags, trimmed];
+
+    const pathsToUpdate = selectedPaths.has(activeImage.path) && selectedPaths.size > 1
+      ? Array.from(selectedPaths)
+      : [activeImage.path];
+
+    if (pathsToUpdate.length > 1) {
+      for (const p of pathsToUpdate) {
+        const img = images.find(i => i.path === p);
+        if (img && !img.culling.tags.some(t => t.toLowerCase() === trimmed.toLowerCase())) {
+          const updated = [...img.culling.tags, trimmed];
+          const idx = images.findIndex(i => i.path === p);
+          if (idx !== -1) updateCullingState(idx, { tags: updated });
+        }
+      }
+      invoke('set_culling_state_batch', {
+        paths: pathsToUpdate,
+        addTag: trimmed,
+      }).catch(console.error);
+    } else {
+      const globalIndex = images.findIndex(img => img.path === activeImage.path);
+      if (globalIndex !== -1) updateCullingState(globalIndex, { tags: newTags });
+      invoke('set_culling_state', { 
+        path: activeImage.path, 
+        flag: activeImage.culling.flag, 
+        rating: activeImage.culling.rating, 
+        color: activeImage.culling.color,
+        tags: newTags,
+      }).catch(console.error);
+    }
+    setTagInput('');
+    setIsSuggestOpen(false);
+    setHighlightedIndex(-1);
+  };
+
+  const handleAddTag = () => {
+    if (isSuggestOpen && highlightedIndex >= 0 && suggestions[highlightedIndex]) {
+      handleAddSpecificTag(suggestions[highlightedIndex].name);
+    } else {
+      handleAddSpecificTag(tagInput);
+    }
+  };
+
+  const handleInputKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (!isSuggestOpen) {
+        setIsSuggestOpen(true);
+        setHighlightedIndex(0);
+      } else if (suggestions.length > 0) {
+        setHighlightedIndex((prev) => (prev + 1) % suggestions.length);
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (isSuggestOpen && suggestions.length > 0) {
+        setHighlightedIndex((prev) => (prev - 1 + suggestions.length) % suggestions.length);
+      }
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      handleAddTag();
+    } else if (e.key === 'Escape') {
+      setIsSuggestOpen(false);
+    }
+  };
+
+  const handleRemoveTag = (tagToRemove: string) => {
+    if (!activeImage) return;
+    const newTags = activeImage.culling.tags.filter(t => t !== tagToRemove);
+
+    const pathsToUpdate = selectedPaths.has(activeImage.path) && selectedPaths.size > 1
+      ? Array.from(selectedPaths)
+      : [activeImage.path];
+
+    if (pathsToUpdate.length > 1) {
+      for (const p of pathsToUpdate) {
+        const img = images.find(i => i.path === p);
+        if (img && img.culling.tags.includes(tagToRemove)) {
+          const updated = img.culling.tags.filter(t => t !== tagToRemove);
+          const idx = images.findIndex(i => i.path === p);
+          if (idx !== -1) updateCullingState(idx, { tags: updated });
+        }
+      }
+      invoke('set_culling_state_batch', {
+        paths: pathsToUpdate,
+        removeTag: tagToRemove,
+      }).catch(console.error);
+    } else {
+      const globalIndex = images.findIndex(img => img.path === activeImage.path);
+      if (globalIndex !== -1) updateCullingState(globalIndex, { tags: newTags });
+      invoke('set_culling_state', { 
+        path: activeImage.path, 
+        flag: activeImage.culling.flag, 
+        rating: activeImage.culling.rating, 
+        color: activeImage.culling.color,
+        tags: newTags,
+      }).catch(console.error);
+    }
+  };
+
+  const handleRotate = async (direction: 'cw' | 'ccw') => {
+    if (!activeImage) return;
+    const pathsToRotate = selectedPaths.has(activeImage.path) && selectedPaths.size > 1
+      ? Array.from(selectedPaths)
+      : [activeImage.path];
+
+    try {
+      const res = await invoke<Array<{ path: string; culling: any }>>('rotate_images', {
+        paths: pathsToRotate,
+        direction,
+      });
+      if (res && res.length > 0) {
+        updateImageCullings(res);
+      }
+    } catch (err) {
+      console.error('Failed to rotate images:', err);
+    }
   };
 
   const extension = activeImage?.name.split('.').pop()?.toUpperCase() || '';
   const isRaw = ['CR2', 'CR3', 'ARW', 'NEF', 'DNG', 'ORF', 'RAF', 'RW2'].includes(extension);
 
   return (
-    <div className="w-[300px] flex-shrink-0 border-l border-app-border bg-app-panel flex flex-col min-h-0 overflow-hidden">
+    <div className="w-full h-full flex-shrink-0 bg-app-panel flex flex-col min-h-0 overflow-hidden">
       {/* Inspector Header */}
       <div className="px-4 py-3 border-b border-app-border flex items-center justify-between flex-shrink-0">
-        <h2 className="text-xs font-semibold text-txt-secondary uppercase tracking-wider flex items-center gap-2">
-          <Info className="w-3.5 h-3.5" />
+        <h2 className="text-xs font-semibold text-txt-secondary uppercase tracking-wider">
           {t('inspector.title')}
         </h2>
         <button className="p-1 rounded hover:bg-app-hover transition-colors cursor-pointer" onClick={close}>
@@ -115,7 +325,7 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
             {/* Live Thumbnail Preview */}
             <div className="relative w-full aspect-[3/2] rounded-xl overflow-hidden border border-app-border bg-app-deepest group">
               <img 
-                src={getRrImageUrl(activeImage.path)} 
+                src={getRrImageUrl(activeImage.path, false, activeImage.culling?.orientation)} 
                 alt={activeImage.name} 
                 className="w-full h-full object-contain" 
               />
@@ -185,6 +395,159 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
                     <Star className={`w-4 h-4 ${activeImage.culling.rating >= star ? 'text-warning fill-warning' : 'text-txt-tertiary hover:text-warning/50'}`} />
                   </button>
                 ))}
+              </div>
+
+              {/* Color Labels Row */}
+              <div className="flex items-center justify-center gap-2 pt-2 border-t border-app-border/50">
+                {COLOR_PALETTE.map((c) => {
+                  const isSelected = activeImage.culling.color === c.id;
+                  return (
+                    <button 
+                      key={c.id}
+                      onClick={() => handleSetColor(isSelected ? null : c.id)}
+                      className={`w-5 h-5 rounded-full ${c.bg} flex items-center justify-center hover:scale-115 transition-all cursor-pointer relative ${
+                        isSelected ? 'ring-2 ring-white ring-offset-2 ring-offset-app-card shadow-sm' : 'opacity-70 hover:opacity-100'
+                      }`}
+                      title={`${t(`colors.${c.id}`)}${c.shortcut ? ` (${c.shortcut})` : ''}`}
+                    >
+                      {isSelected && <Check className="w-3 h-3 text-white drop-shadow" />}
+                    </button>
+                  );
+                })}
+                {activeImage.culling.color && (
+                  <button
+                    onClick={() => handleSetColor(null)}
+                    className="w-5 h-5 rounded-full bg-app-panel border border-app-border hover:bg-app-hover flex items-center justify-center text-txt-tertiary hover:text-txt-primary hover:scale-115 transition-all cursor-pointer ml-1"
+                    title={t('colors.none')}
+                  >
+                    <CircleSlash className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+
+              {/* Rotate Row */}
+              <div className="flex items-center justify-between pt-2 border-t border-app-border/50 px-1">
+                <span className="text-[11px] text-txt-tertiary font-medium">{t('toolbar.rotateLabel')}</span>
+                <div className="flex items-center gap-1">
+                  <button 
+                    onClick={() => handleRotate('ccw')}
+                    className="p-1.5 rounded-md hover:bg-app-hover text-txt-secondary hover:text-txt-primary transition-colors cursor-pointer"
+                    title={t('toolbar.rotateCcwTooltip')}
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                  </button>
+                  <button 
+                    onClick={() => handleRotate('cw')}
+                    className="p-1.5 rounded-md hover:bg-app-hover text-txt-secondary hover:text-txt-primary transition-colors cursor-pointer"
+                    title={t('toolbar.rotateCwTooltip')}
+                  >
+                    <RotateCw className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Tags / Schlagwörter Card */}
+            <div className="bg-app-card border border-app-border rounded-xl p-3 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Tag className="w-3.5 h-3.5 text-txt-tertiary" />
+                  <h3 className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider">
+                    {t('inspector.tags')}
+                  </h3>
+                </div>
+                {activeImage.culling.tags.length > 0 && (
+                  <span className="text-[10px] text-txt-tertiary font-mono bg-app-panel px-1.5 py-0.2 rounded border border-app-border">
+                    {activeImage.culling.tags.length}
+                  </span>
+                )}
+              </div>
+
+              {/* Tag Pills */}
+              <div className="flex flex-wrap gap-1.5 min-h-[24px]">
+                {activeImage.culling.tags.length === 0 ? (
+                  <span className="text-xs text-txt-tertiary italic py-0.5">
+                    {t('inspector.noTags')}
+                  </span>
+                ) : (
+                  activeImage.culling.tags.map((tag) => (
+                    <span 
+                      key={tag}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-app-panel border border-app-border text-xs text-txt-primary hover:border-accent/40 transition-colors"
+                    >
+                      <span>{tag}</span>
+                      <button 
+                        onClick={() => handleRemoveTag(tag)}
+                        className="text-txt-tertiary hover:text-danger rounded transition-colors cursor-pointer p-0.5"
+                        title={t('inspector.removeTagTooltip', { tag })}
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))
+                )}
+              </div>
+
+              {/* Tag Input with Autocomplete */}
+              <div className="relative" ref={tagInputContainerRef}>
+                <input
+                  type="text"
+                  value={tagInput}
+                  onChange={(e) => {
+                    setTagInput(e.target.value);
+                    setIsSuggestOpen(true);
+                    setHighlightedIndex(-1);
+                  }}
+                  onFocus={() => {
+                    setIsSuggestOpen(true);
+                    setHighlightedIndex(-1);
+                  }}
+                  onKeyDown={handleInputKeyDown}
+                  placeholder={t('inspector.addTag')}
+                  className="w-full bg-app-panel border border-app-border rounded-lg px-2.5 py-1.5 text-xs text-txt-primary placeholder:text-txt-tertiary focus:outline-none focus:border-accent transition-colors pr-7"
+                />
+                {tagInput.trim().length > 0 && (
+                  <button
+                    onClick={() => handleAddSpecificTag(tagInput)}
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 px-1.5 py-0.5 bg-accent text-white text-[10px] font-semibold rounded hover:bg-accent/80 transition-colors cursor-pointer"
+                  >
+                    +
+                  </button>
+                )}
+
+                {/* Autocomplete Suggestions Dropdown */}
+                {isSuggestOpen && suggestions.length > 0 && (
+                  <div className="absolute left-0 right-0 top-full mt-1 max-h-48 overflow-y-auto bg-[#161619]/95 backdrop-blur-md border border-app-border rounded-xl shadow-2xl py-1 z-50 animate-in fade-in zoom-in-95 duration-100">
+                    <div className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-txt-tertiary border-b border-app-border/40 mb-0.5">
+                      {t('inspector.suggestions')}
+                    </div>
+                    {suggestions.map((item, idx) => {
+                      const isHighlighted = highlightedIndex === idx;
+                      return (
+                        <button
+                          key={item.name}
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            handleAddSpecificTag(item.name);
+                          }}
+                          onMouseEnter={() => setHighlightedIndex(idx)}
+                          className={`w-full flex items-center justify-between px-2.5 py-1.5 text-xs transition-colors cursor-pointer text-left ${
+                            isHighlighted ? 'bg-accent text-white' : 'text-txt-primary hover:bg-app-hover'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5 truncate">
+                            <Tag className={`w-3 h-3 ${isHighlighted ? 'text-white' : 'text-txt-tertiary'}`} />
+                            <span className="font-medium truncate">{item.name}</span>
+                          </div>
+                          <span className={`text-[10px] font-mono ml-2 ${isHighlighted ? 'text-white/80' : 'text-txt-tertiary'}`}>
+                            {item.count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
 

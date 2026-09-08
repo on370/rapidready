@@ -1,7 +1,7 @@
 use rapidready_core::scanner::{scan_directory, ScannedFile};
 use rapidready_core::importer::{execute_import as core_execute_import, ImportProgress};
 use rapidready_core::import_index::ImportIndex;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
 use notify::{Watcher, RecommendedWatcher};
@@ -289,13 +289,25 @@ pub async fn set_culling_state(
     flag: Option<i8>,
     rating: u8,
     color: Option<String>,
+    tags: Option<Vec<String>>,
 ) -> Result<(), String> {
     let p = PathBuf::from(path);
     // Read existing
     let mut state = rapidready_core::culling::read_sidecar(&p);
     state.flag = flag;
     state.rating = rating;
-    state.color = color;
+    state.color = if let Some(ref c) = color {
+        if c == "none" || c.is_empty() {
+            None
+        } else {
+            Some(c.clone())
+        }
+    } else {
+        None
+    };
+    if let Some(t) = tags {
+        state.tags = t;
+    }
     
     // Write updated
     rapidready_core::culling::write_sidecar(&p, &state).map_err(|e| e.to_string())
@@ -405,6 +417,81 @@ pub fn get_default_pictures_dir(app: AppHandle) -> Result<String, String> {
 pub fn show_main_window(window: tauri::WebviewWindow) {
     let _ = window.show();
     let _ = window.set_focus();
+}
+
+#[derive(serde::Serialize)]
+pub struct ImageRotationResult {
+    pub path: String,
+    pub culling: rapidready_core::culling::CullingState,
+}
+
+#[tauri::command]
+pub async fn rotate_images(paths: Vec<String>, direction: String) -> Result<Vec<ImageRotationResult>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut results = Vec::new();
+        for path_str in paths {
+            let path = Path::new(&path_str);
+            let mut state = rapidready_core::culling::read_sidecar(path);
+            let current = state.orientation.unwrap_or_else(|| {
+                rapidready_core::thumbnail::get_effective_orientation(path).unwrap_or(1)
+            });
+            let next = rapidready_core::culling::next_orientation(current, &direction);
+            state.orientation = Some(next);
+            if let Err(e) = rapidready_core::culling::write_sidecar(path, &state) {
+                return Err(format!("Failed to write sidecar for {}: {}", path_str, e));
+            }
+            results.push(ImageRotationResult {
+                path: path_str,
+                culling: state,
+            });
+        }
+        Ok(results)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn set_culling_state_batch(
+    paths: Vec<String>,
+    flag: Option<i8>,
+    rating: Option<u8>,
+    color: Option<String>,
+    add_tag: Option<String>,
+    remove_tag: Option<String>,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        for path_str in paths {
+            let p = PathBuf::from(path_str);
+            let mut state = rapidready_core::culling::read_sidecar(&p);
+            if let Some(f) = flag {
+                state.flag = if f == 0 { None } else { Some(f) };
+            }
+            if let Some(r) = rating {
+                state.rating = r;
+            }
+            if let Some(ref c) = color {
+                if c == "none" || c.is_empty() {
+                    state.color = None;
+                } else {
+                    state.color = Some(c.clone());
+                }
+            }
+            if let Some(ref tag_to_add) = add_tag {
+                let trimmed = tag_to_add.trim();
+                if !trimmed.is_empty() && !state.tags.iter().any(|t| t.eq_ignore_ascii_case(trimmed)) {
+                    state.tags.push(trimmed.to_string());
+                }
+            }
+            if let Some(ref tag_to_remove) = remove_tag {
+                state.tags.retain(|t| !t.eq_ignore_ascii_case(tag_to_remove));
+            }
+            rapidready_core::culling::write_sidecar(&p, &state).map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 

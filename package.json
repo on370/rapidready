@@ -1,12 +1,13 @@
 {
   "name": "rapid-ready",
   "private": true,
-  "version": "0.1.1-beta",
+  "version": "0.2.0-beta",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "node scripts/bump-build.js && tsc && vite build",
     "bump-build": "node scripts/bump-build.js",
+    "set-version": "node scripts/set-version.js",
     "preview": "vite preview",
     "tauri": "tauri"
   },

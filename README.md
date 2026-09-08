@@ -17,8 +17,10 @@ Photographers often shoot thousands of photos on a single job. RapidReady is bui
 
 - **Blazing Fast RAW Engine:** Powered by a custom Rust backend, RapidReady extracts embedded JPEGs from CR2, CR3, ARW, and other proprietary RAW formats instantly without slow decodes.
 - **Zero-Latency Culling & Viewing:** Navigate through massive folders of high-resolution RAW files in real-time. Responsive filmstrip, split folder navigation, and instant sidecar synchronization.
+- **Advanced Culling & Organization:** One-touch flags (`Pick`, `Reject`, `Unflag`), star ratings (`1`-`5`), 5 color labels (`6`-`9`), and tag management with live autocomplete.
+- **Multi-Level Orthogonal Filtering:** Modular filter dropdowns to slice archives by picks, minimum rating, color labels, and tags in real-time.
 - **Smart Import Workflows:** Define custom *Import Presets* and *Archive Locations*. Automatically rename files, create date-based subfolders, and verify copies from SD cards to SSDs.
-- **Seamless RapidRaw Integration:** Deeply integrated with [RapidRaw](https://www.getrapidraw.com/). Double-click or automatically launch imported photos directly in RapidRaw with zero friction.
+- **Seamless RapidRaw Integration:** Deeply integrated with [RapidRaw](https://www.getrapidraw.com/). Open images directly in RapidRaw (`R`) or reveal them in the system file manager (`Cmd+Shift+F` / `Ctrl+Shift+F`).
 - **Multilingual (i18n):** Full native support for English and German interfaces.
 - **Cross-Platform Foundation:** Built on [Tauri v2](https://v2.tauri.app/), [React](https://react.dev/), and [Rust](https://www.rust-lang.org/) for native OS performance with a beautiful, modern UI.
 
@@ -32,7 +34,7 @@ Photographers often shoot thousands of photos on a single job. RapidReady is bui
 ## 📥 Download & Installation
 
 ### Windows (x64)
-1. Download the latest installer (`RapidReady_0.1.1-beta_x64-setup.exe`) from the **[Releases](https://github.com/on370/rapidready/releases)** page.
+1. Download the latest installer (`RapidReady_0.2.0-beta_x64-setup.exe`) from the **[Releases](https://github.com/on370/rapidready/releases)** page.
 2. Run the setup file to install RapidReady for your current user (no admin privileges required).
 3. Launch **RapidReady** from your Start Menu or Desktop shortcut.
 

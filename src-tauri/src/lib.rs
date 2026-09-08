@@ -111,6 +111,19 @@ pub fn run() {
                         Err(_) => {}
                     }
                 } else {
+                    let sidecar_state = rapidready_core::culling::read_sidecar(path);
+                    if sidecar_state.orientation.is_some() {
+                        if let Ok(bytes) = rapidready_core::thumbnail::get_max_preview_jpeg(path) {
+                            let res = Response::builder()
+                                .header("Content-Type", "image/jpeg")
+                                .header("Access-Control-Allow-Origin", "*")
+                                .header("Cache-Control", "public, max-age=86400, immutable")
+                                .body(bytes)
+                                .unwrap();
+                            responder.respond(res);
+                            return;
+                        }
+                    }
                     if let Ok(bytes) = std::fs::read(path) {
                         let content_type = if ext == "png" { "image/png" } else { "image/jpeg" };
                         let res = Response::builder()
@@ -163,6 +176,8 @@ pub fn run() {
             commands::get_removable_drives,
             commands::scan_archive_directory,
             commands::set_culling_state,
+            commands::set_culling_state_batch,
+            commands::rotate_images,
             commands::get_culling_state,
             commands::start_watching_directory,
             commands::delete_files,
