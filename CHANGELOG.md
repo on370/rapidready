@@ -5,6 +5,20 @@ All notable changes to RapidReady will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1-beta-RC1] - 2026-09-09
+
+Bugfix release ensuring strict EXIF capture date priority during import and eliminating thumbnail orientation inversions for RAW files.
+
+### Changed & Fixed
+- **EXIF-First Date Resolution:**
+  - Prioritized camera EXIF metadata (`DateTimeOriginal`, `DateTimeDigitized`) as the primary authority for capture dates during scanning and import.
+  - Fixed an issue where files without dates in their filename (e.g. `004.ARW`) were erroneously assigned the filesystem copy timestamp and imported into today's folder.
+  - Maintained filename date parsing as a secondary fallback for EXIF-less media (scans, screenshots).
+- **RAW Thumbnail Isolation & Orientation Integrity:**
+  - Eliminated companion JPEG redirection in thumbnail and preview generation; RAW files (`.ARW`, `.CR2`, etc.) are now strictly rendered from their own pristine embedded camera previews.
+  - Fixed portrait RAW photos displaying upside-down (180° inverted) or in landscape when accompanied by third-party rotated or edited JPEGs (e.g. via Windows Photo Viewer).
+  - Ensured RAW file EXIF orientation is authoritative and cannot be superseded by companion files.
+
 ## [0.2.0-beta] - 2026-09-08
 
 Major feature release introducing Color Labels, Tag Management with live Autocomplete, modular Filter Bar dropdowns, enhanced Culling Toolbar ergonomics, and complete sidecar tag persistence.

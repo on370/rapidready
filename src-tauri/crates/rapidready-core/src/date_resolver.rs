@@ -34,14 +34,21 @@ pub fn parse_date_from_filename(filename: &str) -> Option<NaiveDateTime> {
 }
 
 pub fn get_fast_creation_date(path: &Path, meta: Option<&std::fs::Metadata>) -> Option<NaiveDateTime> {
+    // 1. EXIF / Metadata is the absolute authority!
+    if let Ok(dt) = get_creation_date(path) {
+        return Some(dt);
+    }
+
+    // 2. Fallback: Try parsing date from filename (e.g. Scans, Screenshots, WhatsApp files without EXIF)
     if let Some(filename) = path.file_name().and_then(|s| s.to_str()) {
         if let Some(dt) = parse_date_from_filename(filename) {
             return Some(dt);
         }
     }
 
+    // 3. Last resort fallback: Filesystem timestamp (prefer modified over created)
     if let Some(m) = meta {
-        if let Ok(sys_time) = m.created().or_else(|_| m.modified()) {
+        if let Ok(sys_time) = m.modified().or_else(|_| m.created()) {
             let dt: chrono::DateTime<chrono::Local> = sys_time.into();
             return Some(dt.naive_local());
         }
@@ -65,7 +72,10 @@ pub fn get_creation_date(path: &Path) -> Result<NaiveDateTime> {
             ];
             
             for tag in tags_to_try {
-                if let Some(field) = exif.get_field(tag, exif::In::PRIMARY) {
+                // Check PRIMARY first, or search across all IFDs (e.g. Sony ARW Exif IFD)
+                let field = exif.get_field(tag, exif::In::PRIMARY)
+                    .or_else(|| exif.fields().find(|f| f.tag == tag));
+                if let Some(field) = field {
                     if let exif::Value::Ascii(ref vec) = field.value {
                         if let Some(val) = vec.first() {
                             if let Ok(dt_str) = std::str::from_utf8(val) {
@@ -90,7 +100,7 @@ pub fn get_creation_date(path: &Path) -> Result<NaiveDateTime> {
     
     // 4. Fallback to filesystem metadata
     let meta = std::fs::metadata(path).context("Failed to read metadata")?;
-    let sys_time = meta.created().or_else(|_| meta.modified()).context("No valid timestamp found")?;
+    let sys_time = meta.modified().or_else(|_| meta.created()).context("No valid timestamp found")?;
     
     let dt: chrono::DateTime<chrono::Local> = sys_time.into();
     Ok(dt.naive_local())
@@ -114,5 +124,17 @@ mod tests {
 
         let dt3 = parse_date_from_filename("_DSC1234.ARW");
         assert!(dt3.is_none());
+    }
+
+    #[test]
+    fn test_get_fast_creation_date_prefers_exif() {
+        let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let workspace_root = manifest_dir.parent().unwrap().parent().unwrap().parent().unwrap().parent().unwrap();
+        let path = workspace_root.join("testdata/dest/2023/2023-10-03/DSC02298.ARW");
+        if path.exists() {
+            let meta = std::fs::metadata(&path).ok();
+            let date = get_fast_creation_date(&path, meta.as_ref()).unwrap();
+            assert_eq!(date.format("%Y-%m-%d").to_string(), "2023-10-03");
+        }
     }
 }

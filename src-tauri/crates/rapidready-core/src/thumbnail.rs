@@ -44,14 +44,17 @@ pub fn get_effective_orientation(path: &Path) -> Option<u32> {
     if let Some(o) = sidecar_state.orientation {
         return Some(o);
     }
-    // 2. Fall back to companion JPEG EXIF
+    // 2. Check image file EXIF directly (primary source of truth!)
+    if let Some(o) = read_exif_orientation(path) {
+        return Some(o);
+    }
+    // 3. Fall back to companion JPEG EXIF only if raw file had no readable EXIF
     if let Some(companion) = find_companion_jpeg(path) {
         if let Some(o) = read_exif_orientation(&companion) {
             return Some(o);
         }
     }
-    // 3. Fall back to image file EXIF
-    read_exif_orientation(path)
+    None
 }
 
 pub fn orientation_to_degrees(tag: u32) -> u32 {
@@ -104,17 +107,14 @@ pub fn get_preview_jpeg(path: &Path, scale: u32) -> Result<Vec<u8>> {
         }
     }
     
-    // Performance boost: If RAW has a companion JPEG, use the JPEG for thumbnail extraction
-    let target_path = find_companion_jpeg(path).unwrap_or_else(|| path.to_path_buf());
-
-    let thumb = get_thumbnail(&target_path, ThumbnailScale(scale))
+    let thumb = get_thumbnail(path, ThumbnailScale(scale))
         .map_err(|e| anyhow::anyhow!("thumb_rs error: {:?}", e))?;
         
     let img = RgbaImage::from_raw(thumb.width, thumb.height, thumb.rgba)
         .context("Failed to construct RgbaImage from raw bytes")?;
     let dyn_img = image::DynamicImage::ImageRgba8(img);
     
-    let file_orient = read_exif_orientation(&target_path).or_else(|| read_exif_orientation(path));
+    let file_orient = read_exif_orientation(path);
     let rotated_img = apply_effective_orientation(dyn_img, target_orient, file_orient);
     let rgb_img = rotated_img.into_rgb8();
         
@@ -138,18 +138,6 @@ pub fn get_max_preview_jpeg(path: &Path) -> Result<Vec<u8>> {
     if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
         if let Some(cached) = cache.get(&cache_key) {
             return Ok(cached.clone());
-        }
-    }
-
-    // Performance boost: If RAW has a companion JPEG and NO sidecar orientation override, directly return the JPEG bytes
-    if crate::culling::read_sidecar(path).orientation.is_none() {
-        if let Some(companion) = find_companion_jpeg(path) {
-            if let Ok(bytes) = std::fs::read(&companion) {
-                if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
-                    cache.put(cache_key, bytes.clone());
-                }
-                return Ok(bytes);
-            }
         }
     }
 
@@ -257,11 +245,13 @@ mod tests {
             println!("CR2 max preview: width={}, height={}", img.width(), img.height());
             let dng_portrait = workspace_root.join("testdata").join("dest").join("2023").join("2023-10-03").join("DSC02298.ARW");
             if dng_portrait.exists() {
-                let thumb2 = get_thumbnail(&dng_portrait, ThumbnailScale(1)).unwrap();
-                println!("ARW portrait thumb: width={}, height={}", thumb2.width, thumb2.height);
+                let res = get_preview_jpeg(&dng_portrait, 1).unwrap();
+                let img = image::load_from_memory(&res).unwrap();
+                assert!(img.height() > img.width(), "Portrait ARW thumbnail must be portrait! Got {}x{}", img.width(), img.height());
+
                 let res2 = get_max_preview_jpeg(&dng_portrait).unwrap();
                 let img2 = image::load_from_memory(&res2).unwrap();
-                println!("ARW max preview: width={}, height={}", img2.width(), img2.height());
+                assert!(img2.height() > img2.width(), "Portrait ARW max preview must be portrait! Got {}x{}", img2.width(), img2.height());
             }
         }
     }
@@ -275,25 +265,20 @@ mod tests {
             workspace_root.join("testdata/dest/2014/2014-05-01/IMG_3126.CR2"),
             workspace_root.join("testdata/dest/2014/2014-05-01/IMG_3191.CR2"),
             workspace_root.join("testdata/dest/2023/2023-10-03/DSC02298.ARW"),
+            workspace_root.join("testdata/dest/2023/2023-10-03/DSC02313.ARW"),
+            workspace_root.join("testdata/dest/2015/2015-03-24/DSC06201.ARW"),
+            workspace_root.join("testdata/dest/2015/2015-03-24/DSC06207.ARW"),
+            workspace_root.join("testdata/dest/2015/2015-03-24/DSC06208.ARW"),
+            workspace_root.join("testdata/dest/2015/2015-03-24/DSC06216.ARW"),
             workspace_root.join("testdata/src/Bilder/R0002008.DNG"),
             workspace_root.join("testdata/dest/2014/2014-08-25/DSC03058.JPG"),
         ];
 
         for p in &test_files {
             if !p.exists() { continue; }
-            let mut file = std::fs::File::open(p).unwrap();
-            let mut bufreader = std::io::BufReader::new(&mut file);
-            let exifreader = exif::Reader::new();
-            let orient = if let Ok(exif) = exifreader.read_from_container(&mut bufreader) {
-                if let Some(f) = exif.get_field(exif::Tag::Orientation, exif::In::PRIMARY) {
-                    f.value.get_uint(0)
-                } else {
-                    None
-                }
-            } else {
-                None
-            };
-            println!("FILE {:?}: EXIF orientation = {:?}", p.file_name().unwrap(), orient);
+            let orient = read_exif_orientation(p);
+            let effective = get_effective_orientation(p);
+            assert!(orient.is_some() || effective.is_some());
         }
     }
 
