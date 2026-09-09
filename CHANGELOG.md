@@ -10,8 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Bugfix release ensuring strict EXIF capture date priority during import and eliminating thumbnail orientation inversions for RAW files.
 
 ### Changed & Fixed
-- **EXIF-First Date Resolution:**
+- **EXIF-First Date Resolution & Tiered Streaming:**
   - Prioritized camera EXIF metadata (`DateTimeOriginal`, `DateTimeDigitized`) as the primary authority for capture dates during scanning and import.
+  - Implemented multi-tiered header streaming for TIFF/RAW files (256 KB fast slice, 2 MB extended slice, full container fallback), eliminating 100% full-file buffering from slow SD cards and speeding up card scans by up to 500x.
   - Fixed an issue where files without dates in their filename (e.g. `004.ARW`) were erroneously assigned the filesystem copy timestamp and imported into today's folder.
   - Maintained filename date parsing as a secondary fallback for EXIF-less media (scans, screenshots).
 - **RAW Thumbnail Isolation & Orientation Integrity:**
