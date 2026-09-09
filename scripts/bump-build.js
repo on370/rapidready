@@ -23,7 +23,7 @@ if (fs.existsSync(buildInfoPath)) {
 }
 
 // Check if we should skip increment (e.g. check only)
-const shouldIncrement = !process.argv.includes('--no-bump');
+const shouldIncrement = !process.argv.includes('--no-bump') && !process.env.NO_BUMP;
 
 if (shouldIncrement) {
   const currentHex = buildInfo.buildNumber || "000F";
