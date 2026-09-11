@@ -5,6 +5,32 @@ All notable changes to RapidReady will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0-beta] - 2026-09-11
+
+Major release introducing a native RAW full-resolution preview extractor, 1:1 sensor-pixel loupe zooming, a progressive import preview with full-screen lightbox inspection, multi-tier thumbnails, and minimal-scroll grid stability.
+
+### Added
+- **Native RAW Full-Resolution Extractor (`rapidready-core`):**
+  - Direct bitstream extraction of high-resolution embedded JPEGs directly from RAW containers (Sony ARW, Canon CR2/CR3, Ricoh DNG, Nikon NEF, etc.) delivering pristine 20–60 MP sensor resolution in 12–19 ms.
+  - Zero-cost EXIF orientation tag injection directly into the JPEG stream (0.001 ms) avoiding lossy re-encoding and preserving full sensor fidelity for rotated RAWs and JPEGs.
+- **Pin-Sharp 1:1 Sensor-Pixel Loupe Zoom:**
+  - True 1:1 sensor-pixel mapping in Loupe mode for critical focus and sharpness inspection, eliminating macOS QuickLook downscaling limits.
+- **Multi-Tier Thumbnail Pipeline:**
+  - `scale=0` (160×120 fast-path) exclusively for ultra-dense grids (15×14 tiles).
+  - `scale=1` (256px) and `scale=2` (512px) for crisp rendering on high-DPI and Retina displays in grid, filmstrip, and inspectors.
+- **Import Step 2 – Progressive Preview & Full-Screen Lightbox:**
+  - Fast-path 512px preview rendering immediately in the file inspector, followed by automatic background arrival of full sensor resolution.
+  - Full-screen lightbox modal for pre-import inspection with 1:1 pixel peeping (`Z`), smooth drag panning, interactive minimap, keyboard navigation (`←` / `→`), and direct culling (`Space`).
+- **Import Destination Prominence:**
+  - Added `DestinationInfoBar` in Step 2 displaying the active destination folder, free disk space warnings, and quick destination switching.
+
+### Fixed & Improved
+- **Grid Scroll Stability & Minimal-Scroll Algorithm:**
+  - Preserved persistent DOM scroll state when switching between Loupe and Grid views.
+  - Implemented an intelligent minimal-scroll algorithm keeping the selected photo visible with zero displacement if already in view, or scrolling by the minimum necessary rows upon navigation or container resize.
+- **Ricoh GR DNG Thumbnail Quality:**
+  - Implemented native embedded preview extraction (720×480 in < 0.2 ms) for DNG files lacking IFD1 thumbnails, eliminating blurred 16×16 generic macOS file icons.
+
 ## [0.2.1-beta] - 2026-09-09
 
 Bugfix release ensuring strict EXIF capture date priority during import and eliminating thumbnail orientation inversions for RAW files.

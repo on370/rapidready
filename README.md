@@ -34,7 +34,7 @@ Photographers often shoot thousands of photos on a single job. RapidReady is bui
 ## 📥 Download & Installation
 
 ### Windows (x64)
-1. Download the latest installer (`RapidReady_0.2.1-beta_x64-setup.exe`) from the **[Releases](https://github.com/on370/rapidready/releases)** page.
+1. Download the latest installer (`RapidReady_0.3.0-beta_x64-setup.exe`) from the **[Releases](https://github.com/on370/rapidready/releases)** page.
 2. Run the setup file to install RapidReady for your current user (no admin privileges required).
 3. Launch **RapidReady** from your Start Menu or Desktop shortcut.
 
