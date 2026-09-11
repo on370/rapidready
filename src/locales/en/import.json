@@ -83,7 +83,12 @@
     "savedLocations": "Saved Locations",
     "browseOther": "Choose other folder…",
     "photosCount": "{{count}} photos",
-    "photoCountSingle": "{{count}} photo"
+    "photoCountSingle": "{{count}} photo",
+    "lightboxFit": "Fit",
+    "lightbox100": "1:1 Sensor (100%)",
+    "lightboxClose": "Close",
+    "selectedForImport": "Selected for import",
+    "photoCounter": "{{current}} of {{total}}"
   },
   "execute": {
     "importing": "Importing Files",

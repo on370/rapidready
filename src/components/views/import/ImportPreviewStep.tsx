@@ -1,9 +1,10 @@
-import { GitBranch, Folder, ChevronDown, MousePointerClick, Camera, CheckCircle2, Filter, X, Info } from "lucide-react";
+import { GitBranch, Folder, ChevronDown, MousePointerClick, Camera, CheckCircle2, Filter, X, Info, Maximize2 } from "lucide-react";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useImportStore, ScannedFile } from '../../../stores/importStore';
 import { getRrImageUrl } from '../../../utils/image';
 import { DestinationInfoBar } from './components/DestinationInfoBar';
+import { ImportLightboxModal } from './components/ImportLightboxModal';
 
 const RAW_EXTENSIONS = new Set(["cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2"]);
 const JPG_EXTENSIONS = new Set(["jpg", "jpeg"]);
@@ -41,7 +42,12 @@ export function ImportPreviewStep() {
   }, [isHelpOpen]);
 
   const [selectedPairId, setSelectedPairId] = useState<string | null>(null);
-  const [isZoomed, setIsZoomed] = useState(false);
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+  const [fullresLoaded, setFullresLoaded] = useState(false);
+
+  useEffect(() => {
+    setFullresLoaded(false);
+  }, [selectedPairId]);
   const [collapsedDates, setCollapsedDates] = useState<Set<string>>(new Set());
   const { scannedFiles, toggleFileSelection, toggleGroupSelection, hideImported } = useImportStore();
 
@@ -194,6 +200,11 @@ export function ImportPreviewStep() {
     return allPairs.find(p => p.id === selectedPairId) || null;
   }, [selectedPairId, allPairs]);
 
+  const currentIndex = useMemo(() => {
+    if (!selectedPair) return -1;
+    return allPairs.findIndex(p => p.id === selectedPair.id);
+  }, [selectedPair, allPairs]);
+
   const selectedFilesCount = scannedFiles.filter(f => f.selected).length;
   const totalPhotosCount = allPairs.length;
   const selectedPhotosCount = allPairs.filter(p => p.selected || p.partiallySelected).length;
@@ -274,7 +285,7 @@ export function ImportPreviewStep() {
                     <div 
                       key={pair.id} 
                       className={`flex items-center gap-2 py-1.5 px-2 rounded-lg hover:bg-app-hover transition-colors cursor-pointer group ${selectedPairId === pair.id ? 'bg-app-hover' : ''} ${pair.allImported ? 'opacity-50' : ''}`} 
-                      onClick={() => { setSelectedPairId(pair.id); setIsZoomed(false); }}
+                      onClick={() => { setSelectedPairId(pair.id); }}
                     >
                       {/* Pair Master Checkbox */}
                       <div 
@@ -414,15 +425,17 @@ export function ImportPreviewStep() {
           ) : (
             /* Photo detail */
             <div className="space-y-4">
-              {/* Thumbnail (uses companion JPG for instant rendering!) */}
+              {/* Thumbnail (uses 512px fast-path companion JPG for instant rendering, then loads full sensor resolution) */}
               <div 
-                className={`w-full aspect-[3/2] rounded-xl overflow-hidden bg-app-deepest border border-app-border relative flex items-center justify-center group ${isZoomed ? 'cursor-zoom-out' : 'cursor-zoom-in'}`}
-                onClick={() => setIsZoomed(!isZoomed)}
+                className="w-full aspect-[3/2] rounded-xl overflow-hidden bg-app-deepest border border-app-border relative flex items-center justify-center group cursor-zoom-in"
+                onClick={() => setIsLightboxOpen(true)}
+                title={t('preview.clickToZoom')}
               >
+                {/* 1. Fast preview image (512px scale=2, instant) */}
                 <img 
-                  src={getRrImageUrl(selectedPair.previewFile.path)} 
+                  src={getRrImageUrl(selectedPair.previewFile.path, false, undefined, 2)} 
                   alt={selectedPair.stem}
-                  className={`${isZoomed ? 'w-full h-full object-contain' : 'max-w-full max-h-full object-contain'} ${selectedPair.allImported ? 'opacity-50' : ''} transition-all duration-200`}
+                  className={`w-full h-full object-contain ${selectedPair.allImported ? 'opacity-50' : ''}`}
                   loading="lazy"
                   onError={(e) => {
                     e.currentTarget.style.display = 'none';
@@ -432,9 +445,29 @@ export function ImportPreviewStep() {
                     }
                   }}
                 />
+
+                {/* 2. Full-resolution layer (fades in smoothly once loaded) */}
+                <img 
+                  src={getRrImageUrl(selectedPair.previewFile.path, true)} 
+                  alt={selectedPair.stem}
+                  onLoad={() => setFullresLoaded(true)}
+                  className={`absolute inset-0 w-full h-full object-contain transition-opacity duration-300 ${
+                    fullresLoaded ? (selectedPair.allImported ? 'opacity-50' : 'opacity-100') : 'opacity-0 pointer-events-none'
+                  }`}
+                  loading="lazy"
+                />
+
                 <div className="hidden flex-col items-center gap-2 w-full h-full justify-center" style={{ background: 'linear-gradient(135deg, #1a4a6e 0%, #2d7aac 50%, #1a6e5a 100%)' }}>
                   <Camera className="w-10 h-10 text-white/20" />
                   <span className="text-xs text-white/30 font-medium truncate px-4">{selectedPair.stem}</span>
+                </div>
+
+                {/* Hover zoom hint overlay */}
+                <div className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                  <div className="bg-black/75 backdrop-blur-sm text-white text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-xl border border-white/15">
+                    <Maximize2 className="w-3.5 h-3.5 text-accent" />
+                    <span className="font-medium">{t('preview.clickToZoom')}</span>
+                  </div>
                 </div>
               </div>
 
@@ -507,8 +540,32 @@ export function ImportPreviewStep() {
         </div>
       </div>
     </div>
-  </div>
-);
+
+      {/* Fullscreen Lightbox Modal for 1:1 Sensor Inspection */}
+      {selectedPair && (
+        <ImportLightboxModal
+          isOpen={isLightboxOpen}
+          onClose={() => setIsLightboxOpen(false)}
+          pair={selectedPair}
+          currentIndex={currentIndex}
+          totalCount={allPairs.length}
+          onPrev={() => {
+            if (currentIndex > 0) {
+              setSelectedPairId(allPairs[currentIndex - 1].id);
+            }
+          }}
+          onNext={() => {
+            if (currentIndex !== -1 && currentIndex < allPairs.length - 1) {
+              setSelectedPairId(allPairs[currentIndex + 1].id);
+            }
+          }}
+          hasPrev={currentIndex > 0}
+          hasNext={currentIndex !== -1 && currentIndex < allPairs.length - 1}
+          onToggleSelection={(paths, selected) => toggleGroupSelection(paths, selected)}
+        />
+      )}
+    </div>
+  );
 }
 
 // Ensure Info is imported, we missed it earlier in the list above but I will just use what we have or add it.
