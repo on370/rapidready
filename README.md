@@ -94,5 +94,9 @@ npm run tauri build
 
 See [CHANGELOG.md](CHANGELOG.md) for a detailed history of changes and releases.
 
+## 📬 Contact
+
+- **Website:** [https://rapidready.de/](https://rapidready.de/)
+
 ## 📝 License
 MIT License. Created by Ole N
