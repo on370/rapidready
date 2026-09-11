@@ -75,6 +75,13 @@
     "toggleRaw": "RAW ({{ext}}) - Click to toggle",
     "toggleJpg": "JPEG - Click to toggle",
     "excludePhoto": "Exclude photo from import",
+    "destinationLabel": "Destination:",
+    "noDestination": "No destination directory selected!",
+    "noDestinationHint": "Please select a destination directory before importing",
+    "defaultPicturesWarning": "Default Pictures folder active (verify destination)",
+    "changeDestination": "Change Destination",
+    "savedLocations": "Saved Locations",
+    "browseOther": "Choose other folder…",
     "photosCount": "{{count}} photos",
     "photoCountSingle": "{{count}} photo"
   },

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, MouseEvent as ReactMouseEvent, WheelEvent } from "react";
-import { useLibraryStore } from "../../../stores/libraryStore";
+import { useLibraryUIStore } from "../../../stores/libraryUIStore";
 
 interface ZoomableImageProps {
   src: string;
@@ -9,7 +9,7 @@ interface ZoomableImageProps {
 }
 
 export function ZoomableImage({ src, previewSrc, alt, onContextMenu }: ZoomableImageProps) {
-  const { invertScrollZoom, loupeScale, setLoupeScale } = useLibraryStore();
+  const { invertScrollZoom, loupeScale, setLoupeScale } = useLibraryUIStore();
   const [currentSrc, setCurrentSrc] = useState(previewSrc || src);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -28,14 +28,18 @@ export function ZoomableImage({ src, previewSrc, alt, onContextMenu }: ZoomableI
     setLoupeScale(0);
     setPosition({ x: 0, y: 0 });
 
-    if (previewSrc) {
-      setCurrentSrc(previewSrc);
-    }
     const img = new Image();
     img.src = src;
-    img.onload = () => {
+    if (img.complete && img.naturalWidth > 0) {
       setCurrentSrc(src);
-    };
+    } else {
+      if (previewSrc) {
+        setCurrentSrc(previewSrc);
+      }
+      img.onload = () => {
+        setCurrentSrc(src);
+      };
+    }
   }, [src, previewSrc, setLoupeScale]);
 
   const clampAndSetPosition = useCallback((x: number, y: number, currentScale = scale) => {

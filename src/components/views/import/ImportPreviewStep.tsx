@@ -3,6 +3,7 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useImportStore, ScannedFile } from '../../../stores/importStore';
 import { getRrImageUrl } from '../../../utils/image';
+import { DestinationInfoBar } from './components/DestinationInfoBar';
 
 const RAW_EXTENSIONS = new Set(["cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2"]);
 const JPG_EXTENSIONS = new Set(["jpg", "jpeg"]);
@@ -204,9 +205,14 @@ export function ImportPreviewStep() {
   );
 
   return (
-    <div className="flex-1 min-h-0 overflow-hidden p-6 gap-6 flex">
-      {/* Left Panel: File Tree */}
-      <div className="w-[440px] flex-shrink-0 flex flex-col min-h-0 overflow-hidden">
+    <div className="flex-1 min-h-0 overflow-hidden p-6 flex flex-col gap-4">
+      {/* Destination Info Bar & Change/Warning Control */}
+      <DestinationInfoBar />
+
+      {/* Main Content Area */}
+      <div className="flex-1 min-h-0 overflow-hidden gap-6 flex">
+        {/* Left Panel: File Tree */}
+        <div className="w-[440px] flex-shrink-0 flex flex-col min-h-0 overflow-hidden">
         <div className="flex items-center justify-between flex-shrink-0 mb-3">
           <div className="flex items-center gap-2">
             <GitBranch className="w-4 h-4 text-txt-secondary" />
@@ -501,7 +507,8 @@ export function ImportPreviewStep() {
         </div>
       </div>
     </div>
-  );
+  </div>
+);
 }
 
 // Ensure Info is imported, we missed it earlier in the list above but I will just use what we have or add it.

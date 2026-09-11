@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { normalizePath } from '../utils/image';
+import { useLibraryUIStore } from './libraryUIStore';
 
 export interface CullingState {
   flag: number | null; // 1 = Pick, -1 = Reject, null = Unrated
@@ -183,7 +184,10 @@ export const useLibraryStore = create<LibraryStore>((set) => ({
   }),
   
   viewMode: 'grid',
-  setViewMode: (mode) => set({ viewMode: mode }),
+  setViewMode: (mode) => {
+    useLibraryUIStore.getState().setViewMode(mode);
+    set({ viewMode: mode });
+  },
   
   lastImportPaths: [],
   isViewingLastImport: false,
@@ -240,17 +244,24 @@ export const useLibraryStore = create<LibraryStore>((set) => ({
     return { images: newImages };
   }),
   invertScrollZoom: false,
-  setInvertScrollZoom: (invertScrollZoom) => set({ invertScrollZoom }),
+  setInvertScrollZoom: (invertScrollZoom) => {
+    useLibraryUIStore.getState().setInvertScrollZoom(invertScrollZoom);
+    set({ invertScrollZoom });
+  },
   
   gridThumbnailSize: getSavedThumbSize(),
   setGridThumbnailSize: (size) => {
     try {
       localStorage.setItem('rapidready_thumb_size', size.toString());
     } catch (_) {}
+    useLibraryUIStore.getState().setGridThumbnailSize(size);
     set({ gridThumbnailSize: size });
   },
   loupeScale: 0,
-  setLoupeScale: (scale) => set({ loupeScale: scale }),
+  setLoupeScale: (scale) => {
+    useLibraryUIStore.getState().setLoupeScale(scale);
+    set({ loupeScale: scale });
+  },
   activeImageFolder: null,
   setActiveImageFolder: (folder) => set({ activeImageFolder: folder }),
 }));

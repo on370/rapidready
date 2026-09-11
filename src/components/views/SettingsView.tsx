@@ -3,7 +3,7 @@ import { Settings, Folder, Plus, Globe, Settings2, Trash2, Edit2, Check } from "
 import { useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useSettingsStore } from "../../stores/settingsStore";
-import { useLibraryStore } from "../../stores/libraryStore";
+import { useLibraryUIStore } from "../../stores/libraryUIStore";
 
 
 function EditableItem({ 
@@ -79,7 +79,7 @@ function EditableItem({
 
 export function SettingsView() {
   const { t, i18n } = useTranslation('settings');
-  const { invertScrollZoom, setInvertScrollZoom } = useLibraryStore();
+  const { invertScrollZoom, setInvertScrollZoom } = useLibraryUIStore();
   const {
     /* Unconnected/dummy toggles hidden for MVP:
     autoDetect, setAutoDetect,

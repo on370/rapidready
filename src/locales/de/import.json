@@ -75,6 +75,13 @@
     "toggleRaw": "RAW ({{ext}}) - Klicke zum Umschalten",
     "toggleJpg": "JPEG - Klicke zum Umschalten",
     "excludePhoto": "Foto vom Import ausschließen",
+    "destinationLabel": "Importziel:",
+    "noDestination": "Kein Zielverzeichnis festgelegt!",
+    "noDestinationHint": "Bitte vor dem Import ein Zielverzeichnis auswählen",
+    "defaultPicturesWarning": "Standardordner \"Bilder\" aktiv (Ziel prüfen)",
+    "changeDestination": "Ziel ändern",
+    "savedLocations": "Gespeicherte Locations",
+    "browseOther": "Anderen Ordner wählen…",
     "photosCount": "{{count}} Fotos",
     "photoCountSingle": "{{count}} Foto"
   },

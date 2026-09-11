@@ -2,10 +2,11 @@ import { useState, useRef, useEffect } from "react";
 import { LibraryLeftSidebar } from "./library/LibraryLeftSidebar";
 import { LibraryCenter } from "./library/LibraryCenter";
 import { LibraryInspector } from "./library/LibraryInspector";
+import { useLibraryUIStore } from "../../stores/libraryUIStore";
 
 export function LibraryView() {
-  const [inspectorVisible, setInspectorVisible] = useState(true);
-  const [viewMode, setViewMode] = useState<'grid' | 'loupe'>('grid');
+  const isInspectorOpen = useLibraryUIStore((s) => s.isInspectorOpen);
+  const setIsInspectorOpen = useLibraryUIStore((s) => s.setIsInspectorOpen);
   
   // Sidebar widths
   const [leftWidth, setLeftWidth] = useState(250);
@@ -63,16 +64,12 @@ export function LibraryView() {
         
         {/* Center */}
         <div className="flex-1 min-w-0 flex min-h-0 bg-app-bg relative z-0">
-          <LibraryCenter 
-            viewMode={viewMode} 
-            setViewMode={setViewMode} 
-            toggleInspector={() => setInspectorVisible(!inspectorVisible)} 
-          />
+          <LibraryCenter />
           {(isDraggingLeft || isDraggingRight) && <div className="absolute inset-0 z-50 cursor-col-resize" />}
         </div>
 
         {/* Right Area */}
-        {inspectorVisible && (
+        {isInspectorOpen && (
           <>
             {/* Right Divider */}
             <div 
@@ -81,7 +78,7 @@ export function LibraryView() {
             />
             {/* Right Sidebar */}
             <div style={{ width: rightWidth }} className="flex-shrink-0 flex min-h-0 relative">
-              <LibraryInspector close={() => setInspectorVisible(false)} />
+              <LibraryInspector close={() => setIsInspectorOpen(false)} />
             </div>
           </>
         )}

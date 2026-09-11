@@ -22,7 +22,9 @@ export function ImportView() {
         scannedFiles.length > 0
       );
     }
-    if (currentStep === 2) return selectedCount > 0;
+    if (currentStep === 2) {
+      return selectedCount > 0 && destinationDirectory !== null;
+    }
     return false;
   };
 
@@ -104,6 +106,7 @@ export function ImportView() {
                     !destinationDirectory ? t('wizard.hintSelectDestination') :
                     scannedFiles.length === 0 ? t('wizard.hintNoFiles') : ''
                   ) : (
+                    !destinationDirectory ? t('wizard.hintSelectDestination') :
                     selectedCount === 0 ? t('wizard.hintSelectFiles') : ''
                   )
                 ) : ''

@@ -6,11 +6,17 @@ import { convertFileSrc } from '@tauri-apps/api/core';
  * On macOS, Tauri maps them to <protocol>://localhost/<path>.
  * convertFileSrc automatically selects the correct format for the current OS!
  */
-export function getRrImageUrl(path: string | undefined | null, fullres = false, orientation?: number | null): string {
+export function getRrImageUrl(
+  path: string | undefined | null, 
+  fullres = false, 
+  orientation?: number | null,
+  scale?: number
+): string {
   if (!path) return '';
   const params: string[] = [];
   if (fullres) params.push('fullres=true');
   if (orientation) params.push(`orient=${orientation}`);
+  if (scale !== undefined) params.push(`scale=${scale}`);
   const queryString = params.length > 0 ? `?${params.join('&')}` : '';
 
   try {
