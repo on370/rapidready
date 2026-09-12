@@ -28,8 +28,8 @@
       "desc": "Kehrt die Richtung des Scrollrads beim Zoomen in der Loupe-Ansicht um"
     },
     "startupView": {
-      "title": "Library Modus beim Start öffnen",
-      "desc": "Anstelle des Import Modus"
+      "title": "Immer im Import-Modus starten",
+      "desc": "Öffnet beim App-Start die Import-Ansicht anstelle der Bibliothek"
     }
   },
   "rapidraw": {

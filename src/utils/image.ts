@@ -48,3 +48,13 @@ export function normalizePath(p: string | undefined | null): string {
   return normalizeSlash(p).toLowerCase();
 }
 
+export const RAW_EXTENSIONS = new Set([
+  'cr2', 'cr3', 'arw', 'nef', 'dng', 'orf', 'raf', 'rw2', 'pef', '3fr', 'x3f', 'nrw'
+]);
+
+export function isRawFilename(filename: string | undefined | null): boolean {
+  if (!filename) return false;
+  const ext = filename.split('.').pop()?.toLowerCase();
+  return ext ? RAW_EXTENSIONS.has(ext) : false;
+}
+

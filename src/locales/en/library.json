@@ -91,7 +91,28 @@
   "empty": "No images found",
   "loading": {
     "indexing": "Indexing archive...",
-    "syncing": "Loading files and synchronizing culling sidecars"
+    "syncing": "Loading files and synchronizing culling sidecars",
+    "connectingTitle": "Connecting to archive...",
+    "connectingDesc": "Waiting for filesystem (network shares/NAS may take several seconds to wake up)...",
+    "cancel": "Cancel",
+    "cancelTooltip": "Cancel scan",
+    "scanningCount": "Indexing... {{count}} photos",
+    "pause": "Pause",
+    "pauseTooltip": "Temporarily pause scan",
+    "pausedCount": "Indexing paused ({{count}} photos)",
+    "resume": "Resume",
+    "resumeTooltip": "Resume scan from this point",
+    "end": "Finish",
+    "stoppedCount": "Scan stopped at {{count}} photos",
+    "continueRest": "Load remaining photos",
+    "completedCount": "{{count}} photos indexed",
+    "dismiss": "Dismiss"
+  },
+  "dialog": {
+    "switchFolderTitle": "Switch Folder?",
+    "switchFolderMessage": "Indexing of \"{{current}}\" is still in progress ({{count}} photos loaded).\n\nDo you want to cancel the current scan and switch to \"{{newFolder}}\"?",
+    "switchFolderConfirm": "Yes, cancel & switch",
+    "switchFolderCancel": "No, stay here"
   },
   "inspector": {
     "title": "Inspector",
@@ -122,7 +143,15 @@
     "noTags": "No tags",
     "removeTagTooltip": "Remove tag '{{tag}}'",
     "createTag": "Create '{{tag}}'",
-    "suggestions": "Existing tags"
+    "suggestions": "Existing tags",
+    "monoSensor": "Monochrome Sensor",
+    "monoSensorDesc": "Sensor without Bayer matrix (true B/W)",
+    "monoSensorTooltip": "Hardware monochrome sensor. The RAW contains native black and white sensor data without color filters.",
+    "bwWarningTitle": "B/W Preview (RAW is Color)",
+    "bwWarningSubtitle": "Camera style is Black & White. The RAW file contains full color information!",
+    "bwWarningTooltip": "The camera was set to a Black & White picture style. The preview image is monochrome, but the RAW file contains the sensor's full color information.",
+    "previewRendering": "Preview: In-Camera JPEG",
+    "inCameraPreviewTooltip": "Embedded in-camera preview (color and exposure may differ from RAW development)."
   },
   "colors": {
     "none": "No Color",
@@ -131,5 +160,12 @@
     "green": "Green",
     "blue": "Blue",
     "purple": "Purple"
+  },
+  "errors": {
+    "cullingSaveFailed": "Failed to save rating/tags",
+    "cullingSaveFailedDesc": "Could not write sidecar file (.rrdata). The storage medium may be write-protected (Read-Only) or permission is denied.",
+    "batchSaveFailed": "Failed to save {{failed}} of {{total}} files.",
+    "watcherErrorTitle": "File system watcher interrupted",
+    "watcherErrorDesc": "Automatic sidecar updates have been paused (e.g. network share disconnected)."
   }
 }

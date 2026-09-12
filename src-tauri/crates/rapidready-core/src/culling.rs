@@ -178,9 +178,26 @@ pub fn write_sidecar(original_path: &Path, state: &CullingState) -> anyhow::Resu
         obj.remove("orientation");
     }
 
-    // 7. Write back formatted JSON
+    // 7. Write back formatted JSON atomically (write to unique temp file in same directory + rename)
     let json = serde_json::to_string_pretty(&root)?;
-    fs::write(&sidecar_path, json)?;
+    let parent = sidecar_path.parent().unwrap_or_else(|| Path::new("."));
+    let pid = std::process::id();
+    let thread_id = std::thread::current().id();
+    let file_stem = sidecar_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("sidecar");
+    let tmp_path = parent.join(format!(".{}.tmp.{:?}.{}", file_stem, thread_id, pid));
+
+    if let Err(e) = fs::write(&tmp_path, json) {
+        let _ = fs::remove_file(&tmp_path);
+        return Err(e.into());
+    }
+
+    if let Err(e) = fs::rename(&tmp_path, &sidecar_path) {
+        let _ = fs::remove_file(&tmp_path);
+        return Err(e.into());
+    }
 
     Ok(())
 }
@@ -414,6 +431,40 @@ mod tests {
         let read3 = read_sidecar(&img_path);
         assert_eq!(read3.color, None);
         assert!(read3.tags.is_empty());
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_atomic_sidecar_write() {
+        let temp_dir = std::env::temp_dir().join(format!("rr_atomic_test_{}", std::process::id()));
+        let _ = fs::create_dir_all(&temp_dir);
+        let img_path = temp_dir.join("test_atomic.cr2");
+        let sidecar_path = temp_dir.join("test_atomic.cr2.rrdata");
+
+        let state = CullingState {
+            flag: Some(1),
+            rating: 5,
+            color: Some("purple".to_string()),
+            tags: vec!["atomic".to_string()],
+            orientation: None,
+        };
+
+        write_sidecar(&img_path, &state).unwrap();
+        assert!(sidecar_path.exists(), "Sidecar file must exist after write");
+
+        // Verify no leftover .tmp files
+        let entries: Vec<_> = fs::read_dir(&temp_dir)
+            .unwrap()
+            .flatten()
+            .filter(|e| e.file_name().to_string_lossy().contains(".tmp."))
+            .collect();
+        assert!(entries.is_empty(), "No temporary files should remain after atomic write");
+
+        let read = read_sidecar(&img_path);
+        assert_eq!(read.rating, 5);
+        assert_eq!(read.flag, Some(1));
+        assert_eq!(read.color, Some("purple".to_string()));
 
         let _ = fs::remove_dir_all(&temp_dir);
     }

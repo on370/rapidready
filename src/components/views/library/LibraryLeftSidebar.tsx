@@ -1,9 +1,8 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useSettingsStore } from "../../../stores/settingsStore";
 import { Bookmark, ChevronDown, Plus, HardDrive, Folder, ChevronRight, FolderOpen, Sparkles, Loader2, Camera } from "lucide-react";
-import { open } from '@tauri-apps/plugin-dialog';
-import { invoke } from "@tauri-apps/api/core";
+import { open, ask } from '@tauri-apps/plugin-dialog';
 import { useLibraryStore, LibraryImage } from "../../../stores/libraryStore";
 import { normalizePath, normalizeSlash } from "../../../utils/image";
 
@@ -20,41 +19,45 @@ function buildTree(images: LibraryImage[], rootPath: string): TreeNode {
   const normRoot = normalizeSlash(rootPath);
   const normRootLower = normRoot.toLowerCase();
   const root: TreeNode = { name: "Root", path: normRoot, fileCount: 0, children: {} };
+  const rootLen = normRoot.length;
   
-  images.forEach(img => {
-    const normImgPath = normalizeSlash(img.path);
-    if (!normImgPath.toLowerCase().startsWith(normRootLower)) return;
+  for (let idx = 0; idx < images.length; idx++) {
+    const normImgPath = normalizeSlash(images[idx].path);
+    if (!normImgPath.toLowerCase().startsWith(normRootLower)) continue;
     root.fileCount++;
     
-    let relPath = normImgPath.substring(normRoot.length);
-    if (relPath.startsWith('/')) relPath = relPath.substring(1);
+    let relPath = normImgPath.substring(rootLen);
+    if (relPath.charCodeAt(0) === 47 /* '/' */) relPath = relPath.substring(1);
     
     const parts = relPath.split('/');
-    if (parts.length <= 1) return; // File directly in root folder
+    if (parts.length <= 1) continue; // File directly in root folder
     
     let current = root;
     let currentPath = normRoot;
-    for (let i = 0; i < parts.length - 1; i++) {
+    const end = parts.length - 1;
+    for (let i = 0; i < end; i++) {
       const part = parts[i];
       currentPath = currentPath + '/' + part;
-      if (!current.children[part]) {
-        current.children[part] = {
+      let child = current.children[part];
+      if (!child) {
+        child = {
           name: part,
           path: currentPath,
           fileCount: 0,
           children: {}
         };
+        current.children[part] = child;
       }
-      current = current.children[part];
+      current = child;
       current.fileCount++;
     }
-  });
+  }
   
   return root;
 }
 
 function TreeView({ node, depth = 0, rootFolder }: { node: TreeNode, depth?: number, rootFolder: string }) {
-  const [isOpen, setIsOpen] = useState(depth < 2);
+  const [isOpen, setIsOpen] = useState(depth < 3);
   const { activeFolderPath, setActiveFolderPath, activeImageFolder } = useLibraryStore();
   const nodeRef = useRef<HTMLDivElement>(null);
   
@@ -166,25 +169,63 @@ export function LibraryLeftSidebar() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [collectionsOpen, setCollectionsOpen] = useState(true);
   const [libraryOpen, setLibraryOpen] = useState(true);
-  const { 
-    images, setImages, setActiveFolderPath, setViewMode, rootPath, setRootPath,
-    lastImportPaths, isViewingLastImport, setIsViewingLastImport,
-    isLoading, setIsLoading
-  } = useLibraryStore();
+  
+  const rootPath = useLibraryStore((s) => s.rootPath);
+  const imageCount = useLibraryStore((s) => s.images.length);
+  const scanState = useLibraryStore((s) => s.scanState);
+  const lastImportPaths = useLibraryStore((s) => s.lastImportPaths);
+  const isViewingLastImport = useLibraryStore((s) => s.isViewingLastImport);
+  const setIsViewingLastImport = useLibraryStore((s) => s.setIsViewingLastImport);
+  const isLoading = useLibraryStore((s) => s.isLoading);
+  const loadArchive = useLibraryStore((s) => s.loadArchive);
 
   const loadFolder = async (path: string) => {
-    setRootPath(path);
-    setActiveFolderPath(path);
-    setViewMode('grid');
     setLastLibraryPath(path);
-    setIsLoading(true);
-    try {
-      const loadedImages = (await invoke('scan_archive_directory', { path })) as LibraryImage[];
-      setImages(loadedImages);
-    } catch(e) {
-      console.error("Failed to load archive directory:", e);
-      setIsLoading(false);
+    await loadArchive(path, false);
+  };
+
+  const handleFolderChange = async (newPath: string) => {
+    if (rootPath && normalizePath(newPath) === normalizePath(rootPath)) {
+      return;
     }
+
+    const { scanState: curScanState, pauseScan, resumeScan, cancelScan, scanProgress, images } = useLibraryStore.getState();
+
+    // If an archive scan is actively running, pause and ask the user
+    if (curScanState === 'scanning' || curScanState === 'connecting') {
+      pauseScan();
+
+      const currentName = rootPath ? (normalizeSlash(rootPath).split('/').pop() || rootPath) : '';
+      const newName = normalizeSlash(newPath).split('/').pop() || newPath;
+      const count = scanProgress?.files_found ?? images.length;
+      const formattedCount = count.toLocaleString();
+
+      const confirmed = await ask(
+        t('dialog.switchFolderMessage', {
+          current: currentName,
+          count: formattedCount,
+          newFolder: newName,
+          defaultValue: `Die Indexierung von "${currentName}" läuft noch (${formattedCount} Fotos geladen).\n\nMöchtest du den aktuellen Scan abbrechen und zu "${newName}" wechseln?`
+        }),
+        {
+          title: t('dialog.switchFolderTitle', { defaultValue: 'Ordner wechseln?' }),
+          kind: 'warning',
+          okLabel: t('dialog.switchFolderConfirm', { defaultValue: 'Ja, abbrechen & wechseln' }),
+          cancelLabel: t('dialog.switchFolderCancel', { defaultValue: 'Nein, hier bleiben' }),
+        }
+      );
+
+      if (!confirmed) {
+        // User wants to stay: resume scan!
+        resumeScan();
+        return;
+      }
+
+      // User confirmed: cancel active scan
+      cancelScan();
+    }
+
+    loadFolder(newPath);
   };
 
   // Auto-load last library on mount if nothing is loaded
@@ -194,13 +235,68 @@ export function LibraryLeftSidebar() {
     }
   }, []);
 
-  const tree = useMemo(() => {
-    if (!rootPath || images.length === 0) return null;
-    return buildTree(images, rootPath);
-  }, [images, rootPath]);
+  const [tree, setTree] = useState<TreeNode | null>(() => {
+    const store = useLibraryStore.getState();
+    return store.rootPath && store.images.length > 0 ? buildTree(store.images, store.rootPath) : null;
+  });
+  const lastTreeUpdateRef = useRef<number>(0);
+  const throttleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clean up throttle timer on unmount
+  useEffect(() => {
+    return () => {
+      if (throttleTimerRef.current) {
+        clearTimeout(throttleTimerRef.current);
+        throttleTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!rootPath || imageCount === 0) {
+      if (throttleTimerRef.current) {
+        clearTimeout(throttleTimerRef.current);
+        throttleTimerRef.current = null;
+      }
+      setTree(null);
+      return;
+    }
+
+    const updateTreeNow = () => {
+      const currentImages = useLibraryStore.getState().images;
+      setTree(buildTree(currentImages, rootPath));
+      lastTreeUpdateRef.current = Date.now();
+    };
+
+    // If not actively scanning (e.g. idle, paused, stopped, completed), update immediately
+    if (scanState !== 'scanning' && scanState !== 'connecting') {
+      if (throttleTimerRef.current) {
+        clearTimeout(throttleTimerRef.current);
+        throttleTimerRef.current = null;
+      }
+      updateTreeNow();
+      return;
+    }
+
+    // While scanning: throttle tree updates to at most once every 350ms
+    const now = Date.now();
+    const timeSinceLast = now - lastTreeUpdateRef.current;
+    if (timeSinceLast >= 350) {
+      if (throttleTimerRef.current) {
+        clearTimeout(throttleTimerRef.current);
+        throttleTimerRef.current = null;
+      }
+      updateTreeNow();
+    } else if (!throttleTimerRef.current) {
+      throttleTimerRef.current = setTimeout(() => {
+        throttleTimerRef.current = null;
+        updateTreeNow();
+      }, Math.max(50, 350 - timeSinceLast));
+    }
+  }, [rootPath, imageCount, scanState]);
 
   const renderTree = () => {
-    if (isLoading) {
+    if (isLoading && imageCount === 0) {
       return (
         <div className="flex flex-col items-center justify-center py-8 gap-2 text-txt-secondary">
           <Loader2 className="w-5 h-5 text-accent animate-spin" />
@@ -287,7 +383,7 @@ export function LibraryLeftSidebar() {
                           className="w-full text-left px-3 py-2 hover:bg-app-hover text-txt-secondary hover:text-txt-primary truncate transition-colors flex items-center gap-2"
                           onClick={() => {
                             setDropdownOpen(false);
-                            loadFolder(loc.path);
+                            handleFolderChange(loc.path);
                           }}
                         >
                           <Folder className="w-3.5 h-3.5 text-accent" />
@@ -305,7 +401,7 @@ export function LibraryLeftSidebar() {
                       if (selected && typeof selected === 'string') {
                         const defaultName = normalizeSlash(selected).split('/').pop() || selected;
                         addLocation({ id: Date.now().toString(), name: defaultName, path: selected });
-                        loadFolder(selected);
+                        handleFolderChange(selected);
                       }
                     }}
                     className="w-full text-left px-3 py-2 hover:bg-app-hover text-txt-secondary hover:text-accent transition-colors flex items-center gap-2"
@@ -319,7 +415,7 @@ export function LibraryLeftSidebar() {
                       setDropdownOpen(false);
                       const selected = await open({ directory: true });
                       if (selected && typeof selected === 'string') {
-                        loadFolder(selected);
+                        handleFolderChange(selected);
                       }
                     }}
                     className="w-full text-left px-3 py-2 hover:bg-app-hover text-txt-secondary hover:text-txt-primary transition-colors flex items-center gap-2"

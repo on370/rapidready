@@ -55,7 +55,7 @@ export const useSettingsStore = create<SettingsState>()(
       deleteSource: false,
       launchSystem: false,
       openRapidRaw: true,
-      startupView: 'import',
+      startupView: 'library',
       lastLibraryPath: null,
       locations: [],
       recentPaths: [],

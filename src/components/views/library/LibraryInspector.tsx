@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState, useRef } from "react";
 import { 
-  X, MousePointerClick, Star, Check, RotateCw, RotateCcw, Tag, CircleSlash 
+  X, MousePointerClick, Star, Check, RotateCw, RotateCcw, Tag, CircleSlash,
+  AlertTriangle, Camera
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useLibraryStore } from "../../../stores/libraryStore";
 import { invoke } from "@tauri-apps/api/core";
 import { getRrImageUrl, normalizePath } from "../../../utils/image";
 import { COLOR_PALETTE } from "../../../constants/culling";
+import { useToastStore } from "../../../stores/toastStore";
 
 interface LibraryInspectorProps {
   close: () => void;
@@ -33,9 +35,11 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
         setIsSuggestOpen(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
+    if (isSuggestOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [isSuggestOpen]);
 
   const normLastImport = useMemo(() => {
     return new Set(lastImportPaths.map(p => normalizePath(p)));
@@ -72,6 +76,9 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
         iso: string | null;
         aperture: string | null;
         shutter: string | null;
+        is_raw?: boolean;
+        is_monochrome_sensor?: boolean;
+        is_monochrome_preview?: boolean;
       }>('get_image_metadata', { path: activeImage.path })
         .then(meta => {
           if (isMounted && meta) {
@@ -82,6 +89,9 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
               aperture: meta.aperture || null,
               shutter: meta.shutter || null,
               date: meta.date || activeImage.date,
+              is_raw: meta.is_raw ?? activeImage.is_raw,
+              is_monochrome_sensor: meta.is_monochrome_sensor ?? false,
+              is_monochrome_preview: meta.is_monochrome_preview ?? false,
             });
           }
         })
@@ -99,12 +109,25 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
 
     if (pathsToUpdate.length > 1) {
       updateBatchCullingState(pathsToUpdate, { flag, rating });
-      invoke('set_culling_state_batch', { 
+      invoke<{ total: number; succeeded: number; failed: number }>('set_culling_state_batch', { 
         paths: pathsToUpdate, 
         flag: flag === null ? 0 : flag, 
         rating, 
         color: null 
-      }).catch(console.error);
+      }).then((res) => {
+        if (res && res.failed > 0) {
+          useToastStore.getState().showWarning(
+            t('errors.batchSaveFailed', { failed: res.failed, total: res.total, defaultValue: `Fehler beim Speichern von ${res.failed} von ${res.total} Dateien.` }),
+            t('errors.cullingSaveFailed', { defaultValue: 'Fehler beim Speichern' })
+          );
+        }
+      }).catch((err) => {
+        console.error('Failed to save batch culling state:', err);
+        useToastStore.getState().showError(
+          t('errors.cullingSaveFailedDesc', { defaultValue: 'Die Sidecar-Datei (.rrdata) konnte nicht geschrieben werden.' }),
+          t('errors.cullingSaveFailed', { defaultValue: 'Fehler beim Speichern' })
+        );
+      });
     } else {
       const globalIndex = images.findIndex(img => img.path === activeImage.path);
       if (globalIndex !== -1) updateCullingState(globalIndex, { flag, rating });
@@ -114,7 +137,13 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
         rating, 
         color: activeImage.culling.color,
         tags: activeImage.culling.tags,
-      }).catch(console.error);
+      }).catch((err) => {
+        console.error('Failed to save culling state:', err);
+        useToastStore.getState().showError(
+          t('errors.cullingSaveFailedDesc', { defaultValue: 'Die Sidecar-Datei (.rrdata) konnte nicht geschrieben werden.' }),
+          t('errors.cullingSaveFailed', { defaultValue: 'Fehler beim Speichern' })
+        );
+      });
     }
   };
 
@@ -126,10 +155,23 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
 
     if (pathsToUpdate.length > 1) {
       updateBatchCullingState(pathsToUpdate, { color });
-      invoke('set_culling_state_batch', {
+      invoke<{ total: number; succeeded: number; failed: number }>('set_culling_state_batch', {
         paths: pathsToUpdate,
         color: color || 'none',
-      }).catch(console.error);
+      }).then((res) => {
+        if (res && res.failed > 0) {
+          useToastStore.getState().showWarning(
+            t('errors.batchSaveFailed', { failed: res.failed, total: res.total, defaultValue: `Fehler beim Speichern von ${res.failed} von ${res.total} Dateien.` }),
+            t('errors.cullingSaveFailed', { defaultValue: 'Fehler beim Speichern' })
+          );
+        }
+      }).catch((err) => {
+        console.error('Failed to set batch color:', err);
+        useToastStore.getState().showError(
+          t('errors.cullingSaveFailedDesc', { defaultValue: 'Die Sidecar-Datei (.rrdata) konnte nicht geschrieben werden.' }),
+          t('errors.cullingSaveFailed', { defaultValue: 'Fehler beim Speichern' })
+        );
+      });
     } else {
       const globalIndex = images.findIndex(img => img.path === activeImage.path);
       if (globalIndex !== -1) updateCullingState(globalIndex, { color });
@@ -139,7 +181,13 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
         rating: activeImage.culling.rating, 
         color,
         tags: activeImage.culling.tags,
-      }).catch(console.error);
+      }).catch((err) => {
+        console.error('Failed to set color:', err);
+        useToastStore.getState().showError(
+          t('errors.cullingSaveFailedDesc', { defaultValue: 'Die Sidecar-Datei (.rrdata) konnte nicht geschrieben werden.' }),
+          t('errors.cullingSaveFailed', { defaultValue: 'Fehler beim Speichern' })
+        );
+      });
     }
   };
 
@@ -193,10 +241,23 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
           if (idx !== -1) updateCullingState(idx, { tags: updated });
         }
       }
-      invoke('set_culling_state_batch', {
+      invoke<{ total: number; succeeded: number; failed: number }>('set_culling_state_batch', {
         paths: pathsToUpdate,
         addTag: trimmed,
-      }).catch(console.error);
+      }).then((res) => {
+        if (res && res.failed > 0) {
+          useToastStore.getState().showWarning(
+            t('errors.batchSaveFailed', { failed: res.failed, total: res.total, defaultValue: `Fehler beim Speichern von ${res.failed} von ${res.total} Dateien.` }),
+            t('errors.cullingSaveFailed', { defaultValue: 'Fehler beim Speichern' })
+          );
+        }
+      }).catch((err) => {
+        console.error('Failed to add tag batch:', err);
+        useToastStore.getState().showError(
+          t('errors.cullingSaveFailedDesc', { defaultValue: 'Die Sidecar-Datei (.rrdata) konnte nicht geschrieben werden.' }),
+          t('errors.cullingSaveFailed', { defaultValue: 'Fehler beim Speichern' })
+        );
+      });
     } else {
       const globalIndex = images.findIndex(img => img.path === activeImage.path);
       if (globalIndex !== -1) updateCullingState(globalIndex, { tags: newTags });
@@ -206,7 +267,13 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
         rating: activeImage.culling.rating, 
         color: activeImage.culling.color,
         tags: newTags,
-      }).catch(console.error);
+      }).catch((err) => {
+        console.error('Failed to add tag:', err);
+        useToastStore.getState().showError(
+          t('errors.cullingSaveFailedDesc', { defaultValue: 'Die Sidecar-Datei (.rrdata) konnte nicht geschrieben werden.' }),
+          t('errors.cullingSaveFailed', { defaultValue: 'Fehler beim Speichern' })
+        );
+      });
     }
     setTagInput('');
     setIsSuggestOpen(false);
@@ -260,10 +327,23 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
           if (idx !== -1) updateCullingState(idx, { tags: updated });
         }
       }
-      invoke('set_culling_state_batch', {
+      invoke<{ total: number; succeeded: number; failed: number }>('set_culling_state_batch', {
         paths: pathsToUpdate,
         removeTag: tagToRemove,
-      }).catch(console.error);
+      }).then((res) => {
+        if (res && res.failed > 0) {
+          useToastStore.getState().showWarning(
+            t('errors.batchSaveFailed', { failed: res.failed, total: res.total, defaultValue: `Fehler beim Speichern von ${res.failed} von ${res.total} Dateien.` }),
+            t('errors.cullingSaveFailed', { defaultValue: 'Fehler beim Speichern' })
+          );
+        }
+      }).catch((err) => {
+        console.error('Failed to remove tag batch:', err);
+        useToastStore.getState().showError(
+          t('errors.cullingSaveFailedDesc', { defaultValue: 'Die Sidecar-Datei (.rrdata) konnte nicht geschrieben werden.' }),
+          t('errors.cullingSaveFailed', { defaultValue: 'Fehler beim Speichern' })
+        );
+      });
     } else {
       const globalIndex = images.findIndex(img => img.path === activeImage.path);
       if (globalIndex !== -1) updateCullingState(globalIndex, { tags: newTags });
@@ -273,7 +353,13 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
         rating: activeImage.culling.rating, 
         color: activeImage.culling.color,
         tags: newTags,
-      }).catch(console.error);
+      }).catch((err) => {
+        console.error('Failed to remove tag:', err);
+        useToastStore.getState().showError(
+          t('errors.cullingSaveFailedDesc', { defaultValue: 'Die Sidecar-Datei (.rrdata) konnte nicht geschrieben werden.' }),
+          t('errors.cullingSaveFailed', { defaultValue: 'Fehler beim Speichern' })
+        );
+      });
     }
   };
 
@@ -293,11 +379,15 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
       }
     } catch (err) {
       console.error('Failed to rotate images:', err);
+      useToastStore.getState().showError(
+        t('errors.cullingSaveFailedDesc', { defaultValue: 'Die Sidecar-Datei (.rrdata) konnte nicht geschrieben werden.' }),
+        t('errors.cullingSaveFailed', { defaultValue: 'Fehler beim Speichern' })
+      );
     }
   };
 
   const extension = activeImage?.name.split('.').pop()?.toUpperCase() || '';
-  const isRaw = ['CR2', 'CR3', 'ARW', 'NEF', 'DNG', 'ORF', 'RAF', 'RW2'].includes(extension);
+  const isRaw = activeImage?.is_raw ?? ['CR2', 'CR3', 'ARW', 'NEF', 'DNG', 'ORF', 'RAF', 'RW2', 'PEF', '3FR'].includes(extension);
 
   return (
     <div className="w-full h-full flex-shrink-0 bg-app-panel flex flex-col min-h-0 overflow-hidden">
@@ -347,6 +437,45 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
                 <span>{(activeImage.size / (1024 * 1024)).toFixed(1)} MB</span>
               </div>
             </div>
+
+            {/* RAW & Monochrome Sensor/Preview Status Notification */}
+            {isRaw && (
+              <>
+                {activeImage.is_monochrome_sensor ? (
+                  <div 
+                    className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-txt-secondary text-xs"
+                    title={t('inspector.monoSensorTooltip', 'Hardware-Monochromsensor. Das RAW enthält native Schwarz-Weiß-Sensordaten ohne Farbfilter.')}
+                  >
+                    <Camera className="w-4 h-4 text-white/80 flex-shrink-0" />
+                    <div>
+                      <span className="font-semibold text-white/90 text-[11px] block">{t('inspector.monoSensor', 'Monochrom-Sensor')}</span>
+                      <span className="text-[10px] text-txt-tertiary block">{t('inspector.monoSensorDesc', 'Hardware-Sensor ohne Bayer-Matrix (echtes S/W)')}</span>
+                    </div>
+                  </div>
+                ) : activeImage.is_monochrome_preview ? (
+                  <div 
+                    className="flex items-start gap-2.5 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs shadow-sm"
+                    title={t('inspector.bwWarningTooltip', 'Die Kamera war auf einen Schwarz-Weiß-Bildstil eingestellt. Das Vorschaubild ist monochrom, die RAW-Datei enthält jedoch die vollen Farbinformationen des Sensors.')}
+                  >
+                    <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-semibold text-amber-300 text-[11px] block">{t('inspector.bwWarningTitle', 'S/W-Vorschau (RAW ist Farbe)')}</span>
+                      <span className="text-[10px] text-amber-400/80 block mt-0.5 leading-snug">
+                        {t('inspector.bwWarningSubtitle', 'Kamerastil ist Schwarz-Weiß. Die RAW-Datei enthält alle Farbinformationen!')}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div 
+                    className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-app-card/60 border border-app-border/40 text-txt-tertiary text-[10px]"
+                    title={t('inspector.inCameraPreviewTooltip', 'Eingebettete Kamera-Vorschau (Farbe & Belichtung können vom RAW-Entwickler abweichen).')}
+                  >
+                    <span>{t('inspector.previewRendering', 'Vorschau: In-Camera JPEG')}</span>
+                    <span className="text-white/40 font-mono">JPG Preview</span>
+                  </div>
+                )}
+              </>
+            )}
 
             {/* Interactive Culling Card */}
             <div className="bg-app-card border border-app-border rounded-xl p-3 space-y-2.5">

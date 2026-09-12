@@ -1,8 +1,10 @@
 use rapidready_core::scanner::{scan_directory, ScannedFile};
 use rapidready_core::importer::{execute_import as core_execute_import, ImportProgress};
 use rapidready_core::import_index::ImportIndex;
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::{AppHandle, Emitter, Manager};
 use notify::{Watcher, RecommendedWatcher};
 
@@ -208,6 +210,24 @@ impl Default for SidecarWatcherState {
     }
 }
 
+#[derive(Clone)]
+pub struct ActiveScan {
+    pub id: u64,
+    pub controller: rapidready_core::archive::ScanController,
+}
+
+#[derive(Default)]
+pub struct ArchiveScanState {
+    pub current_scan: Arc<Mutex<Option<ActiveScan>>>,
+    pub next_id: Arc<AtomicU64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArchiveChunkPayload {
+    pub scan_id: u64,
+    pub files: Vec<rapidready_core::archive::ArchiveFile>,
+}
+
 pub fn start_watching_dir_internal(
     app: &AppHandle,
     dir: &std::path::Path,
@@ -228,18 +248,24 @@ pub fn start_watching_dir_internal(
     if should_watch {
         let app_handle = app.clone();
         let mut watcher = notify::recommended_watcher(move |res: Result<notify::Event, notify::Error>| {
-            if let Ok(event) = res {
-                for p in event.paths {
-                    let path_str = p.to_string_lossy();
-                    if path_str.ends_with(".rrdata") {
-                        let img_path_str = path_str.strip_suffix(".rrdata").unwrap_or(&path_str).to_string();
-                        let img_path = PathBuf::from(&img_path_str);
-                        let culling = rapidready_core::culling::read_sidecar(&img_path);
-                        let _ = app_handle.emit("sidecar-updated", serde_json::json!({
-                            "path": img_path_str,
-                            "culling": culling
-                        }));
+            match res {
+                Ok(event) => {
+                    for p in event.paths {
+                        let path_str = p.to_string_lossy();
+                        if path_str.ends_with(".rrdata") {
+                            let img_path_str = path_str.strip_suffix(".rrdata").unwrap_or(&path_str).to_string();
+                            let img_path = PathBuf::from(&img_path_str);
+                            let culling = rapidready_core::culling::read_sidecar(&img_path);
+                            let _ = app_handle.emit("sidecar-updated", serde_json::json!({
+                                "path": img_path_str,
+                                "culling": culling
+                            }));
+                        }
                     }
+                }
+                Err(e) => {
+                    eprintln!("Sidecar watcher error: {}", e);
+                    let _ = app_handle.emit("sidecar-watcher-error", e.to_string());
                 }
             }
         }).map_err(|e| e.to_string())?;
@@ -271,16 +297,115 @@ pub fn get_culling_state(path: String) -> rapidready_core::culling::CullingState
 pub async fn scan_archive_directory(
     app: AppHandle,
     path: String,
+    scan_id: Option<u64>,
+    existing_paths: Option<Vec<String>>,
+    initial_bytes: Option<u64>,
     state: tauri::State<'_, SidecarWatcherState>,
+    scan_state: tauri::State<'_, ArchiveScanState>,
 ) -> Result<Vec<rapidready_core::archive::ArchiveFile>, String> {
     let dir = PathBuf::from(&path);
     let _ = start_watching_dir_internal(&app, &dir, &state);
 
-    tauri::async_runtime::spawn_blocking(move || {
-        rapidready_core::archive::scan_archive_directory(&dir).map_err(|e| e.to_string())
+    let scan_id = scan_id.unwrap_or_else(|| scan_state.next_id.fetch_add(1, Ordering::SeqCst) + 1);
+    let controller = rapidready_core::archive::ScanController::new();
+
+    // Cancel previous scan if any and register this one
+    {
+        let mut lock = scan_state.current_scan.lock().unwrap();
+        if let Some(ref prev) = *lock {
+            prev.controller.cancel();
+        }
+        *lock = Some(ActiveScan {
+            id: scan_id,
+            controller: controller.clone(),
+        });
+    }
+
+    let app_for_prog = app.clone();
+    let app_for_chunk = app.clone();
+    let controller_clone = controller.clone();
+    let scan_state_clone = scan_state.current_scan.clone();
+
+    let existing_set: Option<std::collections::HashSet<String>> = existing_paths.map(|paths| {
+        paths
+            .into_iter()
+            .map(|p| p.replace('\\', "/"))
+            .collect()
+    });
+    let init_bytes = initial_bytes.unwrap_or(0);
+
+    let res = tauri::async_runtime::spawn_blocking(move || {
+        rapidready_core::archive::scan_archive_directory_streaming(
+            &dir,
+            existing_set.as_ref(),
+            init_bytes,
+            scan_id,
+            controller_clone,
+            move |progress| {
+                let _ = app_for_prog.emit("archive_scan_progress", progress);
+            },
+            move |chunk| {
+                let _ = app_for_chunk.emit("archive_scan_chunk", ArchiveChunkPayload {
+                    scan_id,
+                    files: chunk,
+                });
+            },
+        )
+        .map_err(|e| e.to_string())
     })
     .await
-    .map_err(|e| format!("Task join error: {}", e))?
+    .map_err(|e| format!("Task join error: {}", e))?;
+
+    // Clear controller on completion ONLY if it is still this exact scan
+    {
+        let mut lock = scan_state_clone.lock().unwrap();
+        if let Some(ref active) = *lock {
+            if active.id == scan_id {
+                *lock = None;
+            }
+        }
+    }
+
+    res
+}
+
+#[tauri::command]
+pub fn pause_archive_scan(
+    app: AppHandle,
+    scan_state: tauri::State<'_, ArchiveScanState>,
+) -> Result<(), String> {
+    let lock = scan_state.current_scan.lock().unwrap();
+    if let Some(ref active) = *lock {
+        active.controller.pause();
+        let _ = app.emit("archive_scan_paused", ());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn resume_archive_scan(
+    app: AppHandle,
+    scan_state: tauri::State<'_, ArchiveScanState>,
+) -> Result<(), String> {
+    let lock = scan_state.current_scan.lock().unwrap();
+    if let Some(ref active) = *lock {
+        active.controller.resume();
+        let _ = app.emit("archive_scan_resumed", ());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn cancel_archive_scan(
+    app: AppHandle,
+    scan_state: tauri::State<'_, ArchiveScanState>,
+) -> Result<(), String> {
+    let lock = scan_state.current_scan.lock().unwrap();
+    if let Some(ref active) = *lock {
+        active.controller.cancel();
+        let _ = app.emit("archive_scan_cancelled", ());
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -425,10 +550,19 @@ pub struct ImageRotationResult {
     pub culling: rapidready_core::culling::CullingState,
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct BatchCullingResult {
+    pub total: usize,
+    pub succeeded: usize,
+    pub failed: usize,
+    pub first_error: Option<String>,
+}
+
 #[tauri::command]
 pub async fn rotate_images(paths: Vec<String>, direction: String) -> Result<Vec<ImageRotationResult>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let mut results = Vec::new();
+        let mut errors = Vec::new();
         for path_str in paths {
             let path = Path::new(&path_str);
             let mut state = rapidready_core::culling::read_sidecar(path);
@@ -438,12 +572,16 @@ pub async fn rotate_images(paths: Vec<String>, direction: String) -> Result<Vec<
             let next = rapidready_core::culling::next_orientation(current, &direction);
             state.orientation = Some(next);
             if let Err(e) = rapidready_core::culling::write_sidecar(path, &state) {
-                return Err(format!("Failed to write sidecar for {}: {}", path_str, e));
+                errors.push(format!("{}: {}", path_str, e));
+                continue;
             }
             results.push(ImageRotationResult {
                 path: path_str,
                 culling: state,
             });
+        }
+        if !errors.is_empty() && results.is_empty() {
+            return Err(errors.join("\n"));
         }
         Ok(results)
     })
@@ -459,10 +597,15 @@ pub async fn set_culling_state_batch(
     color: Option<String>,
     add_tag: Option<String>,
     remove_tag: Option<String>,
-) -> Result<(), String> {
+) -> Result<BatchCullingResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
+        let total = paths.len();
+        let mut succeeded = 0;
+        let mut failed = 0;
+        let mut first_error = None;
+
         for path_str in paths {
-            let p = PathBuf::from(path_str);
+            let p = PathBuf::from(&path_str);
             let mut state = rapidready_core::culling::read_sidecar(&p);
             if let Some(f) = flag {
                 state.flag = if f == 0 { None } else { Some(f) };
@@ -486,9 +629,27 @@ pub async fn set_culling_state_batch(
             if let Some(ref tag_to_remove) = remove_tag {
                 state.tags.retain(|t| !t.eq_ignore_ascii_case(tag_to_remove));
             }
-            rapidready_core::culling::write_sidecar(&p, &state).map_err(|e| e.to_string())?;
+            match rapidready_core::culling::write_sidecar(&p, &state) {
+                Ok(_) => succeeded += 1,
+                Err(e) => {
+                    failed += 1;
+                    if first_error.is_none() {
+                        first_error = Some(format!("{}: {}", path_str, e));
+                    }
+                }
+            }
         }
-        Ok(())
+
+        if failed > 0 && succeeded == 0 {
+            return Err(first_error.unwrap_or_else(|| "All file writes failed".into()));
+        }
+
+        Ok(BatchCullingResult {
+            total,
+            succeeded,
+            failed,
+            first_error,
+        })
     })
     .await
     .map_err(|e| e.to_string())?

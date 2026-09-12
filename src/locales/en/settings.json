@@ -28,8 +28,8 @@
       "desc": "Reverse the direction of the scroll wheel when zooming in Loupe view"
     },
     "startupView": {
-      "title": "Open Library Mode after Startup",
-      "desc": "Rather than Import Mode"
+      "title": "Always start in Import Mode",
+      "desc": "Opens the app in Import Mode rather than Library upon startup"
     }
   },
   "rapidraw": {

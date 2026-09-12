@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Check, Star } from 'lucide-react';
 import { LibraryImage } from '../../../../stores/libraryStore';
-import { getRrImageUrl } from '../../../../utils/image';
+import { getRrImageUrl, isRawFilename } from '../../../../utils/image';
 import { getColorConfig } from '../../../../constants/culling';
 import { loadedThumbnailCache } from '../utils/thumbnailCache';
 
@@ -24,6 +24,7 @@ export const FilmstripThumbnailItem = React.memo(function FilmstripThumbnailItem
   onClick,
   onContextMenu,
 }: FilmstripThumbnailItemProps) {
+  const isRaw = img.is_raw ?? isRawFilename(img.name);
   const cacheKey = `${img.path}:${img.culling?.orientation || 1}:1`;
   const [loaded, setLoaded] = useState(loadedThumbnailCache.has(cacheKey));
 
@@ -60,6 +61,19 @@ export const FilmstripThumbnailItem = React.memo(function FilmstripThumbnailItem
           <div className="w-5 h-5 rounded bg-white/[0.04] animate-pulse" />
         </div>
       )}
+      {/* Format Badge: RAW vs JPG */}
+      <div className="absolute top-1 left-1 pointer-events-none z-10">
+        {isRaw ? (
+          <span className="px-1 py-0.2 rounded text-[8px] font-mono font-semibold tracking-wider bg-black/70 text-white/90 border border-white/15 shadow-sm leading-tight inline-block">
+            RAW
+          </span>
+        ) : (
+          <span className="px-1 py-0.2 rounded text-[8px] font-mono font-medium tracking-wider bg-black/50 text-txt-tertiary border border-white/5 shadow-sm leading-tight inline-block">
+            JPG
+          </span>
+        )}
+      </div>
+
       <div className="absolute top-1 right-1 flex gap-0.5 pointer-events-none">
         {img.culling.flag === 1 && (
           <div className="w-3.5 h-3.5 rounded-full bg-success flex items-center justify-center shadow">

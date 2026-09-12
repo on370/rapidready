@@ -91,7 +91,28 @@
   "empty": "Keine Bilder gefunden",
   "loading": {
     "indexing": "Archiv wird indexiert...",
-    "syncing": "Dateien werden geladen und Culling-Sidecars synchronisiert"
+    "syncing": "Dateien werden geladen und Culling-Sidecars synchronisiert",
+    "connectingTitle": "Verbindung zum Archiv wird hergestellt...",
+    "connectingDesc": "Warte auf Dateisystem (bei Netzwerkfreigaben/NAS kann das Aufwecken einige Sekunden dauern)...",
+    "cancel": "Abbrechen",
+    "cancelTooltip": "Scan abbrechen",
+    "scanningCount": "Indexiere... {{count}} Fotos",
+    "pause": "Pausieren",
+    "pauseTooltip": "Scan vorübergehend anhalten",
+    "pausedCount": "Indexierung pausiert ({{count}} Fotos)",
+    "resume": "Fortsetzen",
+    "resumeTooltip": "Scan an dieser Stelle fortsetzen",
+    "end": "Beenden",
+    "stoppedCount": "Scan bei {{count}} Fotos gestoppt",
+    "continueRest": "Restliche Fotos laden",
+    "completedCount": "{{count}} Fotos indexiert",
+    "dismiss": "Ausblenden"
+  },
+  "dialog": {
+    "switchFolderTitle": "Ordner wechseln?",
+    "switchFolderMessage": "Die Indexierung von \"{{current}}\" läuft noch ({{count}} Fotos geladen).\n\nMöchtest du den aktuellen Scan abbrechen und zu \"{{newFolder}}\" wechseln?",
+    "switchFolderConfirm": "Ja, abbrechen & wechseln",
+    "switchFolderCancel": "Nein, hier bleiben"
   },
   "inspector": {
     "title": "Inspector",
@@ -122,7 +143,15 @@
     "noTags": "Keine Schlagwörter",
     "removeTagTooltip": "Schlagwort '{{tag}}' entfernen",
     "createTag": "'{{tag}}' neu erstellen",
-    "suggestions": "Vorhandene Schlagwörter"
+    "suggestions": "Vorhandene Schlagwörter",
+    "monoSensor": "Monochrom-Sensor",
+    "monoSensorDesc": "Hardware-Sensor ohne Bayer-Matrix (echtes S/W)",
+    "monoSensorTooltip": "Hardware-Monochromsensor. Das RAW enthält native Schwarz-Weiß-Sensordaten ohne Farbfilter.",
+    "bwWarningTitle": "S/W-Vorschau (RAW ist Farbe)",
+    "bwWarningSubtitle": "Kamerastil ist Schwarz-Weiß. Die RAW-Datei enthält alle Farbinformationen!",
+    "bwWarningTooltip": "Die Kamera war auf einen Schwarz-Weiß-Bildstil eingestellt. Das Vorschaubild ist monochrom, die RAW-Datei enthält jedoch die vollen Farbinformationen des Sensors.",
+    "previewRendering": "Vorschau: In-Camera JPEG",
+    "inCameraPreviewTooltip": "Eingebettete Kamera-Vorschau (Farbe & Belichtung können vom RAW-Entwickler abweichen)."
   },
   "colors": {
     "none": "Keine Farbe",
@@ -131,5 +160,12 @@
     "green": "Grün",
     "blue": "Blau",
     "purple": "Lila"
+  },
+  "errors": {
+    "cullingSaveFailed": "Fehler beim Speichern der Bewertung/Tags",
+    "cullingSaveFailedDesc": "Die Sidecar-Datei (.rrdata) konnte nicht geschrieben werden. Möglicherweise ist das Speichermedium schreibgeschützt (Read-Only) oder die Berechtigungen fehlen.",
+    "batchSaveFailed": "Fehler beim Speichern von {{failed}} von {{total}} Dateien.",
+    "watcherErrorTitle": "Dateisystem-Überwachung unterbrochen",
+    "watcherErrorDesc": "Automatische Sidecar-Aktualisierungen sind unterbrochen (z. B. Netzwerk-Share getrennt)."
   }
 }

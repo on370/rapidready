@@ -242,9 +242,22 @@ export const LibraryGrid = React.memo(function LibraryGrid({
     }
   }, [itemHeight, numColumns, gap, activeImageIndex, rowVirtualizer, setGridScrollTop, displayedImages.length]);
 
-  // Auto-scroll active thumbnail into view with minimal scroll when navigating in Grid View
+  // Track user-initiated mouse clicks to prevent auto-scroll when clicking thumbnails
+  const isMouseSelectionRef = useRef(false);
+  const mouseSelectionTimeRef = useRef(0);
+
+  // Auto-scroll active thumbnail into view with minimal scroll when navigating with keyboard/auto-advance in Grid View
   const prevActiveIndexRef = useRef(activeImageIndex);
   useEffect(() => {
+    // If the selection was triggered by a mouse/pointer click, do NOT auto-scroll!
+    const isRecentMouseClick = isMouseSelectionRef.current || (Date.now() - mouseSelectionTimeRef.current < 200);
+    isMouseSelectionRef.current = false;
+    mouseSelectionTimeRef.current = 0;
+    if (isRecentMouseClick) {
+      prevActiveIndexRef.current = activeImageIndex;
+      return;
+    }
+
     if (viewMode === 'grid' && prevActiveIndexRef.current !== activeImageIndex) {
       prevActiveIndexRef.current = activeImageIndex;
       const el = gridContainerRef.current;
@@ -322,9 +335,17 @@ export const LibraryGrid = React.memo(function LibraryGrid({
                       isActive={activeImageIndex === globalIdx}
                       isSelected={isSelected}
                       isScrolling={rowVirtualizer.isScrolling}
-                      onClick={(e) => onItemClick(e, globalIdx, img)}
+                      onClick={(e) => {
+                        isMouseSelectionRef.current = true;
+                        mouseSelectionTimeRef.current = Date.now();
+                        onItemClick(e, globalIdx, img);
+                      }}
                       onDoubleClick={() => onOpenLoupe(globalIdx)}
-                      onContextMenu={(e) => onContextMenu(e, img.path, globalIdx)}
+                      onContextMenu={(e) => {
+                        isMouseSelectionRef.current = true;
+                        mouseSelectionTimeRef.current = Date.now();
+                        onContextMenu(e, img.path, globalIdx);
+                      }}
                     />
                   );
                 })}

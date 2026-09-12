@@ -8,6 +8,12 @@ export function LibraryView() {
   const isInspectorOpen = useLibraryUIStore((s) => s.isInspectorOpen);
   const setIsInspectorOpen = useLibraryUIStore((s) => s.setIsInspectorOpen);
   
+  const MIN_CENTER_WIDTH = 400;
+  const MIN_LEFT_WIDTH = 180;
+  const MAX_LEFT_WIDTH = 380;
+  const MIN_RIGHT_WIDTH = 260;
+  const MAX_RIGHT_WIDTH = 420;
+
   // Sidebar widths
   const [leftWidth, setLeftWidth] = useState(250);
   const [rightWidth, setRightWidth] = useState(320);
@@ -22,14 +28,18 @@ export function LibraryView() {
     const handleMouseMove = (e: MouseEvent) => {
       if (!containerRef.current) return;
       const rect = containerRef.current.getBoundingClientRect();
+      const containerWidth = rect.width;
+      const currentRight = isInspectorOpen ? rightWidth : 0;
       
       if (isDraggingLeft) {
-        const newWidth = Math.max(160, Math.min(400, e.clientX - rect.left));
+        const maxAllowedLeft = Math.max(MIN_LEFT_WIDTH, Math.min(MAX_LEFT_WIDTH, containerWidth - currentRight - MIN_CENTER_WIDTH));
+        const newWidth = Math.max(MIN_LEFT_WIDTH, Math.min(maxAllowedLeft, e.clientX - rect.left));
         setLeftWidth(newWidth);
       }
       
       if (isDraggingRight) {
-        const newWidth = Math.max(260, Math.min(450, rect.right - e.clientX));
+        const maxAllowedRight = Math.max(MIN_RIGHT_WIDTH, Math.min(MAX_RIGHT_WIDTH, containerWidth - leftWidth - MIN_CENTER_WIDTH));
+        const newWidth = Math.max(MIN_RIGHT_WIDTH, Math.min(maxAllowedRight, rect.right - e.clientX));
         setRightWidth(newWidth);
       }
     };
@@ -46,7 +56,26 @@ export function LibraryView() {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDraggingLeft, isDraggingRight]);
+  }, [isDraggingLeft, isDraggingRight, leftWidth, rightWidth, isInspectorOpen]);
+
+  // Keep sidebars within limits on window resize
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const width = entry.contentRect.width;
+        if (width <= 0) continue;
+        const currentRight = isInspectorOpen ? rightWidth : 0;
+        const totalNeeded = leftWidth + currentRight + MIN_CENTER_WIDTH;
+        if (totalNeeded > width) {
+          const overflow = totalNeeded - width;
+          setLeftWidth((cur) => Math.max(MIN_LEFT_WIDTH, cur - overflow));
+        }
+      }
+    });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, [leftWidth, rightWidth, isInspectorOpen]);
 
   return (
     <div className="flex-1 w-full overflow-hidden flex flex-col min-h-0" ref={containerRef}>
@@ -63,7 +92,7 @@ export function LibraryView() {
         />
         
         {/* Center */}
-        <div className="flex-1 min-w-0 flex min-h-0 bg-app-bg relative z-0">
+        <div className="flex-1 min-w-[400px] flex min-h-0 bg-app-bg relative z-0">
           <LibraryCenter />
           {(isDraggingLeft || isDraggingRight) && <div className="absolute inset-0 z-50 cursor-col-resize" />}
         </div>

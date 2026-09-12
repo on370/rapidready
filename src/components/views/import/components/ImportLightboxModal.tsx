@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect, useCallback, MouseEvent as ReactMouseEvent, WheelEvent } from "react";
-import { X, ChevronLeft, ChevronRight, ZoomIn, Minimize2 } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, ZoomIn, Minimize2, AlertTriangle, Camera } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { invoke } from "@tauri-apps/api/core";
 import { PairedImportItem } from "../ImportPreviewStep";
-import { getRrImageUrl } from "../../../../utils/image";
+import { getRrImageUrl, isRawFilename } from "../../../../utils/image";
 
 interface ImportLightboxModalProps {
   isOpen: boolean;
@@ -35,6 +36,35 @@ export function ImportLightboxModal({
   const [isDragging, setIsDragging] = useState(false);
   const [isMinimapDragging, setIsMinimapDragging] = useState(false);
   const [fullresReady, setFullresReady] = useState(false);
+
+  const targetRawPath = pair.rawFile?.path || (isRawFilename(pair.previewFile.name) ? pair.previewFile.path : null);
+  const [rawMeta, setRawMeta] = useState<{
+    is_raw?: boolean;
+    is_monochrome_sensor?: boolean;
+    is_monochrome_preview?: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!targetRawPath) {
+      setRawMeta(null);
+      return;
+    }
+    let isMounted = true;
+    invoke<{
+      is_raw?: boolean;
+      is_monochrome_sensor?: boolean;
+      is_monochrome_preview?: boolean;
+    }>('get_image_metadata', { path: targetRawPath })
+      .then((res) => {
+        if (isMounted) setRawMeta(res);
+      })
+      .catch(() => {
+        if (isMounted) setRawMeta(null);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [targetRawPath]);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
@@ -297,6 +327,28 @@ export function ImportLightboxModal({
             <span className="text-xs text-white/40 font-mono">
               {(pair.totalSize / (1024 * 1024)).toFixed(1)} MB
             </span>
+
+            {rawMeta?.is_raw && (
+              <>
+                {rawMeta.is_monochrome_sensor ? (
+                  <span
+                    className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-white/10 text-white/90 font-medium border border-white/15 ml-1"
+                    title="Hardware-Monochromsensor. Das RAW enthält native Schwarz-Weiß-Sensordaten ohne Farbfilter."
+                  >
+                    <Camera className="w-3 h-3 text-white/80" />
+                    <span>Monochrom-Sensor</span>
+                  </span>
+                ) : rawMeta.is_monochrome_preview ? (
+                  <span
+                    className="flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-semibold border border-amber-500/40 shadow-xs animate-in fade-in duration-150 ml-1"
+                    title="Die Kamera war auf einen Schwarz-Weiß-Bildstil eingestellt. Das Vorschaubild ist monochrom, die RAW-Datei enthält jedoch die vollen Farbinformationen des Sensors."
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                    <span>S/W-Vorschau (RAW ist Farbe)</span>
+                  </span>
+                ) : null}
+              </>
+            )}
 
             <span className="text-xs text-white/50 bg-white/5 px-2 py-0.5 rounded-full ml-1">
               {t("preview.photoCounter", { current: currentIndex + 1, total: totalCount })}

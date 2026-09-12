@@ -9,7 +9,7 @@ const __dirname = path.dirname(__filename);
 const buildInfoPath = path.resolve(__dirname, '../src/build-info.json');
 
 let buildInfo = {
-  version: "0.3.0-beta",
+  version: "0.3.5-beta-RC1",
   buildNumber: "000F", // will increment to 0010 on first build if missing
   buildDate: new Date().toISOString().slice(0, 10)
 };

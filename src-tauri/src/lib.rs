@@ -19,6 +19,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(commands::SidecarWatcherState::default())
+        .manage(commands::ArchiveScanState::default())
         .setup(|app| {
             #[cfg(target_os = "macos")]
             {
@@ -190,6 +191,9 @@ pub fn run() {
             commands::execute_import,
             commands::get_removable_drives,
             commands::scan_archive_directory,
+            commands::pause_archive_scan,
+            commands::resume_archive_scan,
+            commands::cancel_archive_scan,
             commands::set_culling_state,
             commands::set_culling_state_batch,
             commands::rotate_images,

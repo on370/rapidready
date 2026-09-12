@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { Check, Star } from 'lucide-react';
 import { LibraryImage } from '../../../../stores/libraryStore';
 import { useLibraryUIStore } from '../../../../stores/libraryUIStore';
-import { getRrImageUrl } from '../../../../utils/image';
+import { getRrImageUrl, isRawFilename } from '../../../../utils/image';
 import { getColorConfig } from '../../../../constants/culling';
 import { loadedThumbnailCache } from '../utils/thumbnailCache';
 
@@ -25,6 +25,7 @@ export const GridThumbnailItem = React.memo(function GridThumbnailItem({
   onDoubleClick,
   onContextMenu,
 }: GridThumbnailItemProps) {
+  const isRaw = img.is_raw ?? isRawFilename(img.name);
   const gridThumbnailSize = useLibraryUIStore((s) => s.gridThumbnailSize);
   const scale = gridThumbnailSize <= 130 ? 0 : gridThumbnailSize > 220 ? 2 : 1;
   const cacheKey = `${img.path}:${img.culling?.orientation || 1}:${scale}`;
@@ -87,7 +88,20 @@ export const GridThumbnailItem = React.memo(function GridThumbnailItem({
       >
         <div className="w-6 h-6 rounded-md bg-white/[0.03]" />
       </div>
-      <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      {/* Format Badge: RAW vs JPG */}
+      <div className="absolute top-1.5 left-1.5 z-20 pointer-events-none">
+        {isRaw ? (
+          <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold tracking-wide bg-black/60 text-white/90 border border-white/15 shadow-sm backdrop-blur-xs">
+            RAW
+          </span>
+        ) : (
+          <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-medium tracking-wide bg-black/40 text-txt-tertiary border border-white/5 shadow-sm backdrop-blur-xs">
+            JPG
+          </span>
+        )}
+      </div>
+
+      <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20">
         {img.culling.flag === 1 && <div className="w-4 h-4 rounded-full bg-success flex items-center justify-center shadow"><Check className="w-3 h-3 text-white" /></div>}
         {img.culling.flag === -1 && <div className="w-4 h-4 rounded-full bg-danger flex items-center justify-center text-[10px] font-bold text-white shadow">X</div>}
       </div>

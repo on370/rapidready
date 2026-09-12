@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Film } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Film, AlertTriangle, Camera } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { LibraryImage } from '../../../../stores/libraryStore';
+import { invoke } from '@tauri-apps/api/core';
+import { LibraryImage, useLibraryStore } from '../../../../stores/libraryStore';
 import { useLibraryUIStore } from '../../../../stores/libraryUIStore';
 import { ZoomableImage } from '../ZoomableImage';
 import { FilmstripBar } from './FilmstripBar';
-import { getRrImageUrl } from '../../../../utils/image';
+import { getRrImageUrl, isRawFilename } from '../../../../utils/image';
 
 export interface LoupeViewerProps {
   activeImage: LibraryImage | undefined;
@@ -41,6 +42,47 @@ export const LoupeViewer = React.memo(function LoupeViewer({
     }, 400);
     return () => clearTimeout(timer);
   }, [activeImageIndex]);
+
+  // Lazy-load metadata for active image if needed
+  useEffect(() => {
+    if (!activeImage) return;
+    if (activeImage.camera === undefined || activeImage.is_monochrome_preview === undefined) {
+      let isMounted = true;
+      invoke<{
+        date: string | null;
+        camera: string | null;
+        lens: string | null;
+        iso: string | null;
+        aperture: string | null;
+        shutter: string | null;
+        is_raw?: boolean;
+        is_monochrome_sensor?: boolean;
+        is_monochrome_preview?: boolean;
+      }>('get_image_metadata', { path: activeImage.path })
+        .then((meta) => {
+          if (isMounted && meta) {
+            useLibraryStore.getState().updateImageMetadata(activeImage.path, {
+              camera: meta.camera || null,
+              lens: meta.lens || null,
+              iso: meta.iso || null,
+              aperture: meta.aperture || null,
+              shutter: meta.shutter || null,
+              date: meta.date || activeImage.date,
+              is_raw: meta.is_raw ?? activeImage.is_raw,
+              is_monochrome_sensor: meta.is_monochrome_sensor ?? false,
+              is_monochrome_preview: meta.is_monochrome_preview ?? false,
+            });
+          }
+        })
+        .catch(console.error);
+
+      return () => {
+        isMounted = false;
+      };
+    }
+  }, [activeImage?.path]);
+
+  const isRaw = activeImage ? (activeImage.is_raw ?? isRawFilename(activeImage.name)) : false;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -126,10 +168,48 @@ export const LoupeViewer = React.memo(function LoupeViewer({
           </button>
         </div>
 
-        <div className="flex items-center gap-4 text-xs text-txt-secondary">
-          <span className="font-semibold text-txt-primary truncate max-w-[200px]" title={activeImage?.name}>
-            {activeImage?.name}
-          </span>
+        <div className="flex items-center gap-3 text-xs text-txt-secondary">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-txt-primary truncate max-w-[200px]" title={activeImage?.name}>
+              {activeImage?.name}
+            </span>
+            {activeImage && (
+              isRaw ? (
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold tracking-wide bg-white/10 text-white/90 border border-white/15">
+                  RAW
+                </span>
+              ) : (
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-medium tracking-wide bg-black/40 text-txt-tertiary border border-white/5">
+                  JPG
+                </span>
+              )
+            )}
+          </div>
+
+          {/* Status Badges */}
+          {isRaw && (
+            <>
+              {activeImage?.is_monochrome_sensor ? (
+                <span 
+                  className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-white/10 border border-white/15 text-white/90 font-medium"
+                  title={t('inspector.monoSensorTooltip', 'Hardware-Monochromsensor. Das RAW enthält native Schwarz-Weiß-Sensordaten ohne Farbfilter.')}
+                >
+                  <Camera className="w-3 h-3 text-white/80" />
+                  <span>{t('inspector.monoSensor', 'Monochrom-Sensor')}</span>
+                </span>
+              ) : activeImage?.is_monochrome_preview ? (
+                <span 
+                  className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] bg-amber-500/20 border border-amber-500/40 text-amber-300 font-semibold shadow-xs"
+                  title={t('inspector.bwWarningTooltip', 'Die Kamera war auf einen Schwarz-Weiß-Bildstil eingestellt. Das Vorschaubild ist monochrom, die RAW-Datei enthält jedoch die vollen Farbinformationen des Sensors.')}
+                >
+                  <AlertTriangle className="w-3 h-3 text-amber-400" />
+                  <span>{t('inspector.bwWarningTitle', 'S/W-Vorschau (RAW ist Farbe)')}</span>
+                </span>
+              ) : null}
+            </>
+          )}
+
+          <span className="text-txt-tertiary">·</span>
           <span>{displayedImages.length > 0 ? activeImageIndex + 1 : 0} / {displayedImages.length}</span>
         </div>
 

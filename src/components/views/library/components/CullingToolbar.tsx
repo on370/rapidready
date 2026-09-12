@@ -227,7 +227,7 @@ export const CullingToolbar = React.memo(function CullingToolbar({
       </div>
 
       {/* 2. Filter Bar: All/Picks/Rejects + Rating, Color, Tag Dropdowns */}
-      <div className="relative z-30 flex items-center gap-3 px-4 py-2 border-b border-app-border bg-app-panel/60 flex-shrink-0 text-xs">
+      <div className="relative z-40 flex items-center gap-3 px-4 py-2 border-b border-app-border bg-app-panel/60 flex-shrink-0 text-xs">
         <span className="text-txt-tertiary font-medium">{t('filters.label')}</span>
         <div className="flex items-center gap-1 text-[11px]">
           <button onClick={() => setFilterMode('all')} className={`filter-pill px-2 py-1 rounded-md font-medium ${filterMode === 'all' ? 'bg-accent/15 text-accent' : 'text-txt-tertiary hover:bg-app-hover'}`}>{t('filters.all')}</button>
@@ -522,7 +522,7 @@ export const CullingToolbar = React.memo(function CullingToolbar({
       </div>
 
       {/* 3. Culling Toolbar: Flags P/U/X, Delete, Stars, Color, Rotation, Share */}
-      <div ref={toolbarRef} className="relative z-20 flex items-center gap-3 px-4 py-2 border-b border-app-border bg-[#111114] flex-shrink-0 overflow-visible whitespace-nowrap">
+      <div ref={toolbarRef} className="relative z-30 flex items-center gap-3 px-4 py-2 border-b border-app-border bg-[#111114] flex-shrink-0 overflow-visible whitespace-nowrap">
         {/* Flag Buttons */}
         <div className="flex items-center gap-0.5 flex-shrink-0">
           <button 

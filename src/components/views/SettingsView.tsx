@@ -242,7 +242,7 @@ export function SettingsView() {
                 <p className="text-sm text-txt-primary">{t('general.startupView.title')}</p>
                 <p className="text-xs text-txt-tertiary">{t('general.startupView.desc')}</p>
               </div>
-              <div className={`toggle-track ${startupView === 'library' ? 'on' : ''}`} onClick={() => setStartupView(startupView === 'library' ? 'import' : 'library')}>
+              <div className={`toggle-track ${startupView === 'import' ? 'on' : ''}`} onClick={() => setStartupView(startupView === 'import' ? 'library' : 'import')}>
                 <div className="toggle-knob"></div>
               </div>
             </div>

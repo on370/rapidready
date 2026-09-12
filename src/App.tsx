@@ -9,9 +9,11 @@ import { SettingsView } from "./components/views/SettingsView";
 import { HelpModal } from "./components/ui/HelpModal";
 import { AboutModal } from "./components/ui/AboutModal";
 import { TextContextMenu } from "./components/ui/TextContextMenu";
+import { ToastContainer } from "./components/ui/ToastContainer";
+import { useToastStore } from "./stores/toastStore";
 import { useSettingsStore } from "./stores/settingsStore";
 import { useNavigationStore } from "./stores/navigationStore";
-import { CullingState, useLibraryStore } from "./stores/libraryStore";
+import { CullingState, useLibraryStore, ArchiveScanProgress, ArchiveChunkPayload, LibraryImage } from "./stores/libraryStore";
 import "./App.css";
 
 function App() {
@@ -32,6 +34,17 @@ function App() {
       }
     );
 
+    const unlistenWatcherError = listen<string>(
+      "sidecar-watcher-error",
+      (event) => {
+        console.warn("Sidecar watcher error:", event.payload);
+        useToastStore.getState().showWarning(
+          "Automatische Sidecar-Synchronisation unterbrochen (z. B. Netzwerkfreigabe getrennt).",
+          "Dateisystem-Überwachung"
+        );
+      }
+    );
+
     // Immediate fallback when returning to the RapidReady window from RapidRAW
     const handleWindowFocus = async () => {
       const state = useLibraryStore.getState();
@@ -47,7 +60,74 @@ function App() {
 
     return () => {
       unlistenPromise.then((unlisten) => unlisten());
+      unlistenWatcherError.then((unlisten) => unlisten());
       window.removeEventListener("focus", handleWindowFocus);
+    };
+  }, []);
+
+  // Real-time synchronization for archive directory scanning (chunks & progress)
+  useEffect(() => {
+    const unlistenScanProgress = listen<ArchiveScanProgress>(
+      "archive_scan_progress",
+      (event) => {
+        const store = useLibraryStore.getState();
+        if (store.activeScanId !== null && event.payload.scan_id !== undefined && event.payload.scan_id !== store.activeScanId) {
+          return;
+        }
+        if (event.payload.is_cancelled) {
+          store.setScanProgress(event.payload);
+          if (store.images.length > 0 || event.payload.files_found > 0) {
+            store.setScanState('stopped');
+          } else {
+            store.setScanState('idle');
+          }
+          store.setIsLoading(false);
+          return;
+        }
+        if (store.scanState === 'stopped') {
+          return;
+        }
+        store.setScanProgress(event.payload);
+        if (event.payload.is_complete) {
+          if (store.scanState === 'scanning' && store.images.length >= 100) {
+            store.setScanState('completed');
+            store.setIsLoading(false);
+            setTimeout(() => {
+              if (useLibraryStore.getState().scanState === 'completed') {
+                useLibraryStore.getState().setScanState('idle');
+              }
+            }, 1200);
+          } else {
+            store.setScanState('idle');
+            store.setIsLoading(false);
+          }
+        } else if (event.payload.is_paused) {
+          store.setScanState('paused');
+        } else if (store.scanState === 'connecting' || store.scanState === 'idle') {
+          store.setScanState('scanning');
+        }
+      }
+    );
+
+    const unlistenScanChunk = listen<ArchiveChunkPayload | LibraryImage[]>(
+      "archive_scan_chunk",
+      (event) => {
+        const store = useLibraryStore.getState();
+        const files = Array.isArray(event.payload) ? event.payload : event.payload.files;
+        const scanId = Array.isArray(event.payload) ? undefined : event.payload.scan_id;
+        if (store.activeScanId !== null && scanId !== undefined && scanId !== store.activeScanId) {
+          return;
+        }
+        store.appendImageChunk(files);
+        if (store.scanState === 'connecting' || store.scanState === 'idle') {
+          store.setScanState('scanning');
+        }
+      }
+    );
+
+    return () => {
+      unlistenScanProgress.then((unlisten) => unlisten());
+      unlistenScanChunk.then((unlisten) => unlisten());
     };
   }, []);
 
@@ -103,6 +183,7 @@ function App() {
       </div>
       <HelpModal />
       <AboutModal />
+      <ToastContainer />
       {textMenu && (
         <TextContextMenu
           x={textMenu.x}

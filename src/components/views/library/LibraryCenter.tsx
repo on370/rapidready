@@ -1,8 +1,9 @@
 import React, { useEffect, useCallback, useState, useRef } from "react";
-import { Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useLibraryStore, LibraryImage, CullingState } from "../../../stores/libraryStore";
 import { ContextMenu } from "./ContextMenu";
+import { ArchiveConnectingOverlay } from "./components/ArchiveConnectingOverlay";
+import { ArchiveScanBanner } from "./components/ArchiveScanBanner";
 import { invoke } from "@tauri-apps/api/core";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { normalizePath } from "../../../utils/image";
@@ -13,6 +14,7 @@ import { LoupeViewer } from "./components/LoupeViewer";
 import { useLibraryShortcuts } from "./hooks/useLibraryShortcuts";
 
 import { useLibraryUIStore } from "../../../stores/libraryUIStore";
+import { useToastStore } from "../../../stores/toastStore";
 
 interface LibraryCenterProps {
   viewMode?: 'grid' | 'loupe';
@@ -46,7 +48,7 @@ export function LibraryCenter({
     selectedRatingFilter,
     selectedColorFilter,
     selectedTagFilter,
-    lastImportPaths, isViewingLastImport, isLoading, rootPath,
+    lastImportPaths, isViewingLastImport, rootPath,
   } = useLibraryStore();
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
@@ -186,8 +188,12 @@ export function LibraryCenter({
       }
     } catch (err) {
       console.error('Failed to rotate images:', err);
+      useToastStore.getState().showError(
+        t('errors.cullingSaveFailedDesc', { defaultValue: 'Die Sidecar-Datei (.rrdata) konnte nicht geschrieben werden.' }),
+        t('errors.cullingSaveFailed', { defaultValue: 'Fehler beim Speichern' })
+      );
     }
-  }, [activeImage, selectedPaths, updateImageCullings]);
+  }, [activeImage, selectedPaths, updateImageCullings, t]);
 
   const handleCulling = useCallback((flag: number | null, rating: number) => {
     if (!activeImage) return;
@@ -198,12 +204,25 @@ export function LibraryCenter({
 
     if (targetPaths.length > 1) {
       updateBatchCullingState(targetPaths, { flag, rating });
-      invoke('set_culling_state_batch', {
+      invoke<{ total: number; succeeded: number; failed: number }>('set_culling_state_batch', {
         paths: targetPaths,
         flag: flag === null ? 0 : flag,
         rating,
         color: null,
-      }).catch(console.error);
+      }).then((res) => {
+        if (res && res.failed > 0) {
+          useToastStore.getState().showWarning(
+            t('errors.batchSaveFailed', { failed: res.failed, total: res.total, defaultValue: `Fehler beim Speichern von ${res.failed} von ${res.total} Dateien.` }),
+            t('errors.cullingSaveFailed', { defaultValue: 'Fehler beim Speichern' })
+          );
+        }
+      }).catch((err) => {
+        console.error('Failed to save batch culling state:', err);
+        useToastStore.getState().showError(
+          t('errors.cullingSaveFailedDesc', { defaultValue: 'Die Sidecar-Datei (.rrdata) konnte nicht geschrieben werden.' }),
+          t('errors.cullingSaveFailed', { defaultValue: 'Fehler beim Speichern' })
+        );
+      });
     } else {
       const globalIndex = images.findIndex(img => img.path === activeImage.path);
       if (globalIndex !== -1) updateCullingState(globalIndex, { flag, rating });
@@ -214,7 +233,13 @@ export function LibraryCenter({
         rating,
         color: activeImage.culling.color,
         tags: activeImage.culling.tags,
-      }).catch(console.error);
+      }).catch((err) => {
+        console.error('Failed to save culling state:', err);
+        useToastStore.getState().showError(
+          t('errors.cullingSaveFailedDesc', { defaultValue: 'Die Sidecar-Datei (.rrdata) konnte nicht geschrieben werden.' }),
+          t('errors.cullingSaveFailed', { defaultValue: 'Fehler beim Speichern' })
+        );
+      });
 
       // Auto-advance only for single selection
       if (autoAdvance && flag !== null && activeImageIndex < displayedImages.length - 1) {
@@ -225,7 +250,7 @@ export function LibraryCenter({
         }
       }
     }
-  }, [activeImage, selectedPaths, images, autoAdvance, activeImageIndex, displayedImages, updateBatchCullingState, updateCullingState, setActiveImageIndex, setSelectedPaths]);
+  }, [activeImage, selectedPaths, images, autoAdvance, activeImageIndex, displayedImages, updateBatchCullingState, updateCullingState, setActiveImageIndex, setSelectedPaths, t]);
 
   const handleSetColor = useCallback((newColor: string | null) => {
     if (!activeImage) return;
@@ -236,10 +261,23 @@ export function LibraryCenter({
 
     if (targetPaths.length > 1) {
       updateBatchCullingState(targetPaths, { color: newColor });
-      invoke('set_culling_state_batch', {
+      invoke<{ total: number; succeeded: number; failed: number }>('set_culling_state_batch', {
         paths: targetPaths,
         color: newColor || 'none',
-      }).catch(console.error);
+      }).then((res) => {
+        if (res && res.failed > 0) {
+          useToastStore.getState().showWarning(
+            t('errors.batchSaveFailed', { failed: res.failed, total: res.total, defaultValue: `Fehler beim Speichern von ${res.failed} von ${res.total} Dateien.` }),
+            t('errors.cullingSaveFailed', { defaultValue: 'Fehler beim Speichern' })
+          );
+        }
+      }).catch((err) => {
+        console.error('Failed to set batch color:', err);
+        useToastStore.getState().showError(
+          t('errors.cullingSaveFailedDesc', { defaultValue: 'Die Sidecar-Datei (.rrdata) konnte nicht geschrieben werden.' }),
+          t('errors.cullingSaveFailed', { defaultValue: 'Fehler beim Speichern' })
+        );
+      });
     } else {
       const globalIndex = images.findIndex(img => img.path === activeImage.path);
       if (globalIndex !== -1) updateCullingState(globalIndex, { color: newColor });
@@ -250,9 +288,15 @@ export function LibraryCenter({
         rating: activeImage.culling.rating,
         color: newColor,
         tags: activeImage.culling.tags,
-      }).catch(console.error);
+      }).catch((err) => {
+        console.error('Failed to set color:', err);
+        useToastStore.getState().showError(
+          t('errors.cullingSaveFailedDesc', { defaultValue: 'Die Sidecar-Datei (.rrdata) konnte nicht geschrieben werden.' }),
+          t('errors.cullingSaveFailed', { defaultValue: 'Fehler beim Speichern' })
+        );
+      });
     }
-  }, [activeImage, selectedPaths, images, updateBatchCullingState, updateCullingState]);
+  }, [activeImage, selectedPaths, images, updateBatchCullingState, updateCullingState, t]);
 
   const rejectedImages = React.useMemo(() => {
     return scopedImages.filter(i => i.culling.flag === -1);
@@ -340,7 +384,7 @@ export function LibraryCenter({
       />
 
       {/* Content Area */}
-      <div className="flex-1 relative min-h-0 min-w-0 overflow-hidden">
+      <div className="flex-1 relative min-h-0 min-w-0 overflow-hidden z-0">
         {/* LibraryGrid: kept mounted at all times to preserve DOM layout and scroll state */}
         <div 
           className={`absolute inset-0 flex flex-col ${viewMode === 'grid' ? 'z-10 visible' : 'z-0 invisible pointer-events-none'}`}
@@ -361,7 +405,7 @@ export function LibraryCenter({
 
         {/* LoupeViewer: mounted on-demand when viewMode === 'loupe' */}
         {viewMode === 'loupe' && (
-          <div className="absolute inset-0 z-20 flex flex-col">
+          <div className="absolute inset-0 z-10 flex flex-col">
             <LoupeViewer
               activeImage={activeImage}
               activeImageIndex={activeImageIndex}
@@ -401,14 +445,11 @@ export function LibraryCenter({
         />
       )}
 
-      {/* Loading Overlay when directory is being scanned */}
-      {isLoading && (
-        <div className="absolute inset-0 bg-app-deepest/80 backdrop-blur-xs z-50 flex flex-col items-center justify-center gap-3 animate-in fade-in duration-150">
-          <Loader2 className="w-8 h-8 text-accent animate-spin" />
-          <p className="text-sm font-semibold text-txt-primary">{t('loading.indexing')}</p>
-          <p className="text-xs text-txt-tertiary">{t('loading.syncing')}</p>
-        </div>
-      )}
+      {/* Phase 1: Connecting Overlay (debounced >300ms, cancelable) */}
+      <ArchiveConnectingOverlay />
+
+      {/* Phase 2 & 3: Non-blocking Progressive Scan Banner */}
+      <ArchiveScanBanner />
     </div>
   );
 }
