@@ -112,7 +112,7 @@ pub fn run() {
             if is_fullres {
                 let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
                 
-                if ["cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2"].contains(&ext.as_str()) {
+                if ["cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2", "pef", "3fr", "x3f", "nrw", "heic", "heif", "hif"].contains(&ext.as_str()) {
                     match rapidready_core::thumbnail::get_max_preview_jpeg(path) {
                         Ok(bytes) => {
                             let res = Response::builder()
@@ -166,9 +166,19 @@ pub fn run() {
                 }
                 Err(_) => {
                     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
-                    if ["jpg", "jpeg", "png"].contains(&ext.as_str()) {
+                    if ["jpg", "jpeg", "png", "heic", "heif", "hif", "webp", "avif"].contains(&ext.as_str()) {
                         if let Ok(bytes) = std::fs::read(path) {
-                            let content_type = if ext == "png" { "image/png" } else { "image/jpeg" };
+                            let content_type = if ext == "png" {
+                                "image/png"
+                            } else if ext == "webp" {
+                                "image/webp"
+                            } else if ext == "avif" {
+                                "image/avif"
+                            } else if ext == "heic" || ext == "heif" || ext == "hif" {
+                                "image/heic"
+                            } else {
+                                "image/jpeg"
+                            };
                             Response::builder()
                                 .header("Content-Type", content_type)
                                 .header("Access-Control-Allow-Origin", "*")

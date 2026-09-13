@@ -58,6 +58,9 @@ export const LoupeViewer = React.memo(function LoupeViewer({
         is_raw?: boolean;
         is_monochrome_sensor?: boolean;
         is_monochrome_preview?: boolean;
+        latitude?: number | null;
+        longitude?: number | null;
+        altitude?: number | null;
       }>('get_image_metadata', { path: activeImage.path })
         .then((meta) => {
           if (isMounted && meta) {
@@ -71,6 +74,9 @@ export const LoupeViewer = React.memo(function LoupeViewer({
               is_raw: meta.is_raw ?? activeImage.is_raw,
               is_monochrome_sensor: meta.is_monochrome_sensor ?? false,
               is_monochrome_preview: meta.is_monochrome_preview ?? false,
+              latitude: meta.latitude ?? null,
+              longitude: meta.longitude ?? null,
+              altitude: meta.altitude ?? null,
             });
           }
         })

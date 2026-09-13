@@ -69,7 +69,7 @@ export const FilmstripThumbnailItem = React.memo(function FilmstripThumbnailItem
           </span>
         ) : (
           <span className="px-1 py-0.2 rounded text-[8px] font-mono font-medium tracking-wider bg-black/50 text-txt-tertiary border border-white/5 shadow-sm leading-tight inline-block">
-            JPG
+            {img.name.split('.').pop()?.toUpperCase() || 'JPG'}
           </span>
         )}
       </div>

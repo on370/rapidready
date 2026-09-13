@@ -32,6 +32,14 @@
       "desc": "Opens the app in Import Mode rather than Library upon startup"
     }
   },
+  "gps": {
+    "title": "View GPS Location in",
+    "subtitle": "Choose your preferred service to open geotagged coordinates",
+    "googleMaps": "Google Maps in Browser",
+    "openStreetMap": "OpenStreetMap in Browser",
+    "internalViewer": "Internal Viewer",
+    "comingSoon": "Coming Soon"
+  },
   "rapidraw": {
     "title": "RapidRaw Integration",
     "openAfterImport": {

@@ -151,7 +151,13 @@
     "bwWarningSubtitle": "Camera style is Black & White. The RAW file contains full color information!",
     "bwWarningTooltip": "The camera was set to a Black & White picture style. The preview image is monochrome, but the RAW file contains the sensor's full color information.",
     "previewRendering": "Preview: In-Camera JPEG",
-    "inCameraPreviewTooltip": "Embedded in-camera preview (color and exposure may differ from RAW development)."
+    "inCameraPreviewTooltip": "Embedded in-camera preview (color and exposure may differ from RAW development).",
+    "location": "Location / GPS",
+    "coordinates": "Coordinates",
+    "altitude": "Altitude",
+    "noGps": "No GPS data available",
+    "openInMaps": "Show on Map",
+    "openInMapsTooltip": "Open coordinates in Google Maps"
   },
   "colors": {
     "none": "No Color",

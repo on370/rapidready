@@ -9,7 +9,8 @@
     "hintSelectSource": "Please select a source (SD card or folder)",
     "hintSelectDestination": "Please select a destination folder on the right",
     "hintNoFiles": "No media files found on source",
-    "hintSelectFiles": "Please select at least one photo to import"
+    "hintSelectFiles": "Please select at least one photo to import",
+    "hintSourceDisconnected": "Source media disconnected – import unavailable"
   },
   "source": {
     "title": "Source",
@@ -88,7 +89,11 @@
     "lightbox100": "1:1 Sensor (100%)",
     "lightboxClose": "Close",
     "selectedForImport": "Selected for import",
-    "photoCounter": "{{current}} of {{total}}"
+    "photoCounter": "{{current}} of {{total}}",
+    "sourceDisconnectedTitle": "SD Card / Media Disconnected",
+    "sourceDisconnectedDesc": "The connection to the source media was lost. Please reconnect the memory card or return to source selection.",
+    "btnBackToSource": "Back to Source Selection",
+    "sourceReconnectionHint": "The preview will be automatically restored once reconnected."
   },
   "execute": {
     "importing": "Importing Files",

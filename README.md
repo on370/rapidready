@@ -2,27 +2,41 @@
   <img src="RapidReady-icon2r1-apple-1024.png" alt="RapidReady Logo" width="220" />
   
   <h1>RapidReady</h1>
-  <p><strong>The blazingly fast companion app for RapidRaw.</strong></p>
+  <p><strong>The blazingly fast companion app for RapidRAW and other RAW developers.</strong></p>
 </div>
 
 <br/>
 
 ## ⚡ What is RapidReady?
 
-**RapidReady** is a lightning-fast, native desktop application designed to bridge the gap between camera media and your photo editing workflow. Built specifically as the ultimate companion tool for **RapidRaw**, it handles the heavy lifting of importing, organizing, and culling massive amounts of high-resolution RAW files with zero lag.
+**RapidReady** is a lightning-fast, native desktop application designed to bridge the gap between camera media and your photo editing workflow. Built as the ultimate ingest and culling companion for **RapidRAW** (and designed to integrate seamlessly with other RAW developers via universal sidecars), it handles the heavy lifting of importing, organizing, and rating massive amounts of high-resolution RAW files with zero lag.
 
-Photographers often shoot thousands of photos on a single job. RapidReady is built to ensure you never wait for a progress bar or a rendering thumbnail when you need to review your shots.
+Even if you aren't heading into full RAW development right away, RapidReady is a complete, standalone high-speed tool in its own right: whether you're backing up memory cards, performing a lightning-fast cull across thousands of shots, or simply browsing massive photo archives without ever waiting for a rendering progress bar.
 
 ## 🚀 Key Features (Current & Planned)
 
 - **Blazing Fast RAW Engine:** Powered by a custom Rust backend, RapidReady extracts embedded JPEGs from CR2, CR3, ARW, and other proprietary RAW formats instantly without slow decodes.
 - **Zero-Latency Culling & Viewing:** Navigate through massive folders of high-resolution RAW files in real-time. Responsive filmstrip, split folder navigation, and instant sidecar synchronization.
 - **Advanced Culling & Organization:** One-touch flags (`Pick`, `Reject`, `Unflag`), star ratings (`1`-`5`), 5 color labels (`6`-`9`), and tag management with live autocomplete.
+- **GPS & Location Inspection:** Instant EXIF GPS coordinate extraction, dual photographic DMS & decimal display, altitude, and 1-click map opening in Google Maps or OpenStreetMap (with custom service selection in Settings).
 - **Multi-Level Orthogonal Filtering:** Modular filter dropdowns to slice archives by picks, minimum rating, color labels, and tags in real-time.
 - **Smart Import Workflows:** Define custom *Import Presets* and *Archive Locations*. Automatically rename files, create date-based subfolders, and verify copies from SD cards to SSDs.
 - **Seamless RapidRaw Integration:** Deeply integrated with [RapidRaw](https://www.getrapidraw.com/). Open images directly in RapidRaw (`R`) or reveal them in the system file manager (`Cmd+Shift+F` / `Ctrl+Shift+F`).
 - **Multilingual (i18n):** Full native support for English and German interfaces.
 - **Cross-Platform Foundation:** Built on [Tauri v2](https://v2.tauri.app/), [React](https://react.dev/), and [Rust](https://www.rust-lang.org/) for native OS performance with a beautiful, modern UI.
+
+## 📸 Supported Formats & Media
+
+RapidReady is engineered for professional camera workflows, high-speed SD card ingestion, and massive photo archives:
+
+### Currently Supported Formats
+- **RAW Camera Formats:** Canon (`.cr2`, `.cr3`), Sony (`.arw`), Nikon (`.nef`, `.nrw`), Adobe/Leica/Ricoh (`.dng`), Fujifilm (`.raf`), Olympus/OM System (`.orf`), Panasonic Lumix (`.rw2`), Pentax (`.pef`), Hasselblad (`.3fr`), Sigma (`.x3f`).
+- **Raster & Next-Gen Formats:** JPEG (`.jpg`, `.jpeg`), HEIF/HEIC (`.heic`, `.heif`, `.hif` with RAW+HIF pairing support), WebP (`.webp`), AVIF (`.avif`), PNG (`.png`), TIFF (`.tif`, `.tiff`).
+- **Video Import (Basic Ingestion):** `.mp4`, `.mov`, `.m4v`, `.avi`.
+
+> [!TIP]
+> **Roadmap & Upcoming Media Support:**  
+> A dedicated **native video pipeline** (embedded playback with scrubber, AVCHD `.mts`/`.m2ts`, Canon Cinema RAW `.crm`, Nikon N-RAW `.nev`, runtime badges, and streaming via HTTP range requests) as well as **vintage and specialized RAW formats** (Leica `.rwl`, Hasselblad Studio `.fff`, Phase One `.iiq`, Canon `.crw`) and JPEG XL (`.jxl`) are actively planned on our roadmap. 
 
 ## 🛠️ Technology Stack
 

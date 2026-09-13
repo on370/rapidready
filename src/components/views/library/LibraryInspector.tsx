@@ -1,17 +1,29 @@
 import { useEffect, useMemo, useState, useRef } from "react";
 import { 
   X, MousePointerClick, Star, Check, RotateCw, RotateCcw, Tag, CircleSlash,
-  AlertTriangle, Camera
+  AlertTriangle, Camera, MapPin, ExternalLink
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useLibraryStore } from "../../../stores/libraryStore";
 import { invoke } from "@tauri-apps/api/core";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { getRrImageUrl, normalizePath } from "../../../utils/image";
 import { COLOR_PALETTE } from "../../../constants/culling";
 import { useToastStore } from "../../../stores/toastStore";
+import { useSettingsStore } from "../../../stores/settingsStore";
 
 interface LibraryInspectorProps {
   close: () => void;
+}
+
+function formatDms(val: number, isLat: boolean): string {
+  const abs = Math.abs(val);
+  const deg = Math.floor(abs);
+  const minFloat = (abs - deg) * 60;
+  const min = Math.floor(minFloat);
+  const sec = ((minFloat - min) * 60).toFixed(1);
+  const dir = isLat ? (val >= 0 ? 'N' : 'S') : (val >= 0 ? 'E' : 'W');
+  return `${deg}° ${String(min).padStart(2, '0')}' ${sec.padStart(4, '0')}" ${dir}`;
 }
 
 export function LibraryInspector({ close }: LibraryInspectorProps) {
@@ -22,6 +34,7 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
     updateImageMetadata, activeFolderPath, 
     lastImportPaths, isViewingLastImport, rootPath 
   } = useLibraryStore();
+  const gpsMapProvider = useSettingsStore((s) => s.gpsMapProvider);
 
   const [tagInput, setTagInput] = useState('');
   const [isSuggestOpen, setIsSuggestOpen] = useState(false);
@@ -67,7 +80,7 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
   // Lazy-load detailed EXIF metadata when an image is selected
   useEffect(() => {
     if (!activeImage) return;
-    if (activeImage.camera === undefined || activeImage.camera === null) {
+    if (activeImage.camera === undefined || activeImage.is_monochrome_preview === undefined) {
       let isMounted = true;
       invoke<{
         date: string | null;
@@ -79,6 +92,9 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
         is_raw?: boolean;
         is_monochrome_sensor?: boolean;
         is_monochrome_preview?: boolean;
+        latitude?: number | null;
+        longitude?: number | null;
+        altitude?: number | null;
       }>('get_image_metadata', { path: activeImage.path })
         .then(meta => {
           if (isMounted && meta) {
@@ -92,6 +108,9 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
               is_raw: meta.is_raw ?? activeImage.is_raw,
               is_monochrome_sensor: meta.is_monochrome_sensor ?? false,
               is_monochrome_preview: meta.is_monochrome_preview ?? false,
+              latitude: meta.latitude ?? null,
+              longitude: meta.longitude ?? null,
+              altitude: meta.altitude ?? null,
             });
           }
         })
@@ -739,6 +758,58 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* GPS / Location Info */}
+            <div className="bg-app-card border border-app-border rounded-xl p-3 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <h3 className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider flex items-center gap-1.5">
+                  <MapPin className="w-3 h-3 text-txt-tertiary" />
+                  {t('inspector.location')}
+                </h3>
+                {activeImage.latitude != null && activeImage.longitude != null && (
+                  <button
+                    onClick={() => {
+                      const lat = activeImage.latitude!;
+                      const lon = activeImage.longitude!;
+                      const url = gpsMapProvider === 'osm'
+                        ? `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=16/${lat}/${lon}`
+                        : `https://www.google.com/maps?q=${lat},${lon}`;
+                      openUrl(url).catch(console.error);
+                    }}
+                    className="flex items-center gap-1 text-[10px] text-accent hover:underline hover:text-accent/80 transition-colors"
+                    title={gpsMapProvider === 'osm' ? 'OpenStreetMap' : 'Google Maps'}
+                  >
+                    <span>{t('inspector.openInMaps')}</span>
+                    <ExternalLink className="w-2.5 h-2.5" />
+                  </button>
+                )}
+              </div>
+              {activeImage.latitude != null && activeImage.longitude != null ? (
+                <div className="space-y-1.5 text-[11px]">
+                  <div>
+                    <span className="text-txt-tertiary block text-[10px]">{t('inspector.coordinates')}</span>
+                    <p className="text-txt-primary font-mono text-[11px] font-medium select-text">
+                      {formatDms(activeImage.latitude, true)}, {formatDms(activeImage.longitude, false)}
+                    </p>
+                    <p className="text-txt-tertiary font-mono text-[10px] select-text">
+                      {activeImage.latitude.toFixed(6)}°, {activeImage.longitude.toFixed(6)}°
+                    </p>
+                  </div>
+                  {activeImage.altitude != null && (
+                    <div className="pt-1 border-t border-app-border/40 flex justify-between items-center">
+                      <span className="text-txt-tertiary text-[10px]">{t('inspector.altitude')}</span>
+                      <span className="text-txt-primary font-mono font-medium text-[11px]">
+                        {Math.round(activeImage.altitude)} m
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-[11px] text-txt-tertiary">
+                  {t('inspector.noGps')}
+                </div>
+              )}
             </div>
           </div>
         )}

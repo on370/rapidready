@@ -25,6 +25,9 @@ export interface LibraryImage {
   is_raw?: boolean;
   is_monochrome_sensor?: boolean;
   is_monochrome_preview?: boolean;
+  latitude?: number | null;
+  longitude?: number | null;
+  altitude?: number | null;
 }
 
 export interface ArchiveScanProgress {

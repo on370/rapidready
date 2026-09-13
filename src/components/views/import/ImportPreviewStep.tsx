@@ -1,13 +1,14 @@
-import { GitBranch, Folder, ChevronDown, MousePointerClick, Camera, CheckCircle2, Filter, X, Info, Maximize2 } from "lucide-react";
+import { GitBranch, Folder, ChevronDown, MousePointerClick, Camera, CheckCircle2, Filter, X, Info, Maximize2, ArrowLeft, AlertTriangle, HardDrive } from "lucide-react";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
+import { invoke } from "@tauri-apps/api/core";
 import { useImportStore, ScannedFile } from '../../../stores/importStore';
 import { getRrImageUrl } from '../../../utils/image';
 import { DestinationInfoBar } from './components/DestinationInfoBar';
 import { ImportLightboxModal } from './components/ImportLightboxModal';
 
-const RAW_EXTENSIONS = new Set(["cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2"]);
-const JPG_EXTENSIONS = new Set(["jpg", "jpeg"]);
+const RAW_EXTENSIONS = new Set(["cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2", "pef", "3fr", "x3f", "nrw"]);
+const COMPANION_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "heic", "heif", "hif", "webp", "avif"]);
 
 export interface PairedImportItem {
   id: string;
@@ -25,7 +26,11 @@ export interface PairedImportItem {
   formatted_date: string | null;
 }
 
-export function ImportPreviewStep() {
+export interface ImportPreviewStepProps {
+  onBack?: () => void;
+}
+
+export function ImportPreviewStep({ onBack }: ImportPreviewStepProps = {}) {
   const { t } = useTranslation("import");
   const { t: tHelp } = useTranslation("help");
   const [isHelpOpen, setIsHelpOpen] = useState(false);
@@ -49,7 +54,52 @@ export function ImportPreviewStep() {
     setFullresLoaded(false);
   }, [selectedPairId]);
   const [collapsedDates, setCollapsedDates] = useState<Set<string>>(new Set());
-  const { scannedFiles, toggleFileSelection, toggleGroupSelection, hideImported } = useImportStore();
+  const { 
+    scannedFiles, 
+    toggleFileSelection, 
+    toggleGroupSelection, 
+    hideImported,
+    sourceDirectory,
+    isSourceDisconnected,
+    setIsSourceDisconnected,
+    setSourceDirectory,
+    setScannedFiles,
+  } = useImportStore();
+
+  // Monitor source drive / media availability
+  useEffect(() => {
+    if (!sourceDirectory) return;
+
+    let isMounted = true;
+    const verifySource = async () => {
+      try {
+        const exists = await invoke<boolean>('check_path_exists', { path: sourceDirectory });
+        if (isMounted) {
+          setIsSourceDisconnected(!exists);
+        }
+      } catch {
+        if (isMounted) {
+          setIsSourceDisconnected(true);
+        }
+      }
+    };
+
+    verifySource();
+    const interval = setInterval(verifySource, 1200);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+      setIsSourceDisconnected(false);
+    };
+  }, [sourceDirectory, setIsSourceDisconnected]);
+
+  const handleBackToSource = () => {
+    setIsSourceDisconnected(false);
+    setSourceDirectory(null);
+    setScannedFiles([]);
+    onBack?.();
+  };
 
   const toggleDateCollapse = (dateKey: string) => {
     setCollapsedDates(prev => {
@@ -94,7 +144,7 @@ export function ImportPreviewStep() {
         const entry = pairMap.get(pairKey)!;
         if (RAW_EXTENSIONS.has(ext)) {
           entry.raw = file;
-        } else if (JPG_EXTENSIONS.has(ext)) {
+        } else if (COMPANION_IMAGE_EXTENSIONS.has(ext)) {
           entry.jpg = file;
         } else {
           entry.others.push(file);
@@ -224,11 +274,45 @@ export function ImportPreviewStep() {
       <div className="flex-1 min-h-0 overflow-hidden gap-6 flex">
         {/* Left Panel: File Tree */}
         <div className="w-[440px] flex-shrink-0 flex flex-col min-h-0 overflow-hidden">
-        <div className="flex items-center justify-between flex-shrink-0 mb-3">
-          <div className="flex items-center gap-2">
-            <GitBranch className="w-4 h-4 text-txt-secondary" />
-            <h2 className="text-sm font-semibold text-txt-primary uppercase tracking-wider">Planned Import Structure</h2>
-          </div>
+          {isSourceDisconnected ? (
+            <div className="flex-1 min-h-0 flex flex-col items-center justify-center text-center p-8 bg-app-card border border-warning/30 rounded-xl shadow-lg shadow-warning/5">
+              <div className="relative mb-5">
+                <div className="w-16 h-16 rounded-2xl bg-warning/10 border border-warning/20 flex items-center justify-center text-warning shadow-md shadow-warning/10">
+                  <HardDrive className="w-8 h-8" />
+                </div>
+                <div className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-amber-500 text-app-deepest flex items-center justify-center shadow">
+                  <AlertTriangle className="w-3.5 h-3.5 stroke-[2.5]" />
+                </div>
+              </div>
+
+              <h3 className="text-base font-semibold text-txt-primary mb-2">
+                {t('preview.sourceDisconnectedTitle')}
+              </h3>
+
+              <p className="text-xs text-txt-secondary max-w-[300px] leading-relaxed mb-6">
+                {t('preview.sourceDisconnectedDesc')}
+              </p>
+
+              <button
+                type="button"
+                onClick={handleBackToSource}
+                className="px-5 py-2.5 bg-accent hover:bg-accent-hover text-app-deepest font-semibold rounded-lg text-xs flex items-center gap-2 transition-all cursor-pointer shadow-md shadow-accent/15"
+              >
+                <ArrowLeft className="w-4 h-4 stroke-[2.5]" />
+                <span>{t('preview.btnBackToSource')}</span>
+              </button>
+
+              <p className="mt-4 text-[11px] text-txt-tertiary max-w-[280px]">
+                {t('preview.sourceReconnectionHint')}
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between flex-shrink-0 mb-3">
+                <div className="flex items-center gap-2">
+                  <GitBranch className="w-4 h-4 text-txt-secondary" />
+                  <h2 className="text-sm font-semibold text-txt-primary uppercase tracking-wider">Planned Import Structure</h2>
+                </div>
           <div className="flex items-center gap-2">
             <span className="text-xs text-txt-tertiary">{selectedFilesCount} of {scannedFiles.length} files</span>
             <div 
@@ -339,7 +423,7 @@ export function ImportPreviewStep() {
                             }`}
                             title={t('preview.toggleJpg')}
                           >
-                            JPG
+                            {pair.jpgFile.name.split('.').pop()?.toUpperCase() || 'JPG'}
                           </button>
                         )}
                         {pair.otherFile && (
@@ -380,10 +464,12 @@ export function ImportPreviewStep() {
             );
           })}
         </div>
-      </div>
+      </>
+    )}
+  </div>
 
-      {/* Right Panel: Metadata Inspector */}
-      <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden pl-4">
+  {/* Right Panel: Metadata Inspector */}
+  <div className={`flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden pl-4 transition-opacity duration-200 ${isSourceDisconnected ? 'opacity-40 pointer-events-none' : ''}`}>
         <div className="flex items-center justify-between flex-shrink-0 mb-3">
           <div className="flex items-center gap-2">
             <div className="relative" ref={popoverRef}>

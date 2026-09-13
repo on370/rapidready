@@ -96,7 +96,7 @@ export const GridThumbnailItem = React.memo(function GridThumbnailItem({
           </span>
         ) : (
           <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-medium tracking-wide bg-black/40 text-txt-tertiary border border-white/5 shadow-sm backdrop-blur-xs">
-            JPG
+            {img.name.split('.').pop()?.toUpperCase() || 'JPG'}
           </span>
         )}
       </div>

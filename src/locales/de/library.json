@@ -151,7 +151,13 @@
     "bwWarningSubtitle": "Kamerastil ist Schwarz-Weiß. Die RAW-Datei enthält alle Farbinformationen!",
     "bwWarningTooltip": "Die Kamera war auf einen Schwarz-Weiß-Bildstil eingestellt. Das Vorschaubild ist monochrom, die RAW-Datei enthält jedoch die vollen Farbinformationen des Sensors.",
     "previewRendering": "Vorschau: In-Camera JPEG",
-    "inCameraPreviewTooltip": "Eingebettete Kamera-Vorschau (Farbe & Belichtung können vom RAW-Entwickler abweichen)."
+    "inCameraPreviewTooltip": "Eingebettete Kamera-Vorschau (Farbe & Belichtung können vom RAW-Entwickler abweichen).",
+    "location": "Standort / GPS",
+    "coordinates": "Koordinaten",
+    "altitude": "Höhe",
+    "noGps": "Keine GPS-Daten vorhanden",
+    "openInMaps": "Auf Karte zeigen",
+    "openInMapsTooltip": "Koordinaten in Google Maps öffnen"
   },
   "colors": {
     "none": "Keine Farbe",

@@ -9,7 +9,8 @@
     "hintSelectSource": "Bitte wähle eine Quelle (SD-Karte oder Ordner) aus",
     "hintSelectDestination": "Bitte wähle rechts einen Zielordner aus",
     "hintNoFiles": "Keine Mediendateien auf der Quelle gefunden",
-    "hintSelectFiles": "Bitte mindestens ein Foto zum Import auswählen"
+    "hintSelectFiles": "Bitte mindestens ein Foto zum Import auswählen",
+    "hintSourceDisconnected": "Quellmedium wurde getrennt – Import nicht möglich"
   },
   "source": {
     "title": "Quelle",
@@ -88,7 +89,11 @@
     "lightbox100": "1:1 Sensor (100%)",
     "lightboxClose": "Schließen",
     "selectedForImport": "Für Import ausgewählt",
-    "photoCounter": "{{current}} von {{total}}"
+    "photoCounter": "{{current}} von {{total}}",
+    "sourceDisconnectedTitle": "SD-Karte / Medium getrennt",
+    "sourceDisconnectedDesc": "Die Verbindung zum Quellmedium wurde unterbrochen. Bitte die Speicherkarte erneut verbinden oder zur Quellenauswahl zurückkehren.",
+    "btnBackToSource": "Zurück zur Quellenauswahl",
+    "sourceReconnectionHint": "Die Vorschau wird bei erneuter Verbindung automatisch wiederhergestellt."
   },
   "execute": {
     "importing": "Dateien importieren",

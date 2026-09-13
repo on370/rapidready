@@ -146,7 +146,7 @@ where
     let initial_count = existing_paths.map(|s| s.len()).unwrap_or(0);
     let mut files = Vec::new();
     let supported_exts = [
-        "jpg", "jpeg", "png", "tif", "tiff", // Raster
+        "jpg", "jpeg", "png", "tif", "tiff", "heic", "heif", "hif", "webp", "avif", // Raster
         "cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2", "pef", "3fr", "x3f", "nrw", // RAW
     ];
 

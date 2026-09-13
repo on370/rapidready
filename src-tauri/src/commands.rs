@@ -60,7 +60,10 @@ fn find_first_image_in_path(path_str: &str) -> String {
         return path_str.to_string();
     }
     if p.is_dir() {
-        let valid_extensions = ["cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2", "jpg", "jpeg", "png", "tif", "tiff"];
+        let valid_extensions = [
+            "cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2", "pef", "3fr", "x3f", "nrw",
+            "jpg", "jpeg", "png", "tif", "tiff", "heic", "heif", "hif", "webp", "avif"
+        ];
         if let Ok(entries) = std::fs::read_dir(p) {
             for entry in entries.flatten() {
                 let entry_path = entry.path();

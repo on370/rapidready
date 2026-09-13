@@ -9,7 +9,16 @@ import { useImportStore } from "../../stores/importStore";
 export function ImportView() {
   const { t } = useTranslation('import');
   const [currentStep, setCurrentStep] = useState<number>(1);
-  const { scannedFiles, sourceDirectory, destinationDirectory, isScanning } = useImportStore();
+  const { 
+    scannedFiles, 
+    sourceDirectory, 
+    destinationDirectory, 
+    isScanning, 
+    isSourceDisconnected,
+    setSourceDirectory,
+    setScannedFiles,
+    setIsSourceDisconnected,
+  } = useImportStore();
 
   const selectedCount = scannedFiles.filter(f => f.selected).length;
 
@@ -23,7 +32,7 @@ export function ImportView() {
       );
     }
     if (currentStep === 2) {
-      return selectedCount > 0 && destinationDirectory !== null;
+      return selectedCount > 0 && destinationDirectory !== null && !isSourceDisconnected;
     }
     return false;
   };
@@ -35,6 +44,11 @@ export function ImportView() {
 
   const handlePrev = () => {
     if (isScanning) return;
+    if (currentStep === 2 && isSourceDisconnected) {
+      setSourceDirectory(null);
+      setScannedFiles([]);
+      setIsSourceDisconnected(false);
+    }
     setCurrentStep((prev) => Math.max(prev - 1, 1));
   };
 
@@ -47,6 +61,11 @@ export function ImportView() {
 
   const handleStepClick = (step: number) => {
     if (canGoToStep(step)) {
+      if (step === 1 && isSourceDisconnected) {
+        setSourceDirectory(null);
+        setScannedFiles([]);
+        setIsSourceDisconnected(false);
+      }
       setCurrentStep(step);
     }
   };
@@ -79,7 +98,7 @@ export function ImportView() {
       {/* Step Content Container */}
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden relative">
         {currentStep === 1 && <ImportSourceStep />}
-        {currentStep === 2 && <ImportPreviewStep />}
+        {currentStep === 2 && <ImportPreviewStep onBack={() => setCurrentStep(1)} />}
         {currentStep === 3 && <ImportExecuteStep onReset={() => setCurrentStep(1)} />}
       </div>
 
@@ -106,6 +125,7 @@ export function ImportView() {
                     !destinationDirectory ? t('wizard.hintSelectDestination') :
                     scannedFiles.length === 0 ? t('wizard.hintNoFiles') : ''
                   ) : (
+                    isSourceDisconnected ? t('wizard.hintSourceDisconnected') :
                     !destinationDirectory ? t('wizard.hintSelectDestination') :
                     selectedCount === 0 ? t('wizard.hintSelectFiles') : ''
                   )

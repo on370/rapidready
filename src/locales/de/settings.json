@@ -32,6 +32,14 @@
       "desc": "Öffnet beim App-Start die Import-Ansicht anstelle der Bibliothek"
     }
   },
+  "gps": {
+    "title": "View GPS Location in",
+    "subtitle": "Wähle den bevorzugten Dienst zum Öffnen von Geokoordinaten",
+    "googleMaps": "Google Maps im Browser",
+    "openStreetMap": "OpenStreetMap im Browser",
+    "internalViewer": "Integrierter Viewer",
+    "comingSoon": "Demnächst"
+  },
   "rapidraw": {
     "title": "RapidRaw Integration",
     "openAfterImport": {

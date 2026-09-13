@@ -27,6 +27,7 @@ interface SettingsState {
   openRapidRaw: boolean;
   startupView: 'import' | 'library';
   lastLibraryPath: string | null;
+  gpsMapProvider: 'google' | 'osm' | 'internal';
   locations: ArchiveLocation[];
   recentPaths: string[];
   presets: ImportPreset[];
@@ -38,6 +39,7 @@ interface SettingsState {
   setOpenRapidRaw: (val: boolean) => void;
   setStartupView: (val: 'import' | 'library') => void;
   setLastLibraryPath: (val: string | null) => void;
+  setGpsMapProvider: (val: 'google' | 'osm' | 'internal') => void;
   addLocation: (location: ArchiveLocation) => void;
   removeLocation: (id: string) => void;
   updateLocation: (id: string, name: string, path?: string) => void;
@@ -57,6 +59,7 @@ export const useSettingsStore = create<SettingsState>()(
       openRapidRaw: true,
       startupView: 'library',
       lastLibraryPath: null,
+      gpsMapProvider: 'google',
       locations: [],
       recentPaths: [],
       presets: [
@@ -78,6 +81,7 @@ export const useSettingsStore = create<SettingsState>()(
       setOpenRapidRaw: (openRapidRaw) => set({ openRapidRaw }),
       setStartupView: (startupView) => set({ startupView }),
       setLastLibraryPath: (lastLibraryPath) => set({ lastLibraryPath }),
+      setGpsMapProvider: (gpsMapProvider) => set({ gpsMapProvider }),
       addLocation: (location) => set((state) => {
         if (state.locations.some(l => l.id === location.id || normalizePath(l.path) === normalizePath(location.path))) {
           return state;

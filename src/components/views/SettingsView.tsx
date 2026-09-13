@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Settings, Folder, Plus, Globe, Settings2, Trash2, Edit2, Check } from "lucide-react";
+import { Settings, Folder, Plus, Globe, Settings2, Trash2, Edit2, Check, MapPin } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useSettingsStore } from "../../stores/settingsStore";
@@ -89,6 +89,7 @@ export function SettingsView() {
     */
     openRapidRaw, setOpenRapidRaw,
     startupView, setStartupView,
+    gpsMapProvider, setGpsMapProvider,
     locations, addLocation, removeLocation, updateLocation,
     presets, addPreset, removePreset, updatePreset
   } = useSettingsStore();
@@ -266,6 +267,66 @@ export function SettingsView() {
                 <div className="toggle-knob"></div>
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* View GPS Location in */}
+        <div className="bg-app-card border border-app-border rounded-xl overflow-hidden">
+          <div className="px-5 py-3 border-b border-app-border flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-txt-primary flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-txt-secondary" />
+                {t('gps.title')}
+              </h3>
+              <p className="text-xs text-txt-secondary mt-0.5">{t('gps.subtitle')}</p>
+            </div>
+          </div>
+          <div className="p-5 space-y-3">
+            <label className="flex items-center gap-3 cursor-pointer group select-none">
+              <input
+                type="radio"
+                name="gpsMapProvider"
+                value="google"
+                checked={gpsMapProvider === 'google'}
+                onChange={() => setGpsMapProvider('google')}
+                className="w-4 h-4 text-accent border-app-border focus:ring-accent focus:ring-offset-0 bg-transparent cursor-pointer accent-accent"
+              />
+              <span className="text-sm text-txt-primary group-hover:text-accent transition-colors font-medium">
+                {t('gps.googleMaps')}
+              </span>
+            </label>
+
+            <label className="flex items-center gap-3 cursor-pointer group select-none">
+              <input
+                type="radio"
+                name="gpsMapProvider"
+                value="osm"
+                checked={gpsMapProvider === 'osm'}
+                onChange={() => setGpsMapProvider('osm')}
+                className="w-4 h-4 text-accent border-app-border focus:ring-accent focus:ring-offset-0 bg-transparent cursor-pointer accent-accent"
+              />
+              <span className="text-sm text-txt-primary group-hover:text-accent transition-colors font-medium">
+                {t('gps.openStreetMap')}
+              </span>
+            </label>
+
+            <label className="flex items-center gap-3 cursor-not-allowed opacity-40 select-none">
+              <input
+                type="radio"
+                name="gpsMapProvider"
+                value="internal"
+                disabled
+                className="w-4 h-4 text-accent border-app-border bg-transparent cursor-not-allowed"
+              />
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-txt-tertiary">
+                  {t('gps.internalViewer')}
+                </span>
+                <span className="text-[10px] uppercase font-semibold tracking-wider text-txt-tertiary border border-app-border px-1.5 py-0.2 rounded">
+                  {t('gps.comingSoon')}
+                </span>
+              </div>
+            </label>
           </div>
         </div>
 

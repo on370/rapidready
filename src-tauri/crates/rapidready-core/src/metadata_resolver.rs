@@ -16,6 +16,12 @@ pub struct ImageMetadata {
     pub is_raw: bool,
     pub is_monochrome_sensor: bool,
     pub is_monochrome_preview: bool,
+    #[serde(default)]
+    pub latitude: Option<f64>,
+    #[serde(default)]
+    pub longitude: Option<f64>,
+    #[serde(default)]
+    pub altitude: Option<f64>,
 }
 
 pub fn is_raw_path(path: &Path) -> bool {
@@ -131,6 +137,55 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
                     }
                 }
             }
+
+            // 9. GPS Coordinates (Latitude, Longitude, Altitude) from EXIF
+            let lat_field = exif.fields().find(|f| f.tag == exif::Tag::GPSLatitude);
+            let lat_ref = exif.fields().find(|f| f.tag == exif::Tag::GPSLatitudeRef);
+            if let Some(f) = lat_field {
+                meta.latitude = parse_gps_coord(f, lat_ref);
+            }
+
+            let lon_field = exif.fields().find(|f| f.tag == exif::Tag::GPSLongitude);
+            let lon_ref = exif.fields().find(|f| f.tag == exif::Tag::GPSLongitudeRef);
+            if let Some(f) = lon_field {
+                meta.longitude = parse_gps_coord(f, lon_ref);
+            }
+
+            let alt_field = exif.fields().find(|f| f.tag == exif::Tag::GPSAltitude);
+            let alt_ref = exif.fields().find(|f| f.tag == exif::Tag::GPSAltitudeRef);
+            if let Some(f) = alt_field {
+                if let exif::Value::Rational(ref vec) = f.value {
+                    if let Some(first) = vec.first() {
+                        if let Some(mut alt) = rational_to_f64(first) {
+                            if let Some(r) = alt_ref {
+                                if let Some(ref_byte) = r.value.get_uint(0) {
+                                    if ref_byte == 1 {
+                                        alt = -alt;
+                                    }
+                                }
+                            }
+                            meta.altitude = Some(alt);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Precedence: Check if .rrdata sidecar has manual GPS overrides
+    let sidecar_path = crate::culling::get_sidecar_path(path);
+    if let Ok(contents) = std::fs::read_to_string(&sidecar_path) {
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&contents) {
+            if let Some(gps_obj) = val.get("gps").and_then(|v| v.as_object()) {
+                if let (Some(lat), Some(lon)) = (
+                    gps_obj.get("latitude").and_then(|v| v.as_f64()),
+                    gps_obj.get("longitude").and_then(|v| v.as_f64()),
+                ) {
+                    meta.latitude = Some(lat);
+                    meta.longitude = Some(lon);
+                    meta.altitude = gps_obj.get("altitude").and_then(|v| v.as_f64());
+                }
+            }
         }
     }
 
@@ -161,6 +216,33 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
     }
 
     meta
+}
+
+fn rational_to_f64(r: &exif::Rational) -> Option<f64> {
+    if r.denom == 0 {
+        None
+    } else {
+        Some(r.num as f64 / r.denom as f64)
+    }
+}
+
+fn parse_gps_coord(coord_field: &exif::Field, ref_field: Option<&exif::Field>) -> Option<f64> {
+    if let exif::Value::Rational(ref vec) = coord_field.value {
+        if vec.len() >= 3 {
+            let deg = rational_to_f64(&vec[0])?;
+            let min = rational_to_f64(&vec[1])?;
+            let sec = rational_to_f64(&vec[2])?;
+            let mut val = deg + (min / 60.0) + (sec / 3600.0);
+            if let Some(r) = ref_field {
+                let ref_str = r.display_value().to_string();
+                if ref_str.contains('S') || ref_str.contains('s') || ref_str.contains('W') || ref_str.contains('w') {
+                    val = -val;
+                }
+            }
+            return Some(val);
+        }
+    }
+    None
 }
 
 /// Checks whether an embedded JPEG preview is monochrome (grayscale or B/W camera picture profile).
@@ -319,5 +401,46 @@ mod tests {
             let is_mono = lower.contains("monochrom") || lower.contains("achromatic");
             assert_eq!(is_mono, expected, "Model: {}", model);
         }
+    }
+
+    #[test]
+    fn test_gps_metadata_extraction() {
+        let ios_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../testdata/dest/2022/2022-01-22-gaga/20220122_122303000_iOS.jpg");
+        if ios_path.exists() {
+            let meta = get_image_metadata(&ios_path);
+            assert!(meta.latitude.is_some(), "iOS photo should have latitude: {:?}", meta.latitude);
+            assert!(meta.longitude.is_some(), "iOS photo should have longitude: {:?}", meta.longitude);
+            let lat = meta.latitude.unwrap();
+            let lon = meta.longitude.unwrap();
+            assert!(lat > -90.0 && lat < 90.0, "Latitude out of range: {}", lat);
+            assert!(lon > -180.0 && lon < 180.0, "Longitude out of range: {}", lon);
+        }
+    }
+
+    #[test]
+    fn test_gps_sidecar_override() {
+        let temp_dir = std::env::temp_dir().join(format!("rr_gps_test_{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&temp_dir);
+        let dummy_img = temp_dir.join("test_img.jpg");
+        let _ = std::fs::write(&dummy_img, b"fake jpeg data");
+        let sidecar = temp_dir.join("test_img.jpg.rrdata");
+        let sidecar_json = r#"{
+            "version": 1,
+            "rating": 5,
+            "gps": {
+                "latitude": 48.13715,
+                "longitude": 11.57542,
+                "altitude": 520.0
+            }
+        }"#;
+        let _ = std::fs::write(&sidecar, sidecar_json);
+
+        let meta = get_image_metadata(&dummy_img);
+        assert_eq!(meta.latitude, Some(48.13715));
+        assert_eq!(meta.longitude, Some(11.57542));
+        assert_eq!(meta.altitude, Some(520.0));
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }

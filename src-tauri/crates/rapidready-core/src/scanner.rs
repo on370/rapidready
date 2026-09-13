@@ -36,8 +36,8 @@ where
     F: Fn(ScanProgress) + Send + Sync,
 {
     let supported_exts = [
-        "jpg", "jpeg", "png", "tif", "tiff", // Raster
-        "cr2", "cr3", "arw", "nef", "dng", "orf", "raf", // RAW
+        "jpg", "jpeg", "png", "tif", "tiff", "heic", "heif", "hif", "webp", "avif", // Raster
+        "cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2", "pef", "3fr", "x3f", "nrw", // RAW
         "mp4", "mov", "m4v", "avi" // Video
     ];
 
@@ -128,4 +128,39 @@ where
     });
 
     Ok(files)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_scanner_supports_heic_and_heif() {
+        let temp_dir = std::env::temp_dir().join(format!("rr_scanner_test_{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&temp_dir);
+
+        let jpg = temp_dir.join("photo1.jpg");
+        let heic = temp_dir.join("photo2.heic");
+        let heif = temp_dir.join("photo3.HEIF");
+        let hif = temp_dir.join("photo4.hif");
+        let txt = temp_dir.join("notes.txt");
+
+        let _ = std::fs::write(&jpg, b"dummy jpg");
+        let _ = std::fs::write(&heic, b"dummy heic");
+        let _ = std::fs::write(&heif, b"dummy heif");
+        let _ = std::fs::write(&hif, b"dummy hif");
+        let _ = std::fs::write(&txt, b"dummy text");
+
+        let import_index = ImportIndex::new(&temp_dir).expect("Create dummy import index");
+        let scanned = scan_directory(&temp_dir, &import_index, |_| {}).expect("scan directory");
+
+        let names: Vec<_> = scanned.iter().map(|f| f.name.as_str()).collect();
+        assert!(names.contains(&"photo1.jpg"));
+        assert!(names.contains(&"photo2.heic"));
+        assert!(names.contains(&"photo3.HEIF"));
+        assert!(names.contains(&"photo4.hif"));
+        assert!(!names.contains(&"notes.txt"));
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
 }

@@ -684,5 +684,33 @@ mod tests {
             assert_eq!(img_thumb.height(), 480);
         }
     }
+
+    #[test]
+    fn test_heic_file_handling() {
+        let heic_path = std::path::Path::new("/Volumes/RICOH GR/DCIM/IMG_5195.HEIC");
+        if heic_path.exists() {
+            let date = crate::date_resolver::get_creation_date(heic_path);
+            println!("HEIC creation date: {:?}", date);
+            assert!(date.is_ok(), "Failed to get HEIC creation date: {:?}", date.err());
+
+            let preview_scale_1 = get_preview_jpeg(heic_path, 1);
+            assert!(preview_scale_1.is_ok(), "Failed to get preview at scale 1: {:?}", preview_scale_1.err());
+            let bytes = preview_scale_1.unwrap();
+            let img = image::load_from_memory(&bytes).expect("Decoded scale 1 JPEG");
+            println!("HEIC scale 1 preview dimensions: {}x{}", img.width(), img.height());
+            assert!(img.width() > 32 && img.height() > 32, "Thumbnail too small: {}x{}", img.width(), img.height());
+
+            let max_preview = get_max_preview_jpeg(heic_path);
+            assert!(max_preview.is_ok(), "Failed to get max preview: {:?}", max_preview.err());
+            let max_bytes = max_preview.unwrap();
+            let max_img = image::load_from_memory(&max_bytes).expect("Decoded max preview JPEG");
+            println!("HEIC max preview dimensions: {}x{}", max_img.width(), max_img.height());
+            assert!(max_img.width() >= 1000, "Max preview should be high-res: {}x{}", max_img.width(), max_img.height());
+
+            let meta = crate::metadata_resolver::get_image_metadata(heic_path);
+            println!("HEIC metadata: camera={:?}, lens={:?}, iso={:?}, shutter={:?}, aperture={:?}, lat={:?}, lon={:?}",
+                meta.camera, meta.lens, meta.iso, meta.shutter, meta.aperture, meta.latitude, meta.longitude);
+        }
+    }
 }
 

@@ -40,6 +40,7 @@ export interface ScanProgress {
 
 interface ImportState {
   sourceDirectory: string | null;
+  isSourceDisconnected: boolean;
   destinationDirectory: string | null;
   selectedLocationId: string | null;
   structureMode: StructureMode;
@@ -55,6 +56,7 @@ interface ImportState {
   hideImported: boolean;
   
   setSourceDirectory: (path: string | null) => void;
+  setIsSourceDisconnected: (disconnected: boolean) => void;
   setDestinationDirectory: (path: string | null, locationId?: string | null, markModified?: boolean) => void;
   setStructureMode: (mode: StructureMode) => void;
   setDateFormat: (format: string) => void;
@@ -77,6 +79,7 @@ export const useImportStore = create<ImportState>()(
   persist(
     (set, get) => ({
       sourceDirectory: null,
+      isSourceDisconnected: false,
       destinationDirectory: null,
       selectedLocationId: null,
       structureMode: 'date',
@@ -91,7 +94,8 @@ export const useImportStore = create<ImportState>()(
       scanProgress: null,
       hideImported: true,
 
-      setSourceDirectory: (path) => set({ sourceDirectory: path }),
+      setSourceDirectory: (path) => set({ sourceDirectory: path, isSourceDisconnected: false }),
+      setIsSourceDisconnected: (disconnected) => set({ isSourceDisconnected: disconnected }),
       setDestinationDirectory: (path, locationId = null, markModified = true) => {
         const current = get();
         if (current.destinationDirectory === path && current.selectedLocationId === locationId) return;
