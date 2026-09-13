@@ -1,4 +1,27 @@
 #!/usr/bin/env node
+// ==============================================================================
+// RapidReady - Synchronous Multi-File Version Bumper
+//
+// Purpose:
+//   Synchronously updates the marketing version across all configuration files
+//   in both Node/JavaScript and Rust/Cargo workspaces.
+//
+// Explanation:
+//   Updates the version string in 8 central files in a single command:
+//     1. package.json
+//     2. package-lock.json
+//     3. src-tauri/tauri.conf.json
+//     4. src/build-info.json
+//     5. scripts/bump-build.js
+//     6. src-tauri/Cargo.toml (and internal crate dependencies)
+//     7. src-tauri/crates/rapidready-core/Cargo.toml
+//     8. docs/VERSIONING.md
+//
+// Usage:
+//   npm run set-version <new-version>
+//   Example:
+//     npm run set-version 0.3.7-beta
+// ==============================================================================
 
 import fs from 'fs';
 import path from 'path';

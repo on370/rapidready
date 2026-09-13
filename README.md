@@ -36,7 +36,7 @@ RapidReady is engineered for professional camera workflows, high-speed SD card i
 
 > [!TIP]
 > **Roadmap & Upcoming Media Support:**  
-> A dedicated **native video pipeline** (embedded playback with scrubber, AVCHD `.mts`/`.m2ts`, Canon Cinema RAW `.crm`, Nikon N-RAW `.nev`, runtime badges, and streaming via HTTP range requests) as well as **vintage and specialized RAW formats** (Leica `.rwl`, Hasselblad Studio `.fff`, Phase One `.iiq`, Canon `.crw`) and JPEG XL (`.jxl`) are actively planned on our roadmap. 
+> A dedicated **native video pipeline** (embedded playback with scrubber, AVCHD `.mts`/`.m2ts`, Canon Cinema RAW `.crm`, Nikon N-RAW `.nev`, runtime badges, and streaming via HTTP range requests) as well as **vintage and specialized RAW formats** (Leica `.rwl`, Hasselblad Studio `.fff`, Phase One `.iiq`, Canon `.crw`) and JPEG XL (`.jxl`) are actively planned on our [Technical Roadmap](docs/ROADMAP.md). 
 
 ## 🛠️ Technology Stack
 
@@ -103,6 +103,10 @@ npm run tauri build
 ```
 - **On Windows:** Produces an NSIS installer: `src-tauri/target/release/bundle/nsis/RapidReady_<version>_x64-setup.exe`
 - **On macOS:** Produces a `.dmg` disk image: `src-tauri/target/release/bundle/dmg/RapidReady_<version>_<arch>.dmg`
+
+## 🤝 Contributing
+
+Contributions, feature requests, and bug reports are warmly welcome! Please check out our [Contributing Guide](CONTRIBUTING.md) and [Architecture Documentation](docs/ARCHITECTURE.md) to get started with setup and development guidelines.
 
 ## 📋 Changelog
 

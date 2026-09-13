@@ -1,4 +1,24 @@
 #!/usr/bin/env node
+// ==============================================================================
+// RapidReady - Automated Build Number Incrementor
+//
+// Purpose:
+//   Automatically increments the 4-digit hexadecimal build number (e.g. 008E -> 008F)
+//   and timestamps every production build in 'src/build-info.json'.
+//
+// Explanation:
+//   1. Reads 'src/build-info.json'.
+//   2. Parses the current hex string, increments it by 1, and formats as uppercase hex.
+//   3. Updates 'buildDate' to current ISO date (YYYY-MM-DD).
+//   4. Supports '--no-bump' or env 'NO_BUMP=1' to inspect without incrementing.
+//
+// Usage:
+//   Automated (runs automatically before npm run build):
+//     npm run build
+//   Manual execution:
+//     node scripts/bump-build.js
+//     node scripts/bump-build.js --no-bump
+// ==============================================================================
 
 import fs from 'fs';
 import path from 'path';

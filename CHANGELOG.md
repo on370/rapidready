@@ -5,6 +5,52 @@ All notable changes to RapidReady will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.6-beta] - 2026-09-13
+
+Feature release introducing GPS Map Provider selection, comprehensive HEIC / HEIF / HIF support, disconnected source media detection with automatic recovery in import preview, and developer repository housekeeping.
+
+### Added
+- **Configurable GPS Map Provider (`SettingsView.tsx` & `LibraryInspector.tsx`):**
+  - Instant location viewing with 1-click external map launch via `@tauri-apps/plugin-opener`.
+  - Configurable map provider in Settings: Google Maps in browser, OpenStreetMap in browser, and internal viewer placeholder.
+- **HEIC / HEIF / HIF & Modern Raster Formats:**
+  - Added support across scanner, archive indexer, commands, and fallback preview pipelines.
+  - Automatic RAW+HIF companion pairing in import preview and dynamic badges in Grid and Filmstrip.
+  - Verified with camera and smartphone test fixtures (30 unit tests passing).
+- **Import Step 2 – Source Disconnection Detection & Recovery:**
+  - Background polling (`check_path_exists`, 1.2s interval) detects disconnected or unmounted SD cards.
+  - Replaces preview tree with an informative disconnected warning card and direct return button.
+  - Automatic reconnection restores the preview tree seamlessly without losing selection state.
+  - Synchronized navigation: Returning to step 1 while disconnected immediately resets stale state.
+- **Developer Documentation & Multi-Platform Tooling:**
+  - Added standard `CONTRIBUTING.md`, `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/PLATFORM_WINDOWS.md`, and `docs/PLATFORM_LINUX.md`.
+  - Added 1-click launch and build scripts: `scripts/dev.bat`, `scripts/build-installer.bat`, `scripts/dev.sh`, `scripts/build-dmg.sh`.
+
+## [0.3.5-beta-RC1] - 2026-09-12
+
+Major stabilization release featuring two-phase progressive NAS streaming with pause/resume controls, atomic sidecar persistence, large archive performance optimizations, and comprehensive QA audit fixes.
+
+### Added
+- **Two-Phase Progressive NAS Streaming:**
+  - 300 ms debounced `ArchiveConnectingOverlay` for slow network shares and waking NAS drives.
+  - Floating `ArchiveScanBanner` with live photo counter, accumulated MB, and active folder path.
+  - True 0% CPU pause/resume via Rust `Condvar` and atomic `AtomicBool` cancellation flags.
+  - Resumable scanning with fast-skip for previously indexed paths.
+- **Data Integrity & Atomic Sidecars:**
+  - Atomic writing of `.rrdata` sidecars using temporary files and atomic rename (`std::fs::rename`).
+  - Removed arbitrary `max_depth(4)` directory traversal limit for deeply nested structures.
+  - Concurrency scan-guard with monotonic `scan_id` preventing folder-switching race conditions.
+- **Large Archive Scalability:**
+  - $O(1)$ `imageIndexMap` in Zustand store eliminating linear path search bottlenecks for 50,000+ photo collections.
+  - Throttled tree building (350 ms debouncing) and decoupling sidebar re-renders from culling actions.
+- **Error Handling & Notifications:**
+  - Network share disconnect detection in sidecar file watcher.
+  - Non-blocking batch culling error reporting with detailed per-file failure metrics.
+  - Global, non-intrusive toast notification system (`ToastContainer.tsx`).
+- **Startup Preference & Window Geometry:**
+  - Configurable startup view (Library by default, Import optional).
+  - Enforced minimum grid width (`min-w-[400px]`) and window dimensions (1024×680) preventing panel collapse.
+
 ## [0.3.0-beta] - 2026-09-11
 
 Major release introducing a native RAW full-resolution preview extractor, 1:1 sensor-pixel loupe zooming, a progressive import preview with full-screen lightbox inspection, multi-tier thumbnails, and minimal-scroll grid stability.
