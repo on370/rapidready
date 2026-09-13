@@ -38,6 +38,15 @@ RapidReady is engineered for professional camera workflows, high-speed SD card i
 > **Roadmap & Upcoming Media Support:**  
 > A dedicated **native video pipeline** (embedded playback with scrubber, AVCHD `.mts`/`.m2ts`, Canon Cinema RAW `.crm`, Nikon N-RAW `.nev`, runtime badges, and streaming via HTTP range requests) as well as **vintage and specialized RAW formats** (Leica `.rwl`, Hasselblad Studio `.fff`, Phase One `.iiq`, Canon `.crw`) and JPEG XL (`.jxl`) are actively planned on our [Technical Roadmap](docs/ROADMAP.md). 
 
+### 🍏 Working with Apple Photos Libraries (macOS)
+
+RapidReady operates directly on open filesystem directories, external SSDs, SD cards, and NAS shares with zero proprietary database lock-in. Because macOS Photos libraries (`.photoslibrary`) are sealed system packages (and often store full-resolution RAWs in iCloud rather than on local disk), direct in-place browsing is intentionally bypassed to safeguard library integrity.
+
+To cull and organize images managed by Apple Photos:
+1. In the macOS **Photos** app, select the desired photos or RAW files.
+2. Choose **File → Export → Export Unmodified Original...** (`Shift + Cmd + E`) and select a destination folder.
+3. Open or import that folder in **RapidReady** for instant, zero-latency culling, rating, and sidecar synchronization.
+
 ## 🛠️ Technology Stack
 
 - **Backend:** Rust (Tauri v2)

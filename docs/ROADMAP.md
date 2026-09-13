@@ -198,6 +198,17 @@
     - Clean header styling with smooth expand/collapse transition.
     - Section collapse states should be persisted (e.g. in local storage) so photographers can customize and retain their preferred Inspector layout across sessions.
 
+- [ ] **Live Throughput & Transfer Rate Tooltip in Status Bar (MB/s & Gb/s):**
+  - **Context & Goal:**
+    When indexing large archives (`ArchiveScanBanner.tsx`) or transferring photos during import (`ImportExecuteStep.tsx`), RapidReady displays accumulated data volume in MB/GB (e.g. `(450.2 MB)`). Photographers frequently want to inspect their actual real-time transfer throughput to diagnose hardware bottlenecks (e.g. identifying whether an SD card reader is limited by USB 2.0 vs. UHS-II bus speeds, or verifying 1 GbE vs. 10 GbE NAS network saturation).
+  - **Requirements & Behavior:**
+    - Compute a rolling-window average ($\Delta \text{bytes} / \Delta t$ over a 1.0–1.5s interval) to smooth out bursty filesystem buffer flushes and network spikes.
+    - Display an informative tooltip when hovering over the MB badge in the status bar/banner:
+      - **Live Transfer Speed:** Human-readable photographic rate (`MB/s` or `GB/s`) alongside network rate (`Mb/s` or `Gb/s`), e.g.:  
+        `⚡ Transfer Rate: 84.5 MB/s (676 Mb/s)`
+      - **Session Metrics:** Include peak throughput and estimated time to completion (ETA) when total workload is known.
+    - Consistent styling matching RapidReady's dark glassmorphism theme (`#18181b/95` backdrop with subtle border and mono typography).
+
 ---
 
 ### Milestone: Application Lifecycle, Updates & Distribution
