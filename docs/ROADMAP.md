@@ -16,7 +16,7 @@
 
 ## 🚀 Released Milestones
 
-### Released in `v0.3.6-beta` (Build `0095`)
+### Released in `v0.3.6-beta` (Build `0096`)
 - [x] **GPS Metadata Display & 1-Click Map Navigation (`v0.3.6-beta` / Build `0089`):**
   - Native EXIF extraction of `GPSLatitude`, `GPSLongitude`, and `GPSAltitude` with direction and reference resolution in `metadata_resolver.rs`.
   - Non-destructive `.rrdata` sidecar override support (sidecar GPS takes precedence over camera EXIF).
@@ -34,10 +34,11 @@
   - Replaces preview tree with an intuitive warning card and `[ ← Back to Source Selection ]` button.
   - Automatic reconnection: Re-inserting the card restores the preview tree instantly without losing file selection state.
   - Synchronized navigation: Returning to step 1 while disconnected resets stale paths and scan states cleanly.
-- [x] **Developer Housekeeping & Multi-Platform Tooling (`v0.3.6-beta` / Build `0095`):**
+- [x] **Developer Housekeeping, Multi-Platform Tooling & Windows UNC Fixes (`v0.3.6-beta` / Build `0096`):**
   - Centralized all architecture and platform specifications inside the Git-tracked tree (`app/docs/ARCHITECTURE.md`, `app/docs/ROADMAP.md`, `app/docs/PLATFORM_WINDOWS.md`, `app/docs/PLATFORM_LINUX.md`).
   - Added standard `CONTRIBUTING.md` and Keep-a-Changelog compliant `CHANGELOG.md`.
-  - Created 1-click developer launchers and production release packaging scripts in `app/scripts/` (`dev.bat`, `build-installer.bat`, `dev.sh`, `build-dmg.sh`) with comprehensive header documentation (Purpose, Explanation, and Usage).
+  - Created 1-click developer launchers and production release packaging scripts in `app/scripts/` (`dev.bat`, `build-installer.bat`, `dev.sh`, `build-dmg.sh`) with comprehensive header documentation (Purpose, Explanation, Usage) and `--no-bump` support.
+  - Resolved Windows UNC network paths for custom `rr-image://` protocol enabling seamless NAS media loading on Windows.
 
 ### Released in `v0.3.5-beta-RC1` (Build `0088`)
 - [x] **Progressive NAS Streaming & Interactive Scan Controller (`v0.3.5-beta-RC1` / Build `0075`):**

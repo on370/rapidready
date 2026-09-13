@@ -65,6 +65,8 @@ if not exist "node_modules\" (
     )
 )
 
+if "%~1"=="--no-bump" set "NO_BUMP=1"
+
 echo [RapidReady] Building frontend and compiling release installer...
 call npm run tauri build
 

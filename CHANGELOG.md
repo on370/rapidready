@@ -7,24 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.3.6-beta] - 2026-09-13
 
-Feature release introducing GPS Map Provider selection, comprehensive HEIC / HEIF / HIF support, disconnected source media detection with automatic recovery in import preview, and developer repository housekeeping.
+Feature and platform release introducing configurable GPS Map Provider selection, full modern raster format support (HEIC / HEIF / HIF), disconnected source media detection with automatic recovery in import preview, Windows UNC network share fixes for NAS archives, and complete open-source developer tooling.
 
 ### Added
 - **Configurable GPS Map Provider (`SettingsView.tsx` & `LibraryInspector.tsx`):**
-  - Instant location viewing with 1-click external map launch via `@tauri-apps/plugin-opener`.
-  - Configurable map provider in Settings: Google Maps in browser, OpenStreetMap in browser, and internal viewer placeholder.
+  - Instant photographic location viewing with 1-click external map opening via `@tauri-apps/plugin-opener`.
+  - Configurable map provider in Settings: Google Maps in browser, OpenStreetMap in browser, or internal viewer placeholder.
+  - Native EXIF parsing for `GPSLatitude`, `GPSLongitude`, and `GPSAltitude` with direction and reference resolution (`N/S`, `E/W`, `Above/Below Sea Level`).
+  - Dual coordinate presentation: Photographic Degrees-Minutes-Seconds (DMS) and decimal degrees.
+  - Non-destructive `.rrdata` sidecar override support (sidecar GPS coordinates take precedence over camera EXIF).
 - **HEIC / HEIF / HIF & Modern Raster Formats:**
-  - Added support across scanner, archive indexer, commands, and fallback preview pipelines.
-  - Automatic RAW+HIF companion pairing in import preview and dynamic badges in Grid and Filmstrip.
-  - Verified with camera and smartphone test fixtures (30 unit tests passing).
+  - Full ingestion support for `.heic`, `.heif`, `.hif` (Sony & Canon 10-bit HDR), `.webp`, and `.avif` across scanner, archive indexer, commands, and fallback preview pipelines.
+  - Automatic RAW+HIF / RAW+HEIC companion pairing in pre-import scan view.
+  - Dynamic badges in Grid and Filmstrip reflecting active raster formats (`RAW+HIF`, `HEIC`, `HIF`, etc.).
+  - Verified against mirrorless camera and smartphone test fixtures (30 unit tests passing).
 - **Import Step 2 – Source Disconnection Detection & Recovery:**
-  - Background polling (`check_path_exists`, 1.2s interval) detects disconnected or unmounted SD cards.
-  - Replaces preview tree with an informative disconnected warning card and direct return button.
-  - Automatic reconnection restores the preview tree seamlessly without losing selection state.
-  - Synchronized navigation: Returning to step 1 while disconnected immediately resets stale state.
-- **Developer Documentation & Multi-Platform Tooling:**
-  - Added standard `CONTRIBUTING.md`, `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/PLATFORM_WINDOWS.md`, and `docs/PLATFORM_LINUX.md`.
-  - Added 1-click launch and build scripts: `scripts/dev.bat`, `scripts/build-installer.bat`, `scripts/dev.sh`, `scripts/build-dmg.sh`.
+  - Real-time background polling (`check_path_exists`, 1.2s interval) detects disconnected or unmounted SD cards and external drives.
+  - Replaces preview tree with an informative disconnected warning card and direct `[ ← Back to Source Selection ]` return button.
+  - Automatic reconnection: Re-inserting the card restores the preview tree seamlessly without losing selection state.
+  - Synchronized navigation: Returning to step 1 while disconnected immediately resets stale paths and scan states cleanly.
+- **Developer Documentation & Cross-Platform Tooling:**
+  - Centralized in-repository technical documentation: [`docs/ROADMAP.md`](docs/ROADMAP.md), [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/PLATFORM_WINDOWS.md`](docs/PLATFORM_WINDOWS.md), and [`docs/PLATFORM_LINUX.md`](docs/PLATFORM_LINUX.md).
+  - Added standardized [`CONTRIBUTING.md`](CONTRIBUTING.md) guide and Keep-a-Changelog compliant release tracking.
+  - 1-click cross-platform developer launchers and packaging scripts in `scripts/` (`dev.bat`, `build-installer.bat`, `dev.sh`, `build-dmg.sh`) with detailed header documentation (Purpose, Explanation, and Usage) and `--no-bump` support.
+
+### Fixed & Improved
+- **Windows UNC Network Share Streaming (`lib.rs`):**
+  - Resolved `rr-image://` custom protocol handling on Windows for UNC paths (e.g. `\\server\share\photos\...`).
+  - Strips redundant leading slashes inserted by browser HTTP requests to ensure reliable thumbnail and preview extraction from NAS shares on Windows.
+- **Windows NSIS Build Packaging (`build-installer.bat`):**
+  - Automatically resolves Tauri's local NSIS compiler path (`%LOCALAPPDATA%\tauri\NSIS\Bin`) and system installations.
+- **Build Number Control (`bump-build.js`):**
+  - Added `--no-bump` CLI argument and `NO_BUMP=1` environment variable support to produce repeatable release and debug builds without incrementing the hexadecimal build number.
 
 ## [0.3.5-beta-RC1] - 2026-09-12
 

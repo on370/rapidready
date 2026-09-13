@@ -24,6 +24,10 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 cd "${ROOT_DIR}"
 
+if [[ "$*" == *"--no-bump"* ]]; then
+  export NO_BUMP=1
+fi
+
 echo "🔨 [RapidReady] Building production release and macOS DMG..."
 
 command -v node >/dev/null 2>&1 || {
