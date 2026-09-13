@@ -27,6 +27,7 @@ app/
 ├── docs/                               # Architecture, Roadmap, Platform Guides
 │   ├── ARCHITECTURE.md                 # This document
 │   ├── ROADMAP.md                      # Technical roadmap & backlog
+│   ├── PLATFORM_MACOS.md               # macOS build & packaging instructions
 │   ├── PLATFORM_WINDOWS.md             # Windows build & setup instructions
 │   ├── PLATFORM_LINUX.md               # Linux packaging instructions
 │   └── VERSIONING.md                   # Semantic versioning & build numbers

@@ -27,7 +27,7 @@ Feature and platform release introducing configurable GPS Map Provider selection
   - Automatic reconnection: Re-inserting the card restores the preview tree seamlessly without losing selection state.
   - Synchronized navigation: Returning to step 1 while disconnected immediately resets stale paths and scan states cleanly.
 - **Developer Documentation & Cross-Platform Tooling:**
-  - Centralized in-repository technical documentation: [`docs/ROADMAP.md`](docs/ROADMAP.md), [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/PLATFORM_WINDOWS.md`](docs/PLATFORM_WINDOWS.md), and [`docs/PLATFORM_LINUX.md`](docs/PLATFORM_LINUX.md).
+  - Centralized in-repository technical documentation: [`docs/ROADMAP.md`](docs/ROADMAP.md), [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/PLATFORM_MACOS.md`](docs/PLATFORM_MACOS.md), [`docs/PLATFORM_WINDOWS.md`](docs/PLATFORM_WINDOWS.md), and [`docs/PLATFORM_LINUX.md`](docs/PLATFORM_LINUX.md).
   - Added standardized [`CONTRIBUTING.md`](CONTRIBUTING.md) guide and Keep-a-Changelog compliant release tracking.
   - 1-click cross-platform developer launchers and packaging scripts in `scripts/` (`dev.bat`, `build-installer.bat`, `dev.sh`, `build-dmg.sh`) with detailed header documentation (Purpose, Explanation, and Usage) and `--no-bump` support.
 

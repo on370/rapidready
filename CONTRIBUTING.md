@@ -14,8 +14,8 @@ RapidReady is built with **Tauri v2**, **React 19**, **TypeScript**, and a nativ
 - **Node.js** v18+ or v20+ LTS
 - **Rust toolchain** (stable via [rustup.rs](https://rustup.rs/))
 - **OS-specific dependencies:**
+  - **macOS:** Xcode Command Line Tools (`xcode-select --install`). (See [macOS Platform Guide](docs/PLATFORM_MACOS.md))
   - **Windows:** Microsoft C++ Build Tools (MSVC v143) & WebView2. (See [Windows Platform Guide](docs/PLATFORM_WINDOWS.md))
-  - **macOS:** Xcode Command Line Tools (`xcode-select --install`)
   - **Linux:** WebKitGTK and build libraries. (See [Linux Platform Guide](docs/PLATFORM_LINUX.md))
 
 ### 2. Launching the Development Environment
@@ -40,6 +40,7 @@ Before diving into code, please familiarize yourself with our architectural docu
 - **[Architecture Guide (`docs/ARCHITECTURE.md`)](docs/ARCHITECTURE.md):** Deep dive into the Rust core, progressive RAW streaming, two-phase progressive NAS scanning, and sidecar adapters.
 - **[Technical Roadmap & Backlog (`docs/ROADMAP.md`)](docs/ROADMAP.md):** Our detailed technical backlog, problem analyses, and upcoming milestones (including the persistent Picasa-style disk cache, universal XMP sidecar support, and native video pipeline).
 - **[Platform Guides:](docs/)**
+  - [macOS Setup & Packaging Guide](docs/PLATFORM_MACOS.md)
   - [Windows Setup & Build Guide](docs/PLATFORM_WINDOWS.md)
   - [Linux Setup & Packaging Guide](docs/PLATFORM_LINUX.md)
   - [Versioning & Build Numbering](docs/VERSIONING.md)

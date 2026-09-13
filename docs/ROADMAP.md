@@ -35,7 +35,7 @@
   - Automatic reconnection: Re-inserting the card restores the preview tree instantly without losing file selection state.
   - Synchronized navigation: Returning to step 1 while disconnected resets stale paths and scan states cleanly.
 - [x] **Developer Housekeeping, Multi-Platform Tooling & Windows UNC Fixes (`v0.3.6-beta` / Build `0096`):**
-  - Centralized all architecture and platform specifications inside the Git-tracked tree (`app/docs/ARCHITECTURE.md`, `app/docs/ROADMAP.md`, `app/docs/PLATFORM_WINDOWS.md`, `app/docs/PLATFORM_LINUX.md`).
+  - Centralized all architecture and platform specifications inside the Git-tracked tree (`app/docs/ARCHITECTURE.md`, `app/docs/ROADMAP.md`, `app/docs/PLATFORM_MACOS.md`, `app/docs/PLATFORM_WINDOWS.md`, `app/docs/PLATFORM_LINUX.md`).
   - Added standard `CONTRIBUTING.md` and Keep-a-Changelog compliant `CHANGELOG.md`.
   - Created 1-click developer launchers and production release packaging scripts in `app/scripts/` (`dev.bat`, `build-installer.bat`, `dev.sh`, `build-dmg.sh`) with comprehensive header documentation (Purpose, Explanation, Usage) and `--no-bump` support.
   - Resolved Windows UNC network paths for custom `rr-image://` protocol enabling seamless NAS media loading on Windows.
