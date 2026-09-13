@@ -97,14 +97,21 @@ pub fn run() {
 
             #[cfg(target_os = "windows")]
             {
-                // Konvertiert "/C:/Photos/..." oder "\C:\Photos\..." in "C:\Photos\..."
-                if (decoded_path.starts_with('/') || decoded_path.starts_with('\\'))
-                    && decoded_path.chars().nth(2) == Some(':')
-                {
+                // Normalize all forward slashes to backslashes first
+                decoded_path = decoded_path.replace('/', "\\");
+
+                // 1. Local drive letter paths: convert "\C:\Photos\..." or "/C:/Photos/..." to "C:\Photos\..."
+                if decoded_path.starts_with('\\') && decoded_path.chars().nth(2) == Some(':') {
                     decoded_path.remove(0);
                 }
-                // Backslashes normalisieren
-                decoded_path = decoded_path.replace('/', "\\");
+                // 2. Windows UNC network share paths (e.g. NAS "\\server\share\..."):
+                // HTTP request paths prepend a slash, which after slash replacement becomes "\\\server\share\...".
+                // Strip redundant leading backslashes so exactly two remain ("\\server\share\...").
+                else if decoded_path.starts_with(r"\\\") {
+                    while decoded_path.starts_with(r"\\\") {
+                        decoded_path.remove(0);
+                    }
+                }
             }
 
             let path = Path::new(&decoded_path);

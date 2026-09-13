@@ -33,7 +33,7 @@ if %errorlevel% neq 0 (
 
 where cargo >nul 2>nul
 if %errorlevel% neq 0 (
-    echo [ERROR] Rust (cargo) is not installed or not found in PATH.
+    echo [ERROR] Rust ^(cargo^) is not installed or not found in PATH.
     echo Please install Rust via rustup from https://rustup.rs/
     pause
     exit /b 1

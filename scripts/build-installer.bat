@@ -29,6 +29,15 @@ echo ===========================================================================
 echo  RapidReady - Windows Release Packaging
 echo ==============================================================================
 
+rem Ensure NSIS compiler (makensis.exe) is in PATH (Tauri downloads to %LOCALAPPDATA%\tauri\NSIS\Bin)
+if exist "%LOCALAPPDATA%\tauri\NSIS\Bin" (
+    set "PATH=%LOCALAPPDATA%\tauri\NSIS\Bin;%PATH%"
+) else if exist "%ProgramFiles(x86)%\NSIS" (
+    set "PATH=%ProgramFiles(x86)%\NSIS;%PATH%"
+) else if exist "%ProgramFiles%\NSIS" (
+    set "PATH=%ProgramFiles%\NSIS;%PATH%"
+)
+
 where node >nul 2>nul
 if %errorlevel% neq 0 (
     echo [ERROR] Node.js is not installed or not found in PATH.
@@ -38,13 +47,23 @@ if %errorlevel% neq 0 (
 
 where cargo >nul 2>nul
 if %errorlevel% neq 0 (
-    echo [ERROR] Rust (cargo) is not installed or not found in PATH.
+    echo [ERROR] Rust ^(cargo^) is not installed or not found in PATH.
     pause
     exit /b 1
 )
 
 rem Navigate to repository root (one level up from scripts/)
 cd /d "%~dp0\.."
+
+if not exist "node_modules\" (
+    echo [RapidReady] Installing npm dependencies...
+    call npm install
+    if %errorlevel% neq 0 (
+        echo [ERROR] npm install failed.
+        pause
+        exit /b %errorlevel%
+    )
+)
 
 echo [RapidReady] Building frontend and compiling release installer...
 call npm run tauri build

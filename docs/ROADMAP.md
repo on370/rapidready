@@ -184,3 +184,37 @@
 
 - [ ] **RAW Sensor Signal vs. In-Camera Processed Previews:**
   - Visual indicators distinguishing neutral RAW data from baked-in camera styles (contrast boost, monochrome picture styles) preventing accidental deselection during pre-import culling.
+
+---
+
+### Milestone: Library & Inspector UI Ergonomics
+- [ ] **Collapsible Inspector Cards & Sections:**
+  - **Context & Goal:**
+    As the Inspector panel (`LibraryInspector.tsx`) grows with rich metadata and tooling (Culling, Rating & Colors, Tag suggestions, Technical EXIF, and GPS / Location), vertical space on laptop screens can become tight.
+  - **Requirements & Behavior:**
+    - The uppermost section displaying the active image preview and core file badges remains permanently visible as the primary visual reference.
+    - All subsequent sections and cards (Culling / Flags / Ratings / Color Labels, Tag Management, Camera EXIF & Exposure Details, Location / GPS Map navigation) should be individually collapsible via an interactive chevron toggle button (`>` / `v`).
+    - Clean header styling with smooth expand/collapse transition.
+    - Section collapse states should be persisted (e.g. in local storage) so photographers can customize and retain their preferred Inspector layout across sessions.
+
+---
+
+### Milestone: Application Lifecycle, Updates & Distribution
+- [ ] **GitHub Release Update Check (Startup & Manual Menu Action):**
+  - **Context & Goal:**
+    Notify users when a newer version of RapidReady is published on GitHub, ensuring photographers receive bugfixes, performance optimizations, and newly supported camera formats without manual checking.
+  - **Requirements & Behavior:**
+    - **Startup Check:** On application launch, trigger a lightweight, non-blocking background check against the GitHub Releases endpoint (`https://api.github.com/repos/on370/RapidReady/releases/latest`).
+    - **Manual "Check for Updates..." Menu Action:**
+      - Add a dedicated "Check for Updates..." item in the native application menu (under the macOS App Menu, and under Help / Tools on Windows/Linux).
+      - Include a manual `[ Check for Updates Now ]` trigger button in `SettingsView.tsx`.
+      - If up to date, show an immediate confirmation toast (e.g. *"You're using the latest version of RapidReady (v0.3.6-beta)"*).
+    - Compare remote release tag with local SemVer from `build-info.json` / `package.json`.
+    - If a newer version is available:
+      - Display a clean dialog or notification banner indicating the new version number and brief release headline.
+      - Provide a primary action button to open `https://github.com/on370/RapidReady/releases/latest` in the user's default browser via `@tauri-apps/plugin-opener`.
+      - Include dismiss options: `[ Remind Me Later ]` and `[ Skip This Version ]` (stored in settings to avoid recurring prompts for a skipped version).
+      - Add a toggle in Settings (`SettingsView.tsx`): *Automatically check for updates on startup* (enabled by default).
+
+
+
