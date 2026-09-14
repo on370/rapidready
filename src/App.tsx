@@ -8,10 +8,13 @@ import { ToolsView } from "./components/views/ToolsView";
 import { SettingsView } from "./components/views/SettingsView";
 import { HelpModal } from "./components/ui/HelpModal";
 import { AboutModal } from "./components/ui/AboutModal";
+import { UpdateNotificationModal } from "./components/ui/UpdateNotificationModal";
 import { TextContextMenu } from "./components/ui/TextContextMenu";
 import { ToastContainer } from "./components/ui/ToastContainer";
+import { DestructiveConfirmModal } from "./components/ui/DestructiveConfirmModal";
 import { useToastStore } from "./stores/toastStore";
 import { useSettingsStore } from "./stores/settingsStore";
+import { useUpdateStore } from "./stores/updateStore";
 import { useNavigationStore } from "./stores/navigationStore";
 import { CullingState, useLibraryStore, ArchiveScanProgress, ArchiveChunkPayload, LibraryImage } from "./stores/libraryStore";
 import "./App.css";
@@ -23,6 +26,14 @@ function App() {
   useEffect(() => {
     setActiveView(startupView);
     invoke("show_main_window").catch(() => {});
+  }, []);
+
+  // Check for updates on startup after 3.5s (allowing splashscreen to dismiss first)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      useUpdateStore.getState().checkNow(false);
+    }, 3500);
+    return () => clearTimeout(timer);
   }, []);
 
   // Real-time synchronization for RapidRAW / external sidecar changes
@@ -114,11 +125,15 @@ function App() {
       (event) => {
         const store = useLibraryStore.getState();
         const files = Array.isArray(event.payload) ? event.payload : event.payload.files;
+        const dirs = Array.isArray(event.payload) ? [] : (event.payload.directories || []);
         const scanId = Array.isArray(event.payload) ? undefined : event.payload.scan_id;
         if (store.activeScanId !== null && scanId !== undefined && scanId !== store.activeScanId) {
           return;
         }
-        store.appendImageChunk(files);
+        if (dirs && dirs.length > 0) {
+          store.addDiscoveredFolders(dirs);
+        }
+        store.appendImageChunk(files, dirs);
         if (store.scanState === 'connecting' || store.scanState === 'idle') {
           store.setScanState('scanning');
         }
@@ -183,7 +198,9 @@ function App() {
       </div>
       <HelpModal />
       <AboutModal />
+      <UpdateNotificationModal />
       <ToastContainer />
+      <DestructiveConfirmModal />
       {textMenu && (
         <TextContextMenu
           x={textMenu.x}

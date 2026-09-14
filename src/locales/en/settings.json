@@ -66,5 +66,25 @@
     "subtitle": "Manage workflows (Subfolders, Renaming)",
     "add": "Add Preset",
     "noPresets": "No presets added yet."
+  },
+  "updates": {
+    "title": "Software Updates",
+    "subtitle": "Check for updates via GitHub Releases",
+    "checkAutomatically": {
+      "title": "Check for updates automatically",
+      "desc": "Check in background on startup if a newer version is available"
+    },
+    "includeBeta": {
+      "title": "Include preview releases (Beta)",
+      "desc": "Notify when a new Beta release is published",
+      "onlyBetaNotice": "Only available when using a beta version."
+    },
+    "currentVersion": "Installed version: v{{version}} (Build {{build}})",
+    "checkNow": "Check for updates now",
+    "checking": "Checking for updates...",
+    "upToDate": "RapidReady is up to date (v{{version}}).",
+    "updateAvailable": "New version available: {{tag}}",
+    "download": "Download",
+    "checkError": "Error checking for updates: {{error}}"
   }
 }

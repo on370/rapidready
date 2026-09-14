@@ -10,7 +10,9 @@
     "browseTemp": "Temporären Ordner öffnen...",
     "lastImport": "Letzter Import",
     "locationsTitle": "Locations",
-    "scanning": "Bibliothek wird gescannt..."
+    "scanning": "Bibliothek wird gescannt...",
+    "exactLocationTooltip": "Enthält das aktuell ausgewählte Foto",
+    "ancestorLocationTooltip": "Enthält Unterordner mit dem aktuell ausgewählten Foto"
   },
   "header": {
     "lastImport": "Letzter Import",
@@ -81,12 +83,18 @@
   "delete": {
     "button": "Verworfene löschen ({{count}})",
     "buttonTooltip": "{{count}} verworfene(s) Bild(er) in den Papierkorb verschieben",
+    "buttonTooltipPermanent": "{{count}} verworfene(s) Bild(er) dauerhaft vom Netzwerklaufwerk löschen",
     "noRejectedTooltip": "Keine verworfenen Bilder vorhanden",
-    "confirmMessage": "Möchtest du {{count}} verworfene Bilder in den macOS Papierkorb verschieben?",
+    "confirmMessage": "Möchtest du {{count}} verworfene(s) Bild(er) in den Papierkorb verschieben?",
     "confirmTitle": "Löschen bestätigen",
     "okLabel": "In den Papierkorb",
     "cancelLabel": "Abbrechen",
-    "failedError": "Verschieben in den Papierkorb fehlgeschlagen: "
+    "nasConfirmTitle": "⚠️ ACHTUNG: Dauerhaftes Löschen auf NAS / Netzwerk",
+    "nasConfirmMessage": "Die {{count}} verworfenen Bilder liegen auf einer Netzwerkfreigabe (NAS).\n\nDateien auf Netzwerklaufwerken können NICHT in den Papierkorb verschoben werden!\n\nSie werden DAUERHAFT und UNWIDERRUFLICH von der Festplatte gelöscht.\n\nMöchtest du diese {{count}} Bilder jetzt wirklich unwiderruflich löschen?",
+    "nasOkLabel": "Unwiderruflich löschen",
+    "nasSuccessToast": "{{count}} Bild(er) dauerhaft vom Netzwerklaufwerk gelöscht.",
+    "localSuccessToast": "{{count}} Bild(er) in den Papierkorb verschoben.",
+    "failedError": "Löschen fehlgeschlagen: "
   },
   "empty": "Keine Bilder gefunden",
   "loading": {
@@ -106,7 +114,12 @@
     "stoppedCount": "Scan bei {{count}} Fotos gestoppt",
     "continueRest": "Restliche Fotos laden",
     "completedCount": "{{count}} Fotos indexiert",
-    "dismiss": "Ausblenden"
+    "dismiss": "Ausblenden",
+    "transferSpeedTitle": "Übertragungsrate",
+    "live": "Live",
+    "speed": "Geschwindigkeit",
+    "peakSpeed": "Spitzenwert",
+    "dataVolume": "Datenvolumen"
   },
   "dialog": {
     "switchFolderTitle": "Ordner wechseln?",
@@ -116,6 +129,7 @@
   },
   "inspector": {
     "title": "Inspector",
+    "preview": "Vorschau",
     "noSelection": "Kein Bild ausgewählt",
     "noSelectionDesc": "Wähle ein Bild aus, um Details anzuzeigen.",
     "fileInfo": "Datei",
@@ -173,5 +187,54 @@
     "batchSaveFailed": "Fehler beim Speichern von {{failed}} von {{total}} Dateien.",
     "watcherErrorTitle": "Dateisystem-Überwachung unterbrochen",
     "watcherErrorDesc": "Automatische Sidecar-Aktualisierungen sind unterbrochen (z. B. Netzwerk-Share getrennt)."
+  },
+  "folderMenu": {
+    "showInFinder": "Im Finder anzeigen",
+    "showInExplorer": "Im Explorer anzeigen",
+    "selectAllImages": "Alle Bilder in diesem Ordner auswählen",
+    "expandSubfolders": "Alle Unterordner aufklappen",
+    "collapseSubfolders": "Alle Unterordner einklappen",
+    "deleteRejectedInFolder": "Nur verworfene Bilder (X) in diesem Ordner löschen...",
+    "noRejectedInFolder": "Keine verworfenen Bilder in diesem Ordner vorhanden.",
+    "newSubfolder": "Neuer Unterordner...",
+    "newSubfolderIn": "Neuer Unterordner in „{{name}}“...",
+    "deleteFolder": "Ordner löschen...",
+    "deleteRootProtected": "Der Hauptordner kann nicht gelöscht werden",
+    "createFolderTitle": "Neuer Unterordner",
+    "createFolderPrompt": "Name für den neuen Unterordner:",
+    "createFolderDefault": "Neuer Ordner",
+    "createBtn": "Erstellen",
+    "createFolderSuccess": "Ordner „{{name}}“ wurde erstellt.",
+    "createFolderError": "Erstellen des Ordners fehlgeschlagen: ",
+    "renameFolder": "Ordner umbenennen...",
+    "renameFolderTitle": "Ordner umbenennen",
+    "renameFolderPrompt": "Neuer Name für den Ordner:",
+    "renameBtn": "Umbenennen",
+    "renameFolderSuccess": "Ordner in „{{name}}“ umbenannt.",
+    "renameFolderError": "Umbenennen des Ordners fehlgeschlagen: ",
+    "multiHeader": "{{count}} ausgewählte Ordner",
+    "selectAllInMultiFolders": "Alle Fotos in den {{count}} Ordnern auswählen",
+    "expandSelectedSubfolders": "Ausgewählte Ordner aufklappen",
+    "collapseSelectedSubfolders": "Ausgewählte Ordner einklappen",
+    "deleteRejectedInMultiFolders": "Nur verworfene Bilder ({{count}}) in Auswahl löschen...",
+    "deleteMultiFolders": "{{count}} ausgewählte Ordner löschen..."
+  },
+  "folderDelete": {
+    "localTitle": "Ordner in den Papierkorb verschieben?",
+    "localMessage": "Möchtest du den Ordner „{{name}}“ ({{count}} Fotos) und alle darin enthaltenen Dateien und Unterordner wirklich in den Papierkorb verschieben?",
+    "localOk": "In den Papierkorb",
+    "localSuccess": "Ordner „{{name}}“ in den Papierkorb verschoben.",
+    "nasTitle": "⚠️ ACHTUNG: Dauerhaftes Löschen auf NAS / Netzwerk",
+    "nasMessage": "Der Ordner „{{name}}“ ({{count}} Fotos) liegt auf einer Netzwerkfreigabe (NAS).\n\nDateien und Ordner auf Netzwerklaufwerken können NICHT in den Papierkorb verschoben werden!\n\nDer gesamte Ordner und alle darin enthaltenen Dateien und Unterordner werden DAUERHAFT und UNWIDERRUFLICH gelöscht.\n\nMöchtest du „{{name}}“ jetzt wirklich unwiderruflich löschen?",
+    "nasOk": "Unwiderruflich löschen",
+    "nasSuccess": "Ordner „{{name}}“ dauerhaft vom Netzwerklaufwerk gelöscht.",
+    "multiLocalTitle": "{{count}} Ordner in den Papierkorb verschieben?",
+    "multiLocalMessage": "Möchtest du die {{count}} ausgewählten Ordner (mit insgesamt {{photoCount}} Fotos) und alle darin enthaltenen Dateien und Unterordner wirklich in den Papierkorb verschieben?",
+    "multiLocalSuccess": "{{count}} Ordner in den Papierkorb verschoben.",
+    "multiNasTitle": "⚠️ ACHTUNG: Dauerhaftes Löschen auf NAS / Netzwerk",
+    "multiNasMessage": "Die {{count}} ausgewählten Ordner (mit insgesamt {{photoCount}} Fotos) liegen ganz oder teilweise auf einer Netzwerkfreigabe (NAS).\n\nDateien und Ordner auf Netzwerklaufwerken können NICHT in den Papierkorb verschoben werden!\n\nAlle ausgewählten Ordner und alle darin enthaltenen Dateien und Unterordner werden DAUERHAFT und UNWIDERRUFLICH von der Festplatte gelöscht.\n\nMöchtest du diese {{count}} Ordner jetzt wirklich unwiderruflich löschen?",
+    "multiNasSuccess": "{{count}} Ordner dauerhaft vom Netzwerklaufwerk gelöscht.",
+    "cancel": "Abbrechen",
+    "error": "Löschen des Ordners fehlgeschlagen: "
   }
 }

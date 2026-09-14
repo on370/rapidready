@@ -38,6 +38,7 @@ npm run tauri dev
 Before diving into code, please familiarize yourself with our architectural documentation in [`docs/`](docs/):
 
 - **[Architecture Guide (`docs/ARCHITECTURE.md`)](docs/ARCHITECTURE.md):** Deep dive into the Rust core, progressive RAW streaming, two-phase progressive NAS scanning, and sidecar adapters.
+- **[GUI Styleguide & Interaction Semantics (`docs/GUI_STYLEGUIDE.md`)](docs/GUI_STYLEGUIDE.md):** Authoritative guide on UI color tokens, selection vs. location semantics, culling indicators, and safety-first modal rules.
 - **[Technical Roadmap & Backlog (`docs/ROADMAP.md`)](docs/ROADMAP.md):** Our detailed technical backlog, problem analyses, and upcoming milestones (including the persistent Picasa-style disk cache, universal XMP sidecar support, and native video pipeline).
 - **[Platform Guides:](docs/)**
   - [macOS Setup & Packaging Guide](docs/PLATFORM_MACOS.md)

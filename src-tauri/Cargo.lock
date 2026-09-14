@@ -3502,6 +3502,7 @@ name = "rapid-ready"
 version = "0.3.6"
 dependencies = [
  "cc",
+ "libc",
  "notify",
  "open",
  "rapidready-core",

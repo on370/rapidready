@@ -139,14 +139,13 @@ export const FilmstripBar = React.memo(function FilmstripBar({
       <div className="flex items-center justify-center gap-2">
         {visibleImages.map((img, localIdx) => {
           const itemIndex = startIndex + localIdx;
-          const isSelected = selectedPaths.size > 0
-            ? selectedPaths.has(img.path)
-            : activeImageIndex === itemIndex;
+          const isSelected = selectedPaths.has(img.path);
+          const isActive = isSelected && activeImageIndex === itemIndex;
           return (
             <FilmstripThumbnailItem
               key={img.path}
               img={img}
-              isActive={activeImageIndex === itemIndex}
+              isActive={isActive}
               isSelected={isSelected}
               thumbWidth={thumbWidth}
               thumbHeight={thumbHeight}

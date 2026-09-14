@@ -1,6 +1,85 @@
-import { Loader2, Pause, Play, X, RotateCw, Folder, Check } from 'lucide-react';
+import { Loader2, Pause, Play, X, RotateCw, Folder, Check, Zap, HelpCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLibraryStore } from '../../../../stores/libraryStore';
+import { useThroughput, ThroughputStats } from '../../../../utils/throughput';
+
+interface ScanStatsCardProps {
+  label: string;
+  labelClassName?: string;
+  sizeMb: string | null;
+  throughput: ThroughputStats;
+  scanState: string;
+  formattedCount: string;
+}
+
+function ScanStatsCard({
+  label,
+  labelClassName = "font-medium text-txt-primary flex-shrink-0 whitespace-nowrap",
+  sizeMb,
+  throughput,
+  scanState,
+  formattedCount,
+}: ScanStatsCardProps) {
+  const { t } = useTranslation('library');
+
+  return (
+    <div className="relative group/speed flex items-center gap-1.5 cursor-help min-w-0">
+      <span className={`${labelClassName} transition-colors group-hover/speed:text-white`}>
+        {label}
+      </span>
+
+      {sizeMb && (
+        <span className="text-txt-tertiary font-mono text-[11px] tabular-nums flex-shrink-0 group-hover/speed:text-accent transition-colors underline decoration-dotted decoration-white/25 underline-offset-2">
+          ({sizeMb} MB)
+        </span>
+      )}
+
+      <span className="flex items-center text-txt-tertiary/70 group-hover/speed:text-accent transition-colors">
+        <HelpCircle className="w-3.5 h-3.5 flex-shrink-0" />
+      </span>
+
+      {/* Rich Glassmorphism Floating Speed Card on Hover (no native delayed title) */}
+      <div className="absolute bottom-full mb-2.5 left-1/2 -translate-x-1/2 opacity-0 pointer-events-none group-hover/speed:opacity-100 group-hover/speed:pointer-events-auto transition-all duration-150 z-50">
+        <div className="bg-[#18181b]/95 backdrop-blur-md border border-white/15 shadow-2xl rounded-xl p-2.5 w-60 text-txt-primary select-none flex flex-col gap-1.5">
+          <div className="flex items-center justify-between text-[11px] font-semibold border-b border-white/10 pb-1.5 text-txt-secondary">
+            <span className="flex items-center gap-1.5 text-accent">
+              <Zap className="w-3.5 h-3.5 text-accent" />
+              {t('loading.transferSpeedTitle', 'Übertragungsrate')}
+            </span>
+            <span className="text-[10px] font-mono text-txt-tertiary">
+              {scanState === 'scanning' ? t('loading.live', 'Live') : scanState === 'paused' ? t('loading.paused', 'Pausiert') : t('loading.done', 'Fertig')}
+            </span>
+          </div>
+
+          <div className="flex items-baseline justify-between pt-0.5">
+            <span className="text-xs text-txt-secondary">{t('loading.speed', 'Geschwindigkeit')}:</span>
+            <div className="text-right">
+              <span className="font-mono font-bold text-accent text-xs tabular-nums">{throughput.formattedSpeed}</span>
+              <span className="font-mono text-[10px] text-txt-tertiary ml-1.5 tabular-nums">({throughput.formattedBitrate})</span>
+            </div>
+          </div>
+
+          {throughput.peakBytesPerSecond > 0 && (
+            <div className="flex items-baseline justify-between text-[11px] text-txt-tertiary pt-0.5 border-t border-white/5">
+              <span>{t('loading.peakSpeed', 'Spitzenwert')}:</span>
+              <div className="text-right font-mono text-[10px] tabular-nums text-txt-secondary">
+                <span>{throughput.formattedPeakSpeed}</span>
+                <span className="text-txt-tertiary ml-1">({throughput.formattedPeakBitrate})</span>
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-baseline justify-between text-[10px] text-txt-tertiary pt-0.5 border-t border-white/5">
+            <span>{t('loading.dataVolume', 'Datenvolumen')}:</span>
+            <span className="font-mono tabular-nums">{sizeMb ? `${sizeMb} MB` : ''} ({formattedCount} Fotos)</span>
+          </div>
+        </div>
+        {/* Tooltip triangle beak */}
+        <div className="w-2 h-2 bg-[#18181b] border-b border-r border-white/15 rotate-45 mx-auto -mt-1" />
+      </div>
+    </div>
+  );
+}
 
 interface ArchiveScanBannerProps {
   onRestartScan?: () => void;
@@ -10,6 +89,7 @@ export function ArchiveScanBanner({ onRestartScan }: ArchiveScanBannerProps) {
   const { t } = useTranslation('library');
   const scanState = useLibraryStore((s) => s.scanState);
   const scanProgress = useLibraryStore((s) => s.scanProgress);
+  const activeScanId = useLibraryStore((s) => s.activeScanId);
   const images = useLibraryStore((s) => s.images);
   const rootPath = useLibraryStore((s) => s.rootPath);
   const viewMode = useLibraryStore((s) => s.viewMode);
@@ -18,6 +98,12 @@ export function ArchiveScanBanner({ onRestartScan }: ArchiveScanBannerProps) {
   const cancelScan = useLibraryStore((s) => s.cancelScan);
   const setScanState = useLibraryStore((s) => s.setScanState);
   const loadArchive = useLibraryStore((s) => s.loadArchive);
+
+  const throughput = useThroughput(
+    scanProgress?.total_bytes ?? 0,
+    scanState === 'scanning',
+    activeScanId ?? undefined
+  );
 
   // Only show banner if there are images in the grid and a scan is active, paused, stopped, or completed
   if (images.length === 0 || scanState === 'idle') return null;
@@ -43,14 +129,14 @@ export function ArchiveScanBanner({ onRestartScan }: ArchiveScanBannerProps) {
           <>
             <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
               <Loader2 className="w-3.5 h-3.5 text-accent animate-spin flex-shrink-0" />
-              <span className="font-medium text-txt-primary flex-shrink-0 whitespace-nowrap">
-                {t('loading.scanningCount', { count: formattedCount, defaultValue: `Indexiere... ${formattedCount} Fotos` })}
-              </span>
-              {sizeMb && (
-                <span className="text-txt-tertiary font-mono text-[11px] tabular-nums flex-shrink-0">
-                  ({sizeMb} MB)
-                </span>
-              )}
+              <ScanStatsCard
+                label={t('loading.scanningCount', { count: formattedCount, defaultValue: `Indexiere... ${formattedCount} Fotos` })}
+                labelClassName="font-medium text-txt-primary flex-shrink-0 whitespace-nowrap"
+                sizeMb={sizeMb}
+                throughput={throughput}
+                scanState={scanState}
+                formattedCount={formattedCount}
+              />
               {shortDir && (
                 <div className="hidden sm:flex items-center gap-1 text-txt-tertiary min-w-0 flex-1 truncate border-l border-white/10 pl-2.5 ml-1" title={currentDir}>
                   <Folder className="w-3 h-3 flex-shrink-0 opacity-60" />
@@ -84,14 +170,14 @@ export function ArchiveScanBanner({ onRestartScan }: ArchiveScanBannerProps) {
           <>
             <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
               <Pause className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
-              <span className="font-medium text-amber-300 flex-shrink-0 whitespace-nowrap">
-                {t('loading.pausedCount', { count: formattedCount, defaultValue: `Indexierung pausiert (${formattedCount} Fotos)` })}
-              </span>
-              {sizeMb && (
-                <span className="text-txt-tertiary font-mono text-[11px] tabular-nums flex-shrink-0">
-                  ({sizeMb} MB)
-                </span>
-              )}
+              <ScanStatsCard
+                label={t('loading.pausedCount', { count: formattedCount, defaultValue: `Indexierung pausiert (${formattedCount} Fotos)` })}
+                labelClassName="font-medium text-amber-300 flex-shrink-0 whitespace-nowrap"
+                sizeMb={sizeMb}
+                throughput={throughput}
+                scanState={scanState}
+                formattedCount={formattedCount}
+              />
             </div>
 
             <div className="flex items-center gap-1.5 flex-shrink-0 border-l border-white/10 pl-2.5">
@@ -146,14 +232,14 @@ export function ArchiveScanBanner({ onRestartScan }: ArchiveScanBannerProps) {
         {scanState === 'completed' && (
           <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
             <Check className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
-            <span className="font-medium text-emerald-300 flex-shrink-0 whitespace-nowrap">
-              {t('loading.completedCount', { count: formattedCount, defaultValue: `${formattedCount} Fotos indexiert` })}
-            </span>
-            {sizeMb && (
-              <span className="text-txt-tertiary font-mono text-[11px] tabular-nums flex-shrink-0">
-                ({sizeMb} MB)
-              </span>
-            )}
+            <ScanStatsCard
+              label={t('loading.completedCount', { count: formattedCount, defaultValue: `${formattedCount} Fotos indexiert` })}
+              labelClassName="font-medium text-emerald-300 flex-shrink-0 whitespace-nowrap"
+              sizeMb={sizeMb}
+              throughput={throughput}
+              scanState={scanState}
+              formattedCount={formattedCount}
+            />
           </div>
         )}
       </div>

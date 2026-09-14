@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, MouseEvent as ReactMouseEvent, WheelEvent } from "react";
-import { X, ChevronLeft, ChevronRight, ZoomIn, Minimize2, AlertTriangle, Camera } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, ZoomIn, Minimize2, Info, Camera } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { PairedImportItem } from "../ImportPreviewStep";
@@ -343,7 +343,7 @@ export function ImportLightboxModal({
                     className="flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-semibold border border-amber-500/40 shadow-xs animate-in fade-in duration-150 ml-1"
                     title="Die Kamera war auf einen Schwarz-Weiß-Bildstil eingestellt. Das Vorschaubild ist monochrom, die RAW-Datei enthält jedoch die vollen Farbinformationen des Sensors."
                   >
-                    <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                    <Info className="w-3.5 h-3.5 text-amber-400" />
                     <span>S/W-Vorschau (RAW ist Farbe)</span>
                   </span>
                 ) : null}

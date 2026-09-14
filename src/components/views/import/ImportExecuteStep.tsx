@@ -1,6 +1,6 @@
 import { 
   Download, File, Terminal, CheckCircle2, Folder, 
-  LayoutGrid, Rocket, RotateCcw 
+  LayoutGrid, Rocket, RotateCcw, Zap
 } from "lucide-react";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
@@ -10,6 +10,7 @@ import { useImportStore } from '../../../stores/importStore';
 import { useLibraryStore, LibraryImage } from '../../../stores/libraryStore';
 import { useNavigationStore } from '../../../stores/navigationStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
+import { useThroughput } from '../../../utils/throughput';
 
 interface ImportProgress {
   files_processed: number;
@@ -38,6 +39,7 @@ export function ImportExecuteStep({ onReset }: ImportExecuteStepProps) {
   const { setRootPath, setImages, setLastImportPaths, setIsViewingLastImport } = useLibraryStore();
   const { setActiveView } = useNavigationStore();
   
+  const throughput = useThroughput(progress?.bytes_processed ?? 0, !isComplete && progress !== null);
   const selectedFiles = scannedFiles.filter(f => f.selected);
 
   useEffect(() => {
@@ -128,7 +130,11 @@ export function ImportExecuteStep({ onReset }: ImportExecuteStepProps) {
       setLastImportPaths(importedPaths);
       setIsViewingLastImport(true);
       try {
-        const loadedImages: LibraryImage[] = await invoke('scan_archive_directory', { path: destinationDirectory });
+        const scanResult = await invoke<{ files: LibraryImage[]; directories: string[] }>('scan_archive_directory', { path: destinationDirectory });
+        const loadedImages: LibraryImage[] = scanResult.files || [];
+        if (scanResult.directories) {
+          useLibraryStore.getState().addDiscoveredFolders(scanResult.directories);
+        }
         setImages(loadedImages);
       } catch (e) {
         console.error("Failed to scan library after import:", e);
@@ -193,6 +199,16 @@ export function ImportExecuteStep({ onReset }: ImportExecuteStepProps) {
               </div>
               <div className="flex items-center justify-between mt-2 text-xs text-txt-tertiary">
                 <span>{t('execute.bytesProgress', { current: (p_bytes / (1024 * 1024 * 1024)).toFixed(2), total: (t_bytes / (1024 * 1024 * 1024)).toFixed(2) })}</span>
+                {throughput.bytesPerSecond > 0 && (
+                  <span 
+                    className="font-mono text-accent flex items-center gap-1 font-medium cursor-help"
+                    title={`${throughput.formattedBitrate} (${throughput.formattedSpeed})`}
+                  >
+                    <Zap className="w-3 h-3 text-accent" />
+                    <span>{throughput.formattedSpeed}</span>
+                    <span className="text-txt-tertiary text-[11px]">({throughput.formattedBitrate})</span>
+                  </span>
+                )}
               </div>
             </div>
 

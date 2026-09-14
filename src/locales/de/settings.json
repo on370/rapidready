@@ -66,5 +66,25 @@
     "subtitle": "Verwalte Workflows (Unterordner, Umbenennung)",
     "add": "Preset hinzufügen",
     "noPresets": "Noch keine Presets hinzugefügt."
+  },
+  "updates": {
+    "title": "Software-Updates",
+    "subtitle": "Updates über GitHub Releases abrufen",
+    "checkAutomatically": {
+      "title": "Automatisch nach Updates suchen",
+      "desc": "Beim App-Start im Hintergrund prüfen, ob eine neuere Version verfügbar ist"
+    },
+    "includeBeta": {
+      "title": "Auf Vorab-Versionen (Beta) hinweisen",
+      "desc": "Benachrichtigen, wenn ein neues Beta-Release veröffentlicht wurde",
+      "onlyBetaNotice": "Nur verfügbar, wenn eine Beta-Version verwendet wird."
+    },
+    "currentVersion": "Installierte Version: v{{version}} (Build {{build}})",
+    "checkNow": "Jetzt nach Updates suchen",
+    "checking": "Suche nach Updates...",
+    "upToDate": "RapidReady ist auf dem neuesten Stand (v{{version}}).",
+    "updateAvailable": "Neue Version verfügbar: {{tag}}",
+    "download": "Herunterladen",
+    "checkError": "Fehler beim Prüfen auf Updates: {{error}}"
   }
 }

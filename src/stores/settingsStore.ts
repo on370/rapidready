@@ -31,6 +31,9 @@ interface SettingsState {
   locations: ArchiveLocation[];
   recentPaths: string[];
   presets: ImportPreset[];
+  checkForUpdates: boolean;
+  includeBetaUpdates: boolean;
+  dismissedUpdateVersion: string | null;
   
   setAutoDetect: (val: boolean) => void;
   setVerifyCopy: (val: boolean) => void;
@@ -40,6 +43,9 @@ interface SettingsState {
   setStartupView: (val: 'import' | 'library') => void;
   setLastLibraryPath: (val: string | null) => void;
   setGpsMapProvider: (val: 'google' | 'osm' | 'internal') => void;
+  setCheckForUpdates: (val: boolean) => void;
+  setIncludeBetaUpdates: (val: boolean) => void;
+  setDismissedUpdateVersion: (val: string | null) => void;
   addLocation: (location: ArchiveLocation) => void;
   removeLocation: (id: string) => void;
   updateLocation: (id: string, name: string, path?: string) => void;
@@ -62,6 +68,9 @@ export const useSettingsStore = create<SettingsState>()(
       gpsMapProvider: 'google',
       locations: [],
       recentPaths: [],
+      checkForUpdates: true,
+      includeBetaUpdates: true,
+      dismissedUpdateVersion: null,
       presets: [
         {
           id: 'default-std',
@@ -82,6 +91,13 @@ export const useSettingsStore = create<SettingsState>()(
       setStartupView: (startupView) => set({ startupView }),
       setLastLibraryPath: (lastLibraryPath) => set({ lastLibraryPath }),
       setGpsMapProvider: (gpsMapProvider) => set({ gpsMapProvider }),
+      setCheckForUpdates: (checkForUpdates) => set((state) => ({
+        checkForUpdates,
+        // When checking for updates is turned off, also switch off includeBetaUpdates
+        includeBetaUpdates: checkForUpdates ? state.includeBetaUpdates : false,
+      })),
+      setIncludeBetaUpdates: (includeBetaUpdates) => set({ includeBetaUpdates }),
+      setDismissedUpdateVersion: (dismissedUpdateVersion) => set({ dismissedUpdateVersion }),
       addLocation: (location) => set((state) => {
         if (state.locations.some(l => l.id === location.id || normalizePath(l.path) === normalizePath(location.path))) {
           return state;

@@ -142,6 +142,14 @@
        - **Tier 1 (Grid Micro-Thumbnails 256px / 512px):** Packed chunk files (e.g. 64 MB / 256 MB binary segments) or a memory-mapped key-value store (LMDB / Sled in Rust) avoiding inode overhead.
        - **Tier 2 (Full-Res Screen Previews 2048px):** High-quality WebP files on local NVMe for instant fullscreen loupe switching.
     4. *Instant Grid on Open:* Opening an indexed archive renders the grid immediately from local NVMe (< 20 ms), while network SMB scans run decoupled in the background to detect new or modified files.
+    5. *Hierarchical Cache Inheritance across Nested Library Locations:*
+       - **Architectural Question & Challenge:** Photographers often register multiple Library Locations in RapidReady that overlap hierarchically (e.g. `/Volumes/Photos` as a master location, alongside `/Volumes/Photos/2024` or `/Volumes/Photos/2024/09_Iceland` as focused quick-access locations).
+       - If Location A is a sub-directory of Location B (or B is a parent of A), an index or thumbnail DB already exists partially or completely.
+       - **Design Requirement:**
+         - Key entries in the persistent cache must be based on normalized canonical absolute paths (or a volume UUID + relative path scheme) rather than scope-relative offsets.
+         - Opening a sub-location (`/Volumes/Photos/2024`) immediately inherits 100% of the cache entries already generated when `/Volumes/Photos` was scanned.
+         - Conversely, scanning a parent location discovers and reuses already-indexed sub-locations without re-extracting thumbnails or re-reading EXIF data.
+         - Avoid separate redundant DB instances per registered location; maintain a unified, path-indexed cache store per local workstation.
 
 - [ ] **Speculative RAM Viewport Caching:**
   - Prefetching neighboring thumbnails in RAM (`visible_index ± 20`) during idle pauses (> 150 ms).
@@ -149,17 +157,45 @@
 
 ---
 
-### Milestone: Geodata & Map Integration
-- [ ] **Manual Geotagging & Coordinate Editor in Sidecars (Option B):**
-  - Allow photographers to assign or edit GPS coordinates for cameras lacking built-in GPS receivers.
-  - Non-destructive persistence in `.rrdata` (and `.xmp`) sidecars under `"gps": { "latitude", "longitude", "altitude" }`.
-  - Smart clipboard parsing: One-click paste of standard Google Maps coordinate strings (e.g. `"48.137154, 11.575421"`).
-  - Batch assignment: Apply identical location coordinates to multiple selected images simultaneously.
+- [ ] **GEO Part 1: Universal Geotagging & Intelligent GPS Coordinate Editor:**
+  - **Context & Goal:**
+    Photographers frequently shoot with mirrorless or medium format cameras without built-in GPS (e.g. Fuji X-T5, Leica M, Hasselblad, older DSLRs), or require manual location corrections. Pasting coordinates from disparate sources (Google Maps URLs, Apple Maps, OpenStreetMap, German comma notation, degrees-minutes-seconds) is traditionally painful and error-prone.
+  - **Universal Input Parser (Pure Client-Side Engine):**
+    - **Google Maps & Web URLs:** Direct paste of web URLs (`https://www.google.com/maps?q=48.137154,11.575421`, `https://www.google.com/maps/@48.137154,11.575421,17z`, `https://maps.apple.com/?ll=...`, `https://www.openstreetmap.org/?mlat=...`, `geo:48.137154,11.575421`).
+    - **Decimal Degrees (DD):** Standard dot notation (`48.137154, 11.575421`), space-separated (`48.137154 11.575421`), and European comma notation (`48,137154; 11,575421`).
+    - **Degrees, Minutes, Seconds (DMS):** Photographic standard (`48° 08' 13.8" N, 11° 34' 31.5" E`) with unicode apostrophe resilience (`' / ’ / ′`, `" / ” / ″`).
+    - **Degrees, Decimal Minutes (DMM / NMEA):** Marine & GPS handheld format (`48° 08.230' N, 11° 34.525' E`).
+    - **Cardinal Direction Prefix/Suffix:** `N/S/E/W` handling with proper sign conversion (South/West = negative).
+  - **Inspector UI & Feedback:**
+    - Dedicated edit button (`Pencil` / *„Add coordinates...“*) in `LibraryInspector.tsx`.
+    - Live parsing preview showing normalized DMS and decimal degrees in green checkmark state (`✓ 48° 08' 14" N, 11° 34' 32" E (48.137154°, 11.575421°)`).
+    - Validation error guidance when unparseable or out of bounds ($-90 \le \text{lat} \le +90$, $-180 \le \text{lon} \le +180$).
+  - **Non-Destructive Persistence:**
+    - Written to `.rrdata` sidecar under `"gps": { "latitude": lat, "longitude": lon }` (already given priority override in Rust `metadata_resolver.rs`).
+    - Batch application: Apply to all selected photos in the grid.
 
-- [ ] **Native In-App Map Viewer:**
-  - Interactive map modal directly within RapidReady (via Leaflet / OpenStreetMap or MapLibre vector tiles) avoiding external browser round-trips.
-  - Interactive pin placement for manual geotagging.
-  - Optional offline tile caching for remote field work.
+- [ ] **GEO Part 2: Native In-App Map Viewer & Geographic Photo Explorer:**
+  - **Context & Vision:**
+    A full-fledged, embedded interactive map viewer (e.g. via MapLibre Vector Tiles or Leaflet with OpenStreetMap / vector tiles) instead of relying solely on external browser round-trips to Google or OpenStreetMap.
+  - **Two-Way Dual Functionality:**
+    1. **Interactive Location Assignment (Geotagging):**
+       - Assign or adjust coordinates by clicking directly on the map for the active photo or multiple selected photos.
+       - Available either as an embedded mini-map inside the Inspector panel or within the full map view.
+    2. **Geographic Exploration & Photo Selection (Apple Photos / Lightroom Maps Paradigm):**
+       - Visualize all geotagged photos across the map using location pins/markers ("inverted teardrops with circle cutout") displaying the photo count.
+       - **Dynamic Zoom-Dependent Clustering:**
+         - *Zoomed Out (Country / Continent level):* Geographically adjacent locations aggregate into regional cluster badges displaying the aggregate photo count.
+         - *Zoomed In (City / Street level):* Large clusters smoothly de-aggregate into smaller sub-clusters and finally individual photo pins.
+       - **Direct Selection into the Grid:**
+         - Clicking any cluster badge or individual pin immediately filters and selects the corresponding photos within the main photo grid.
+  - **UI Architecture (No Modal Overlay):**
+    - Because the map interacts directly with the photo grid in real time (map selection filters photos in the grid), the map viewer **must not be a modal pop-up / dialog** that conceals the workspace.
+    - *Candidate Layout Concepts (to be finalized during design phase):*
+      - Dedicated primary view mode alongside Grid and Loupe: `[ Grid ] [ Loupe ] [ Map ]`, retaining a synchronized filmstrip or split grid within the map view.
+      - Split workspace layout (e.g. top half map, bottom half photo grid).
+      - Dockable bottom/side panel or an interactive, expandable Inspector map card.
+  - **Offline Capability:**
+    - Optional local tile caching for field work, travel, and remote assignments without active internet connectivity.
 
 ---
 
@@ -189,7 +225,7 @@
 ---
 
 ### Milestone: Library & Inspector UI Ergonomics
-- [ ] **Collapsible Inspector Cards & Sections:**
+- [x] **Collapsible Inspector Cards & Sections:**
   - **Context & Goal:**
     As the Inspector panel (`LibraryInspector.tsx`) grows with rich metadata and tooling (Culling, Rating & Colors, Tag suggestions, Technical EXIF, and GPS / Location), vertical space on laptop screens can become tight.
   - **Requirements & Behavior:**
@@ -198,7 +234,7 @@
     - Clean header styling with smooth expand/collapse transition.
     - Section collapse states should be persisted (e.g. in local storage) so photographers can customize and retain their preferred Inspector layout across sessions.
 
-- [ ] **Live Throughput & Transfer Rate Tooltip in Status Bar (MB/s & Gb/s):**
+- [x] **Live Throughput & Transfer Rate Tooltip in Status Bar (MB/s & Gb/s):**
   - **Context & Goal:**
     When indexing large archives (`ArchiveScanBanner.tsx`) or transferring photos during import (`ImportExecuteStep.tsx`), RapidReady displays accumulated data volume in MB/GB (e.g. `(450.2 MB)`). Photographers frequently want to inspect their actual real-time transfer throughput to diagnose hardware bottlenecks (e.g. identifying whether an SD card reader is limited by USB 2.0 vs. UHS-II bus speeds, or verifying 1 GbE vs. 10 GbE NAS network saturation).
   - **Requirements & Behavior:**
@@ -209,24 +245,81 @@
       - **Session Metrics:** Include peak throughput and estimated time to completion (ETA) when total workload is known.
     - Consistent styling matching RapidReady's dark glassmorphism theme (`#18181b/95` backdrop with subtle border and mono typography).
 
+- [x] **Dynamic Folder Tree Active Selection Indicator Bubbling on Collapse:**
+  - **Context & Goal:**
+    In Library view (`LibraryLeftSidebar.tsx`), when an active photo is selected in the grid, its containing folder is highlighted in the folder tree (orange accent border and camera icon). When any parent folder above it is collapsed with `>` / `v`, the selection indicator currently disappears from view, leaving the photographer without context as to where the active file is located.
+  - **Requirements & Behavior:**
+    - When a subtree containing the active image is collapsed, the selection indicator and camera badge must dynamically "bubble up" to the nearest visible ancestor node in the tree hierarchy.
+    - As soon as the user expands the parent directory again, the indicator smoothly migrates back down to the exact subfolder.
+
+- [x] **Native Multi-Selection Ergonomics (Finder & Windows Explorer Parity for Cmd/Ctrl+Click):**
+  - **Context & Goal:**
+    When a photographer selects all photos in a folder (`Cmd+A` / `Ctrl+A`) and subsequently attempts to deselect individual photos using `Cmd+Click` (macOS) or `Ctrl+Click` (Windows), the current selection behavior can become erratic or unresponsive.
+  - **Requirements & Behavior:**
+    - Achieve 100% behavioral parity with macOS Finder and Windows File Explorer.
+    - `Cmd+Click` / `Ctrl+Click` on an already selected item must reliably toggle it off (remove from `selectedPaths`) without resetting the rest of the selection set.
+    - The active photo (`activeImageIndex`) must handle deselection gracefully (e.g. keeping visual focus or transferring active status to the next remaining selected item).
+    - Maintain stable anchor tracking for subsequent `Shift+Click` range extensions.
+
+---
+
+### Milestone: Data Safety & File Operations
+- [x] **Unmistakable Permanent Deletion Warning for Network & NAS Storage:**
+  - **Context & Goal:**
+    When deleting rejected images (`X`) from network shares (SMB/NFS on macOS, UNC paths on Windows), the operating system does NOT have a Recycle Bin / Trash. Unlike local internal drives where files move to the OS Trash and can be recovered, deletions on a NAS are **immediate and permanent**. The current dialog states files will be moved to the Trash, which is dangerously misleading on network storage.
+  - **Requirements & Behavior:**
+    - Detect whether target files / archive root reside on a remote network share or NAS (UNC path on Windows, non-local mount `statfs` on macOS).
+    - If on local storage with Trash support: Display the standard "Move {{count}} images to Trash" prompt.
+    - If on a network share / NAS: Display an explicit, unmistakable **Permanent Deletion Warning** with a prominent warning triangle (`!`), clearly informing the photographer:
+      *"ATTENTION: The selected files are located on a network share / NAS. They CANNOT be moved to the Trash and will be PERMANENTLY and IRREVOCABLY deleted from disk!"*
+    - Action buttons: Red *"Permanently Delete"* confirmation button vs. *"Cancel"*.
+
+- [x] **Folder Tree Context Menu & Recursive Folder Deletion / Management:**
+  - **Context & Goal:**
+    Currently, RapidReady only allows deleting individual image files. When a photographer reorganizes shoots, eliminates discarded subfolders, or manages whole subtrees in `LibraryLeftSidebar.tsx`, there is no way to perform folder-level operations directly within the app. Adding a native-feeling context menu on folder tree nodes bridges this workflow gap, matching expectations set by Adobe Lightroom, Photo Mechanic, and OS file managers.
+  - **Requirements & Behavior:**
+    - **Context Menu Trigger:** Right-click on any folder tree node in `LibraryLeftSidebar.tsx` opens a custom dark-glass context menu.
+    - **Menu Actions:**
+      - *Navigation & View:*
+        - **"Im Finder anzeigen"** (macOS) / **"Im Explorer anzeigen"** (Windows) via existing `show_in_finder` Tauri command.
+        - **"Alle Unterordner aufklappen"** (`Expand All`) / **"Alle Unterordner einklappen"** (`Collapse All`).
+        - **"Alle Bilder in diesem Ordner auswählen"**: Selects all images belonging to this subtree in the grid/filmstrip.
+      - *Culling Shortcut:*
+        - **"Nur verworfene Bilder (X) in diesem Ordner löschen..."**: Scans this specific folder subtree for images flagged as `-1` (Reject) and prompts for their deletion, leaving picks/unrated photos intact.
+      - *Filesystem Operations:*
+        - **"Neuer Unterordner..."**: Creates a new subdirectory (`mkdir`) within the targeted folder.
+        - **"Ordner umbenennen..."**: Renames the folder and atomically updates all internal path mappings in `images` and `imageIndexMap`.
+        - **"Ordner löschen..."** *(Destructive Action, highlighted in red)*:
+          - Protected Root: The archive root folder cannot be deleted (option disabled or hidden).
+          - Confirmation Dialog: Clearly lists the folder name, path, known image count, and explains that **all contents and subdirectories** will be deleted.
+          - OS Trash vs. NAS Deletion:
+            - On local storage: Moves entire folder to Trash (`trash::delete`).
+            - On Network/NAS: Prompts with explicit **red warning triangle** alerting that files on network shares are permanently and irrevocably wiped without Trash support (`fs::remove_dir_all`).
+          - State Cleanup: Removes all images under the deleted path from `libraryStore`, cleans `selectedPaths`, and gracefully steps `activeFolderPath` up to the parent directory.
+
 ---
 
 ### Milestone: Application Lifecycle, Updates & Distribution
-- [ ] **GitHub Release Update Check (Startup & Manual Menu Action):**
+- [x] **GitHub Release Update Check (Startup & Manual Menu Action):**
   - **Context & Goal:**
     Notify users when a newer version of RapidReady is published on GitHub, ensuring photographers receive bugfixes, performance optimizations, and newly supported camera formats without manual checking.
   - **Requirements & Behavior:**
-    - **Startup Check:** On application launch, trigger a lightweight, non-blocking background check against the GitHub Releases endpoint (`https://api.github.com/repos/on370/RapidReady/releases/latest`).
+    - **Startup Check:** On application launch, trigger a lightweight, non-blocking background check against the GitHub Releases endpoint (`https://api.github.com/repos/on370/RapidReady/releases`).
     - **Manual "Check for Updates..." Menu Action:**
       - Add a dedicated "Check for Updates..." item in the native application menu (under the macOS App Menu, and under Help / Tools on Windows/Linux).
       - Include a manual `[ Check for Updates Now ]` trigger button in `SettingsView.tsx`.
       - If up to date, show an immediate confirmation toast (e.g. *"You're using the latest version of RapidReady (v0.3.6-beta)"*).
+    - **Two-Tier Configuration Switches in Settings (`SettingsView.tsx`):**
+      - **Master Switch 1:** *"Automatically check for updates on startup"* (enabled by default).
+      - **Dependent Switch 2:** *"Notify about pre-release / beta versions (when currently running a beta build)"*:
+        - *Stable Build Rule:* If the user is running a non-beta release (e.g. `v1.0.0`), RapidReady **never** notifies about beta versions. Switch 2 is hidden or permanently disabled.
+        - *Beta Build Rule:* If the user is running a beta version (e.g. `0.3.x-beta`), Switch 2 is active. When checked, newer beta releases trigger update prompts; when unchecked, notifications are suppressed until a newer official stable release is published.
+        - *Dependency Link:* When Master Switch 1 is toggled off, Switch 2 is automatically turned off and grayed out (`disabled`).
     - Compare remote release tag with local SemVer from `build-info.json` / `package.json`.
     - If a newer version is available:
       - Display a clean dialog or notification banner indicating the new version number and brief release headline.
       - Provide a primary action button to open `https://github.com/on370/RapidReady/releases/latest` in the user's default browser via `@tauri-apps/plugin-opener`.
       - Include dismiss options: `[ Remind Me Later ]` and `[ Skip This Version ]` (stored in settings to avoid recurring prompts for a skipped version).
-      - Add a toggle in Settings (`SettingsView.tsx`): *Automatically check for updates on startup* (enabled by default).
 
 
 

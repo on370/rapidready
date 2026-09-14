@@ -12,6 +12,7 @@ export interface LibraryGridProps {
   onItemClick: (e: React.MouseEvent, index: number, img: LibraryImage) => void;
   onOpenLoupe: (index: number) => void;
   onContextMenu: (e: React.MouseEvent, path: string, index: number) => void;
+  onClearSelection?: () => void;
   viewMode?: 'grid' | 'loupe';
 }
 
@@ -71,6 +72,7 @@ export const LibraryGrid = React.memo(function LibraryGrid({
   onItemClick,
   onOpenLoupe,
   onContextMenu,
+  onClearSelection,
   viewMode = 'grid',
 }: LibraryGridProps) {
   const { t } = useTranslation('library');
@@ -287,6 +289,11 @@ export const LibraryGrid = React.memo(function LibraryGrid({
     <div 
       ref={gridContainerRef} 
       className="flex-1 overflow-auto p-6 relative"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onClearSelection?.();
+        }
+      }}
       onScroll={(e) => {
         setGridScrollTop(e.currentTarget.scrollTop);
       }}
@@ -304,6 +311,11 @@ export const LibraryGrid = React.memo(function LibraryGrid({
             height: `${rowVirtualizer.getTotalSize()}px`,
             width: '100%',
             position: 'relative',
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              onClearSelection?.();
+            }
           }}
         >
           {rowVirtualizer.getVirtualItems().map((virtualRow) => {
@@ -325,14 +337,13 @@ export const LibraryGrid = React.memo(function LibraryGrid({
               >
                 {rowImages.map((img, colIdx) => {
                   const globalIdx = startIndex + colIdx;
-                  const isSelected = selectedPaths.size > 0 
-                    ? selectedPaths.has(img.path) 
-                    : activeImageIndex === globalIdx;
+                  const isSelected = selectedPaths.has(img.path);
+                  const isActive = isSelected && activeImageIndex === globalIdx;
                   return (
                     <GridThumbnailItem
                       key={img.path}
                       img={img}
-                      isActive={activeImageIndex === globalIdx}
+                      isActive={isActive}
                       isSelected={isSelected}
                       isScrolling={rowVirtualizer.isScrolling}
                       onClick={(e) => {

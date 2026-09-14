@@ -12,7 +12,7 @@
 | **Backend Language** | **Rust 2024** | Zero-cost abstractions, fearless concurrency with Rayon & Tokio, direct byte-level EXIF/RAW parsing without GC pause. |
 | **Frontend Framework** | **React 19 + TypeScript** | Strict type safety, clean component lifecycle, high developer ergonomics. |
 | **State Management** | **Zustand** | Minimalist, unopinionated, high-performance state store with native slice subscriptions avoiding unnecessary re-renders. |
-| **Styling** | **Tailwind CSS v4** | Hardware-accelerated CSS variables, consistent dark theme design tokens, zero runtime CSS overhead. |
+| **Styling** | **Tailwind CSS v4** | Hardware-accelerated CSS variables, consistent dark theme design tokens, zero runtime CSS overhead. See [GUI Styleguide](GUI_STYLEGUIDE.md). |
 | **Virtualization** | **TanStack Virtual v3** | Smooth 60 FPS virtualization across thousands of grid thumbnails and filmstrip items. |
 | **Licensing** | **MIT License** | Maximum flexibility for open-source adoption and collaboration with the RapidRAW ecosystem. |
 
@@ -26,6 +26,7 @@ The repository is structured as a clean separation between the frontend presenta
 app/
 ├── docs/                               # Architecture, Roadmap, Platform Guides
 │   ├── ARCHITECTURE.md                 # This document
+│   ├── GUI_STYLEGUIDE.md               # Visual design, color tokens & interaction semantics
 │   ├── ROADMAP.md                      # Technical roadmap & backlog
 │   ├── PLATFORM_MACOS.md               # macOS build & packaging instructions
 │   ├── PLATFORM_WINDOWS.md             # Windows build & setup instructions

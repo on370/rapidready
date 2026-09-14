@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Film, AlertTriangle, Camera } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Film, Info, Camera } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { LibraryImage, useLibraryStore } from '../../../../stores/libraryStore';
@@ -35,11 +35,12 @@ export const LoupeViewer = React.memo(function LoupeViewer({
 
   const [debouncedActiveIndex, setDebouncedActiveIndex] = useState(activeImageIndex);
 
-  // Debounce preloading so rapid key-navigation doesn't hammer QuickLook with full-res requests
+  // Debounce preloading slightly (120ms) so rapid key repeat skips intermediate frames,
+  // but normal human culling rhythm (~300-800ms) preloads immediately into RAM cache
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedActiveIndex(activeImageIndex);
-    }, 400);
+    }, 120);
     return () => clearTimeout(timer);
   }, [activeImageIndex]);
 
@@ -111,28 +112,42 @@ export const LoupeViewer = React.memo(function LoupeViewer({
               }}
             />
             
-            {/* Preload Previous and Next Full-Res images when navigation pauses */}
+            {/* Preload Previous and Next preview & full-res images into RAM when navigation pauses */}
             {debouncedActiveIndex === activeImageIndex && (
               <>
                 {debouncedActiveIndex > 0 && (
-                  <img 
-                    src={getRrImageUrl(displayedImages[debouncedActiveIndex - 1].path, true, displayedImages[debouncedActiveIndex - 1].culling?.orientation)} 
-                    className="hidden" 
-                    alt="" 
-                  />
+                  <>
+                    <img 
+                      src={getRrImageUrl(displayedImages[debouncedActiveIndex - 1].path, false, displayedImages[debouncedActiveIndex - 1].culling?.orientation, 2)} 
+                      className="hidden" 
+                      alt="" 
+                    />
+                    <img 
+                      src={getRrImageUrl(displayedImages[debouncedActiveIndex - 1].path, true, displayedImages[debouncedActiveIndex - 1].culling?.orientation)} 
+                      className="hidden" 
+                      alt="" 
+                    />
+                  </>
                 )}
                 {debouncedActiveIndex < displayedImages.length - 1 && (
-                  <img 
-                    src={getRrImageUrl(displayedImages[debouncedActiveIndex + 1].path, true, displayedImages[debouncedActiveIndex + 1].culling?.orientation)} 
-                    className="hidden" 
-                    alt="" 
-                  />
+                  <>
+                    <img 
+                      src={getRrImageUrl(displayedImages[debouncedActiveIndex + 1].path, false, displayedImages[debouncedActiveIndex + 1].culling?.orientation, 2)} 
+                      className="hidden" 
+                      alt="" 
+                    />
+                    <img 
+                      src={getRrImageUrl(displayedImages[debouncedActiveIndex + 1].path, true, displayedImages[debouncedActiveIndex + 1].culling?.orientation)} 
+                      className="hidden" 
+                      alt="" 
+                    />
+                  </>
                 )}
               </>
             )}
           </>
         ) : null}
-        {activeImage?.culling.flag === -1 && <div className="absolute inset-0 bg-danger/10 pointer-events-none" />}
+        {activeImage?.culling.flag === -1 && <div className="absolute inset-0 bg-danger/15 pointer-events-none z-20" />}
       </div>
 
       {/* Filmstrip Bar */}
@@ -208,7 +223,7 @@ export const LoupeViewer = React.memo(function LoupeViewer({
                   className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] bg-amber-500/20 border border-amber-500/40 text-amber-300 font-semibold shadow-xs"
                   title={t('inspector.bwWarningTooltip', 'Die Kamera war auf einen Schwarz-Weiß-Bildstil eingestellt. Das Vorschaubild ist monochrom, die RAW-Datei enthält jedoch die vollen Farbinformationen des Sensors.')}
                 >
-                  <AlertTriangle className="w-3 h-3 text-amber-400" />
+                  <Info className="w-3 h-3 text-amber-400" />
                   <span>{t('inspector.bwWarningTitle', 'S/W-Vorschau (RAW ist Farbe)')}</span>
                 </span>
               ) : null}

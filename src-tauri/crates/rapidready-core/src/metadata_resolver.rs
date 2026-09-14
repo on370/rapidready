@@ -27,6 +27,7 @@ pub struct ImageMetadata {
 pub fn is_raw_path(path: &Path) -> bool {
     let raw_exts = [
         "cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2", "pef", "3fr", "x3f", "nrw",
+        "rwl", "fff", "iiq", "crw", "erf",
     ];
     path.extension()
         .and_then(|s| s.to_str())
@@ -347,6 +348,11 @@ mod tests {
         assert!(is_raw_path(Path::new("photo.DNG")));
         assert!(is_raw_path(Path::new("photo.raf")));
         assert!(is_raw_path(Path::new("photo.rw2")));
+        assert!(is_raw_path(Path::new("photo.rwl")));
+        assert!(is_raw_path(Path::new("photo.fff")));
+        assert!(is_raw_path(Path::new("photo.iiq")));
+        assert!(is_raw_path(Path::new("photo.crw")));
+        assert!(is_raw_path(Path::new("photo.erf")));
         assert!(!is_raw_path(Path::new("photo.jpg")));
         assert!(!is_raw_path(Path::new("photo.jpeg")));
         assert!(!is_raw_path(Path::new("photo.png")));

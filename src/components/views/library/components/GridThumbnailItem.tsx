@@ -53,11 +53,11 @@ export const GridThumbnailItem = React.memo(function GridThumbnailItem({
   return (
     <div 
       className={`aspect-[3/2] rounded-lg border cursor-pointer relative overflow-hidden bg-app-card group transition-colors ${
-        isActive 
-          ? 'border-accent ring-2 ring-accent shadow-md shadow-accent/10' 
-          : isSelected 
-            ? 'border-accent/80 ring-2 ring-accent/50 bg-accent/5' 
-            : 'border-app-border hover:border-app-border-hover'
+        isSelected
+          ? isActive 
+            ? 'border-accent ring-2 ring-accent shadow-md shadow-accent/10' 
+            : 'border-accent/80 ring-2 ring-accent/50 bg-accent/5' 
+          : 'border-app-border hover:border-app-border-hover'
       }`}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
@@ -101,21 +101,21 @@ export const GridThumbnailItem = React.memo(function GridThumbnailItem({
         )}
       </div>
 
-      <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+      <div className={`absolute top-1 right-1 flex gap-1 z-20 transition-opacity ${img.culling.flag !== 0 ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
         {img.culling.flag === 1 && <div className="w-4 h-4 rounded-full bg-success flex items-center justify-center shadow"><Check className="w-3 h-3 text-white" /></div>}
         {img.culling.flag === -1 && <div className="w-4 h-4 rounded-full bg-danger flex items-center justify-center text-[10px] font-bold text-white shadow">X</div>}
       </div>
       {img.culling.rating > 0 && (
-        <div className="absolute bottom-1 left-1 flex">
+        <div className="absolute bottom-1 left-1 flex z-20">
           {Array.from({length: img.culling.rating}).map((_, i) => <Star key={i} className="w-3 h-3 text-warning fill-warning" />)}
         </div>
       )}
       {img.culling.color && (
-        <div className="absolute bottom-1 right-1 flex pointer-events-none">
+        <div className="absolute bottom-1 right-1 flex pointer-events-none z-20">
           <span className={`w-2 h-2 rounded-full shadow ${getColorConfig(img.culling.color)?.bg || 'bg-transparent'}`} />
         </div>
       )}
-      {img.culling.flag === -1 && <div className="absolute inset-0 bg-danger/20 pointer-events-none" />}
+      {img.culling.flag === -1 && <div className="absolute inset-0 bg-danger/25 pointer-events-none z-[15]" />}
     </div>
   );
 });

@@ -49,7 +49,8 @@ export function normalizePath(p: string | undefined | null): string {
 }
 
 export const RAW_EXTENSIONS = new Set([
-  'cr2', 'cr3', 'arw', 'nef', 'dng', 'orf', 'raf', 'rw2', 'pef', '3fr', 'x3f', 'nrw'
+  'cr2', 'cr3', 'arw', 'nef', 'dng', 'orf', 'raf', 'rw2', 'pef', '3fr', 'x3f', 'nrw',
+  'rwl', 'fff', 'iiq', 'crw', 'erf'
 ]);
 
 export function isRawFilename(filename: string | undefined | null): boolean {

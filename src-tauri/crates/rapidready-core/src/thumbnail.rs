@@ -16,7 +16,7 @@ static THUMBNAIL_CACHE: LazyLock<Mutex<LruCache<String, Vec<u8>>>> = LazyLock::n
 
 pub fn find_companion_jpeg(raw_path: &Path) -> Option<std::path::PathBuf> {
     let ext = raw_path.extension().and_then(|e| e.to_str())?.to_lowercase();
-    let raw_exts = ["cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2"];
+    let raw_exts = ["cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2", "pef", "3fr", "x3f", "nrw", "rwl", "fff", "iiq", "crw", "erf"];
     if !raw_exts.contains(&ext.as_str()) {
         return None;
     }

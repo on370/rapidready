@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState, useRef } from "react";
 import { 
   X, MousePointerClick, Star, Check, RotateCw, RotateCcw, Tag, CircleSlash,
-  AlertTriangle, Camera, MapPin, ExternalLink
+  Info, Camera, MapPin, ExternalLink, ChevronDown, ChevronRight
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useLibraryStore } from "../../../stores/libraryStore";
+import { useLibraryStore, LibraryImage } from "../../../stores/libraryStore";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { getRrImageUrl, normalizePath } from "../../../utils/image";
@@ -31,7 +31,7 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
   const { 
     images, activeImageIndex, 
     updateCullingState, updateBatchCullingState, updateImageCullings, selectedPaths,
-    updateImageMetadata, activeFolderPath, 
+    updateImageMetadata, activeFolderPath, selectedFolderPaths,
     lastImportPaths, isViewingLastImport, rootPath 
   } = useLibraryStore();
   const gpsMapProvider = useSettingsStore((s) => s.gpsMapProvider);
@@ -40,6 +40,27 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
   const [isSuggestOpen, setIsSuggestOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const tagInputContainerRef = useRef<HTMLDivElement>(null);
+
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>(() => {
+    try {
+      const saved = localStorage.getItem('rr_inspector_collapsed');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const toggleSection = (section: string) => {
+    setCollapsedSections(prev => {
+      const next = { ...prev, [section]: !prev[section] };
+      try {
+        localStorage.setItem('rr_inspector_collapsed', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  const isCollapsed = (section: string) => !!collapsedSections[section];
 
   // Close tag suggestions on outside click
   useEffect(() => {
@@ -66,16 +87,33 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
     return rootPath ? normalizePath(rootPath) : null;
   }, [rootPath]);
 
-  const scopedImages = isViewingLastImport
-    ? images.filter(img => normLastImport.has(normalizePath(img.path)))
-    : normActiveFolder && normActiveFolder !== normRoot
-      ? images.filter(img => {
-          const p = normalizePath(img.path);
-          return p.startsWith(normActiveFolder + '/') || p === normActiveFolder;
-        })
-      : images;
+  const scopedImages = useMemo(() => {
+    let list: LibraryImage[];
+    if (isViewingLastImport) {
+      list = images.filter(img => normLastImport.has(normalizePath(img.path)));
+    } else if (
+      selectedFolderPaths && 
+      selectedFolderPaths.size > 0 && 
+      !(selectedFolderPaths.size === 1 && normRoot && selectedFolderPaths.has(normRoot))
+    ) {
+      list = images.filter((img) => {
+        const p = normalizePath(img.path);
+        const lastSlash = p.lastIndexOf('/');
+        const dir = lastSlash > 0 ? p.substring(0, lastSlash) : p;
+        return selectedFolderPaths.has(dir);
+      });
+    } else if (normActiveFolder && normActiveFolder !== normRoot) {
+      list = images.filter((img) => {
+        const p = normalizePath(img.path);
+        return p.startsWith(normActiveFolder + '/') || p === normActiveFolder;
+      });
+    } else {
+      list = images;
+    }
+    return list.slice().sort((a, b) => a.path.localeCompare(b.path));
+  }, [images, isViewingLastImport, normLastImport, selectedFolderPaths, normActiveFolder, normRoot]);
 
-  const activeImage = scopedImages[activeImageIndex];
+  const activeImage = selectedPaths.size > 0 ? scopedImages[activeImageIndex] : undefined;
 
   // Lazy-load detailed EXIF metadata when an image is selected
   useEffect(() => {
@@ -432,175 +470,255 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
         ) : (
           <div className="space-y-4">
             {/* Live Thumbnail Preview */}
-            <div className="relative w-full aspect-[3/2] rounded-xl overflow-hidden border border-app-border bg-app-deepest group">
-              <img 
-                src={getRrImageUrl(activeImage.path, false, activeImage.culling?.orientation)} 
-                alt={activeImage.name} 
-                className="w-full h-full object-contain" 
-              />
-              <div className="absolute top-2 right-2 flex gap-1.5">
-                {activeImage.culling.flag === 1 && (
-                  <span className="w-5 h-5 rounded-full bg-success flex items-center justify-center shadow">
-                    <Check className="w-3 h-3 text-white" />
-                  </span>
-                )}
-                {activeImage.culling.flag === -1 && (
-                  <span className="w-5 h-5 rounded-full bg-danger flex items-center justify-center text-xs font-bold text-white shadow">
-                    X
+            <div className="space-y-2">
+              <div 
+                onClick={() => toggleSection('preview')}
+                className="flex items-center justify-between cursor-pointer select-none group px-0.5"
+              >
+                <div className="flex items-center gap-1.5">
+                  {isCollapsed('preview') ? (
+                    <ChevronRight className="w-3.5 h-3.5 text-txt-tertiary group-hover:text-txt-secondary transition-colors" />
+                  ) : (
+                    <ChevronDown className="w-3.5 h-3.5 text-txt-tertiary group-hover:text-txt-secondary transition-colors" />
+                  )}
+                  <h3 className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider group-hover:text-txt-secondary transition-colors">
+                    {t('inspector.preview', 'Vorschau')}
+                  </h3>
+                </div>
+                {isCollapsed('preview') && (
+                  <span className="text-[10px] text-txt-tertiary font-mono">
+                    {extension} · {(activeImage.size / (1024 * 1024)).toFixed(1)} MB
                   </span>
                 )}
               </div>
-              <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/60 backdrop-blur-sm px-2 py-0.5 rounded text-[11px] font-mono text-white">
-                <span className={isRaw ? "text-accent font-semibold" : "text-txt-secondary"}>{extension}</span>
-                <span className="text-white/40">·</span>
-                <span>{(activeImage.size / (1024 * 1024)).toFixed(1)} MB</span>
-              </div>
-            </div>
 
-            {/* RAW & Monochrome Sensor/Preview Status Notification */}
-            {isRaw && (
-              <>
-                {activeImage.is_monochrome_sensor ? (
-                  <div 
-                    className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-txt-secondary text-xs"
-                    title={t('inspector.monoSensorTooltip', 'Hardware-Monochromsensor. Das RAW enthält native Schwarz-Weiß-Sensordaten ohne Farbfilter.')}
-                  >
-                    <Camera className="w-4 h-4 text-white/80 flex-shrink-0" />
-                    <div>
-                      <span className="font-semibold text-white/90 text-[11px] block">{t('inspector.monoSensor', 'Monochrom-Sensor')}</span>
-                      <span className="text-[10px] text-txt-tertiary block">{t('inspector.monoSensorDesc', 'Hardware-Sensor ohne Bayer-Matrix (echtes S/W)')}</span>
+              {!isCollapsed('preview') && (
+                <>
+                  <div className="relative w-full aspect-[3/2] rounded-xl overflow-hidden border border-app-border bg-app-deepest group">
+                    <img 
+                      src={getRrImageUrl(activeImage.path, false, activeImage.culling?.orientation)} 
+                      alt={activeImage.name} 
+                      className="w-full h-full object-contain" 
+                    />
+                    {activeImage.culling.flag === -1 && (
+                      <div className="absolute inset-0 bg-danger/25 pointer-events-none z-10" />
+                    )}
+                    <div className="absolute top-2 right-2 flex gap-1.5 z-20">
+                      {activeImage.culling.flag === 1 && (
+                        <span className="w-5 h-5 rounded-full bg-success flex items-center justify-center shadow">
+                          <Check className="w-3 h-3 text-white" />
+                        </span>
+                      )}
+                      {activeImage.culling.flag === -1 && (
+                        <span className="w-5 h-5 rounded-full bg-danger flex items-center justify-center text-xs font-bold text-white shadow">
+                          X
+                        </span>
+                      )}
+                    </div>
+                    <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/60 backdrop-blur-sm px-2 py-0.5 rounded text-[11px] font-mono text-white z-20">
+                      <span className={isRaw ? "text-accent font-semibold" : "text-txt-secondary"}>{extension}</span>
+                      <span className="text-white/40">·</span>
+                      <span>{(activeImage.size / (1024 * 1024)).toFixed(1)} MB</span>
                     </div>
                   </div>
-                ) : activeImage.is_monochrome_preview ? (
-                  <div 
-                    className="flex items-start gap-2.5 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs shadow-sm"
-                    title={t('inspector.bwWarningTooltip', 'Die Kamera war auf einen Schwarz-Weiß-Bildstil eingestellt. Das Vorschaubild ist monochrom, die RAW-Datei enthält jedoch die vollen Farbinformationen des Sensors.')}
-                  >
-                    <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-semibold text-amber-300 text-[11px] block">{t('inspector.bwWarningTitle', 'S/W-Vorschau (RAW ist Farbe)')}</span>
-                      <span className="text-[10px] text-amber-400/80 block mt-0.5 leading-snug">
-                        {t('inspector.bwWarningSubtitle', 'Kamerastil ist Schwarz-Weiß. Die RAW-Datei enthält alle Farbinformationen!')}
-                      </span>
-                    </div>
-                  </div>
-                ) : (
-                  <div 
-                    className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-app-card/60 border border-app-border/40 text-txt-tertiary text-[10px]"
-                    title={t('inspector.inCameraPreviewTooltip', 'Eingebettete Kamera-Vorschau (Farbe & Belichtung können vom RAW-Entwickler abweichen).')}
-                  >
-                    <span>{t('inspector.previewRendering', 'Vorschau: In-Camera JPEG')}</span>
-                    <span className="text-white/40 font-mono">JPG Preview</span>
-                  </div>
-                )}
-              </>
-            )}
+
+                  {/* RAW & Monochrome Sensor/Preview Status Notification */}
+                  {isRaw && (
+                    <>
+                      {activeImage.is_monochrome_sensor ? (
+                        <div 
+                          className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-txt-secondary text-xs"
+                          title={t('inspector.monoSensorTooltip', 'Hardware-Monochromsensor. Das RAW enthält native Schwarz-Weiß-Sensordaten ohne Farbfilter.')}
+                        >
+                          <Camera className="w-4 h-4 text-white/80 flex-shrink-0" />
+                          <div>
+                            <span className="font-semibold text-white/90 text-[11px] block">{t('inspector.monoSensor', 'Monochrom-Sensor')}</span>
+                            <span className="text-[10px] text-txt-tertiary block">{t('inspector.monoSensorDesc', 'Hardware-Sensor ohne Bayer-Matrix (echtes S/W)')}</span>
+                          </div>
+                        </div>
+                      ) : activeImage.is_monochrome_preview ? (
+                        <div 
+                          className="flex items-start gap-2.5 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs shadow-sm"
+                          title={t('inspector.bwWarningTooltip', 'Die Kamera war auf einen Schwarz-Weiß-Bildstil eingestellt. Das Vorschaubild ist monochrom, die RAW-Datei enthält jedoch die vollen Farbinformationen des Sensors.')}
+                        >
+                          <Info className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <span className="font-semibold text-amber-300 text-[11px] block">{t('inspector.bwWarningTitle', 'S/W-Vorschau (RAW ist Farbe)')}</span>
+                            <span className="text-[10px] text-amber-400/80 block mt-0.5 leading-snug">
+                              {t('inspector.bwWarningSubtitle', 'Kamerastil ist Schwarz-Weiß. Die RAW-Datei enthält alle Farbinformationen!')}
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div 
+                          className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-app-card/60 border border-app-border/40 text-txt-tertiary text-[10px]"
+                          title={t('inspector.inCameraPreviewTooltip', 'Eingebettete Kamera-Vorschau (Farbe & Belichtung können vom RAW-Entwickler abweichen).')}
+                        >
+                          <span>{t('inspector.previewRendering', 'Vorschau: In-Camera JPEG')}</span>
+                          <span className="text-white/40 font-mono">JPG Preview</span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+            </div>
 
             {/* Interactive Culling Card */}
             <div className="bg-app-card border border-app-border rounded-xl p-3 space-y-2.5">
-              <h3 className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider">{t('inspector.culling')}</h3>
-              
-              {/* Flag Row */}
-              <div className="flex items-center gap-1">
-                <button 
-                  onClick={() => handleCulling(1, activeImage.culling.rating)} 
-                  className={`flex-1 py-1.5 rounded-md text-xs font-semibold flex items-center justify-center gap-1 transition-all border cursor-pointer ${activeImage.culling.flag === 1 ? 'bg-success text-white border-success' : 'border-app-border hover:bg-success/15 text-txt-secondary'}`}
-                  title={t('inspector.pick')}
-                >
-                  <Check className="w-3 h-3" />
-                  <span>{t('inspector.pickBtn', 'Pick')}</span>
-                  <kbd className="text-[9px] opacity-70 font-mono">P</kbd>
-                </button>
+              <div 
+                onClick={() => toggleSection('culling')}
+                className="flex items-center justify-between cursor-pointer select-none group"
+              >
+                <div className="flex items-center gap-1.5">
+                  {isCollapsed('culling') ? (
+                    <ChevronRight className="w-3.5 h-3.5 text-txt-tertiary group-hover:text-txt-secondary transition-colors" />
+                  ) : (
+                    <ChevronDown className="w-3.5 h-3.5 text-txt-tertiary group-hover:text-txt-secondary transition-colors" />
+                  )}
+                  <h3 className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider group-hover:text-txt-secondary transition-colors">
+                    {t('inspector.culling')}
+                  </h3>
+                </div>
 
-                <button 
-                  onClick={() => handleCulling(null, activeImage.culling.rating)} 
-                  className={`flex-1 py-1.5 rounded-md text-xs font-medium flex items-center justify-center gap-1 transition-all border cursor-pointer ${activeImage.culling.flag === null ? 'bg-app-hover text-txt-primary border-app-border' : 'border-app-border hover:bg-app-hover text-txt-tertiary'}`}
-                  title={t('inspector.unflag')}
-                >
-                  <span>{t('inspector.unflagBtn', 'Unflag')}</span>
-                  <kbd className="text-[9px] opacity-70 font-mono">U</kbd>
-                </button>
-
-                <button 
-                  onClick={() => handleCulling(-1, activeImage.culling.rating)} 
-                  className={`flex-1 py-1.5 rounded-md text-xs font-semibold flex items-center justify-center gap-1 transition-all border cursor-pointer ${activeImage.culling.flag === -1 ? 'bg-danger text-white border-danger' : 'border-app-border hover:bg-danger/15 text-txt-secondary'}`}
-                  title={t('inspector.reject')}
-                >
-                  <span>{t('inspector.rejectBtn', 'Reject')}</span>
-                  <kbd className="text-[9px] opacity-70 font-mono">X</kbd>
-                </button>
-              </div>
-
-              {/* Stars Row */}
-              <div className="flex items-center justify-center gap-2 pt-1 border-t border-app-border/50">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <button 
-                    key={star}
-                    onClick={() => handleCulling(activeImage.culling.flag, activeImage.culling.rating === star ? 0 : star)}
-                    className="p-1 hover:scale-115 transition-transform cursor-pointer"
-                    title={`${star} ★`}
-                  >
-                    <Star className={`w-4 h-4 ${activeImage.culling.rating >= star ? 'text-warning fill-warning' : 'text-txt-tertiary hover:text-warning/50'}`} />
-                  </button>
-                ))}
-              </div>
-
-              {/* Color Labels Row */}
-              <div className="flex items-center justify-center gap-2 pt-2 border-t border-app-border/50">
-                {COLOR_PALETTE.map((c) => {
-                  const isSelected = activeImage.culling.color === c.id;
-                  return (
-                    <button 
-                      key={c.id}
-                      onClick={() => handleSetColor(isSelected ? null : c.id)}
-                      className={`w-5 h-5 rounded-full ${c.bg} flex items-center justify-center hover:scale-115 transition-all cursor-pointer relative ${
-                        isSelected ? 'ring-2 ring-white ring-offset-2 ring-offset-app-card shadow-sm' : 'opacity-70 hover:opacity-100'
-                      }`}
-                      title={`${t(`colors.${c.id}`)}${c.shortcut ? ` (${c.shortcut})` : ''}`}
-                    >
-                      {isSelected && <Check className="w-3 h-3 text-white drop-shadow" />}
-                    </button>
-                  );
-                })}
-                {activeImage.culling.color && (
-                  <button
-                    onClick={() => handleSetColor(null)}
-                    className="w-5 h-5 rounded-full bg-app-panel border border-app-border hover:bg-app-hover flex items-center justify-center text-txt-tertiary hover:text-txt-primary hover:scale-115 transition-all cursor-pointer ml-1"
-                    title={t('colors.none')}
-                  >
-                    <CircleSlash className="w-3 h-3" />
-                  </button>
+                {isCollapsed('culling') && (
+                  <div className="flex items-center gap-1.5">
+                    {activeImage.culling.flag === 1 && (
+                      <span className="w-4 h-4 rounded-full bg-success flex items-center justify-center">
+                        <Check className="w-2.5 h-2.5 text-white" />
+                      </span>
+                    )}
+                    {activeImage.culling.flag === -1 && (
+                      <span className="w-4 h-4 rounded-full bg-danger flex items-center justify-center text-[10px] font-bold text-white">
+                        X
+                      </span>
+                    )}
+                    {activeImage.culling.rating > 0 && (
+                      <span className="text-[10px] text-warning flex items-center gap-0.5 font-medium">
+                        <Star className="w-3 h-3 fill-warning text-warning" />
+                        {activeImage.culling.rating}
+                      </span>
+                    )}
+                    {activeImage.culling.color && (
+                      <span className={`w-2.5 h-2.5 rounded-full ${COLOR_PALETTE.find(c => c.id === activeImage.culling.color)?.bg || 'bg-accent'}`} />
+                    )}
+                  </div>
                 )}
               </div>
+              
+              {!isCollapsed('culling') && (
+                <>
+                  {/* Flag Row */}
+                  <div className="flex items-center gap-1">
+                    <button 
+                      onClick={() => handleCulling(1, activeImage.culling.rating)} 
+                      className={`flex-1 py-1.5 rounded-md text-xs font-semibold flex items-center justify-center gap-1 transition-all border cursor-pointer ${activeImage.culling.flag === 1 ? 'bg-success text-white border-success' : 'border-app-border hover:bg-success/15 text-txt-secondary'}`}
+                      title={t('inspector.pick')}
+                    >
+                      <Check className="w-3 h-3" />
+                      <span>{t('inspector.pickBtn', 'Pick')}</span>
+                      <kbd className="text-[9px] opacity-70 font-mono">P</kbd>
+                    </button>
 
-              {/* Rotate Row */}
-              <div className="flex items-center justify-between pt-2 border-t border-app-border/50 px-1">
-                <span className="text-[11px] text-txt-tertiary font-medium">{t('toolbar.rotateLabel')}</span>
-                <div className="flex items-center gap-1">
-                  <button 
-                    onClick={() => handleRotate('ccw')}
-                    className="p-1.5 rounded-md hover:bg-app-hover text-txt-secondary hover:text-txt-primary transition-colors cursor-pointer"
-                    title={t('toolbar.rotateCcwTooltip')}
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                  </button>
-                  <button 
-                    onClick={() => handleRotate('cw')}
-                    className="p-1.5 rounded-md hover:bg-app-hover text-txt-secondary hover:text-txt-primary transition-colors cursor-pointer"
-                    title={t('toolbar.rotateCwTooltip')}
-                  >
-                    <RotateCw className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
+                    <button 
+                      onClick={() => handleCulling(null, activeImage.culling.rating)} 
+                      className={`flex-1 py-1.5 rounded-md text-xs font-medium flex items-center justify-center gap-1 transition-all border cursor-pointer ${activeImage.culling.flag === null ? 'bg-app-hover text-txt-primary border-app-border' : 'border-app-border hover:bg-app-hover text-txt-tertiary'}`}
+                      title={t('inspector.unflag')}
+                    >
+                      <span>{t('inspector.unflagBtn', 'Unflag')}</span>
+                      <kbd className="text-[9px] opacity-70 font-mono">U</kbd>
+                    </button>
+
+                    <button 
+                      onClick={() => handleCulling(-1, activeImage.culling.rating)} 
+                      className={`flex-1 py-1.5 rounded-md text-xs font-semibold flex items-center justify-center gap-1 transition-all border cursor-pointer ${activeImage.culling.flag === -1 ? 'bg-danger text-white border-danger' : 'border-app-border hover:bg-danger/15 text-txt-secondary'}`}
+                      title={t('inspector.reject')}
+                    >
+                      <span>{t('inspector.rejectBtn', 'Reject')}</span>
+                      <kbd className="text-[9px] opacity-70 font-mono">X</kbd>
+                    </button>
+                  </div>
+
+                  {/* Stars Row */}
+                  <div className="flex items-center justify-center gap-2 pt-1 border-t border-app-border/50">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button 
+                        key={star}
+                        onClick={() => handleCulling(activeImage.culling.flag, activeImage.culling.rating === star ? 0 : star)}
+                        className="p-1 hover:scale-115 transition-transform cursor-pointer"
+                        title={`${star} ★`}
+                      >
+                        <Star className={`w-4 h-4 ${activeImage.culling.rating >= star ? 'text-warning fill-warning' : 'text-txt-tertiary hover:text-warning/50'}`} />
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Color Labels Row */}
+                  <div className="flex items-center justify-center gap-2 pt-2 border-t border-app-border/50">
+                    {COLOR_PALETTE.map((c) => {
+                      const isSelected = activeImage.culling.color === c.id;
+                      return (
+                        <button 
+                          key={c.id}
+                          onClick={() => handleSetColor(isSelected ? null : c.id)}
+                          className={`w-5 h-5 rounded-full ${c.bg} flex items-center justify-center hover:scale-115 transition-all cursor-pointer relative ${
+                            isSelected ? 'ring-2 ring-white ring-offset-2 ring-offset-app-card shadow-sm' : 'opacity-70 hover:opacity-100'
+                          }`}
+                          title={`${t(`colors.${c.id}`)}${c.shortcut ? ` (${c.shortcut})` : ''}`}
+                        >
+                          {isSelected && <Check className="w-3 h-3 text-white drop-shadow" />}
+                        </button>
+                      );
+                    })}
+                    {activeImage.culling.color && (
+                      <button
+                        onClick={() => handleSetColor(null)}
+                        className="w-5 h-5 rounded-full bg-app-panel border border-app-border hover:bg-app-hover flex items-center justify-center text-txt-tertiary hover:text-txt-primary hover:scale-115 transition-all cursor-pointer ml-1"
+                        title={t('colors.none')}
+                      >
+                        <CircleSlash className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Rotate Row */}
+                  <div className="flex items-center justify-between pt-2 border-t border-app-border/50 px-1">
+                    <span className="text-[11px] text-txt-tertiary font-medium">{t('toolbar.rotateLabel')}</span>
+                    <div className="flex items-center gap-1">
+                      <button 
+                        onClick={() => handleRotate('ccw')}
+                        className="p-1.5 rounded-md hover:bg-app-hover text-txt-secondary hover:text-txt-primary transition-colors cursor-pointer"
+                        title={t('toolbar.rotateCcwTooltip')}
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                      </button>
+                      <button 
+                        onClick={() => handleRotate('cw')}
+                        className="p-1.5 rounded-md hover:bg-app-hover text-txt-secondary hover:text-txt-primary transition-colors cursor-pointer"
+                        title={t('toolbar.rotateCwTooltip')}
+                      >
+                        <RotateCw className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Tags / Schlagwörter Card */}
             <div className="bg-app-card border border-app-border rounded-xl p-3 space-y-2.5">
-              <div className="flex items-center justify-between">
+              <div 
+                onClick={() => toggleSection('tags')}
+                className="flex items-center justify-between cursor-pointer select-none group"
+              >
                 <div className="flex items-center gap-1.5">
-                  <Tag className="w-3.5 h-3.5 text-txt-tertiary" />
-                  <h3 className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider">
+                  {isCollapsed('tags') ? (
+                    <ChevronRight className="w-3.5 h-3.5 text-txt-tertiary group-hover:text-txt-secondary transition-colors" />
+                  ) : (
+                    <ChevronDown className="w-3.5 h-3.5 text-txt-tertiary group-hover:text-txt-secondary transition-colors" />
+                  )}
+                  <Tag className="w-3.5 h-3.5 text-txt-tertiary group-hover:text-txt-secondary transition-colors" />
+                  <h3 className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider group-hover:text-txt-secondary transition-colors">
                     {t('inspector.tags')}
                   </h3>
                 </div>
@@ -611,165 +729,218 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
                 )}
               </div>
 
-              {/* Tag Pills */}
-              <div className="flex flex-wrap gap-1.5 min-h-[24px]">
-                {activeImage.culling.tags.length === 0 ? (
-                  <span className="text-xs text-txt-tertiary italic py-0.5">
-                    {t('inspector.noTags')}
-                  </span>
-                ) : (
-                  activeImage.culling.tags.map((tag) => (
-                    <span 
-                      key={tag}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-app-panel border border-app-border text-xs text-txt-primary hover:border-accent/40 transition-colors"
-                    >
-                      <span>{tag}</span>
-                      <button 
-                        onClick={() => handleRemoveTag(tag)}
-                        className="text-txt-tertiary hover:text-danger rounded transition-colors cursor-pointer p-0.5"
-                        title={t('inspector.removeTagTooltip', { tag })}
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </span>
-                  ))
-                )}
-              </div>
-
-              {/* Tag Input with Autocomplete */}
-              <div className="relative" ref={tagInputContainerRef}>
-                <input
-                  type="text"
-                  value={tagInput}
-                  onChange={(e) => {
-                    setTagInput(e.target.value);
-                    setIsSuggestOpen(true);
-                    setHighlightedIndex(-1);
-                  }}
-                  onFocus={() => {
-                    setIsSuggestOpen(true);
-                    setHighlightedIndex(-1);
-                  }}
-                  onKeyDown={handleInputKeyDown}
-                  placeholder={t('inspector.addTag')}
-                  className="w-full bg-app-panel border border-app-border rounded-lg px-2.5 py-1.5 text-xs text-txt-primary placeholder:text-txt-tertiary focus:outline-none focus:border-accent transition-colors pr-7"
-                />
-                {tagInput.trim().length > 0 && (
-                  <button
-                    onClick={() => handleAddSpecificTag(tagInput)}
-                    className="absolute right-1.5 top-1/2 -translate-y-1/2 px-1.5 py-0.5 bg-accent text-white text-[10px] font-semibold rounded hover:bg-accent/80 transition-colors cursor-pointer"
-                  >
-                    +
-                  </button>
-                )}
-
-                {/* Autocomplete Suggestions Dropdown */}
-                {isSuggestOpen && suggestions.length > 0 && (
-                  <div className="absolute left-0 right-0 top-full mt-1 max-h-48 overflow-y-auto bg-[#161619]/95 backdrop-blur-md border border-app-border rounded-xl shadow-2xl py-1 z-50 animate-in fade-in zoom-in-95 duration-100">
-                    <div className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-txt-tertiary border-b border-app-border/40 mb-0.5">
-                      {t('inspector.suggestions')}
-                    </div>
-                    {suggestions.map((item, idx) => {
-                      const isHighlighted = highlightedIndex === idx;
-                      return (
-                        <button
-                          key={item.name}
-                          type="button"
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            handleAddSpecificTag(item.name);
-                          }}
-                          onMouseEnter={() => setHighlightedIndex(idx)}
-                          className={`w-full flex items-center justify-between px-2.5 py-1.5 text-xs transition-colors cursor-pointer text-left ${
-                            isHighlighted ? 'bg-accent text-white' : 'text-txt-primary hover:bg-app-hover'
-                          }`}
+              {!isCollapsed('tags') && (
+                <>
+                  {/* Tag Pills */}
+                  <div className="flex flex-wrap gap-1.5 min-h-[24px]">
+                    {activeImage.culling.tags.length === 0 ? (
+                      <span className="text-xs text-txt-tertiary italic py-0.5">
+                        {t('inspector.noTags')}
+                      </span>
+                    ) : (
+                      activeImage.culling.tags.map((tag) => (
+                        <span 
+                          key={tag}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-app-panel border border-app-border text-xs text-txt-primary hover:border-accent/40 transition-colors"
                         >
-                          <div className="flex items-center gap-1.5 truncate">
-                            <Tag className={`w-3 h-3 ${isHighlighted ? 'text-white' : 'text-txt-tertiary'}`} />
-                            <span className="font-medium truncate">{item.name}</span>
-                          </div>
-                          <span className={`text-[10px] font-mono ml-2 ${isHighlighted ? 'text-white/80' : 'text-txt-tertiary'}`}>
-                            {item.count}
-                          </span>
-                        </button>
-                      );
-                    })}
+                          <span>{tag}</span>
+                          <button 
+                            onClick={() => handleRemoveTag(tag)}
+                            className="text-txt-tertiary hover:text-danger rounded transition-colors cursor-pointer p-0.5"
+                            title={t('inspector.removeTagTooltip', { tag })}
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))
+                    )}
                   </div>
-                )}
-              </div>
+
+                  {/* Tag Input with Autocomplete */}
+                  <div className="relative" ref={tagInputContainerRef}>
+                    <input
+                      type="text"
+                      value={tagInput}
+                      onChange={(e) => {
+                        setTagInput(e.target.value);
+                        setIsSuggestOpen(true);
+                        setHighlightedIndex(-1);
+                      }}
+                      onFocus={() => {
+                        setIsSuggestOpen(true);
+                        setHighlightedIndex(-1);
+                      }}
+                      onKeyDown={handleInputKeyDown}
+                      placeholder={t('inspector.addTag')}
+                      className="w-full bg-app-panel border border-app-border rounded-lg px-2.5 py-1.5 text-xs text-txt-primary placeholder:text-txt-tertiary focus:outline-none focus:border-accent transition-colors pr-7"
+                    />
+                    {tagInput.trim().length > 0 && (
+                      <button
+                        onClick={() => handleAddSpecificTag(tagInput)}
+                        className="absolute right-1.5 top-1/2 -translate-y-1/2 px-1.5 py-0.5 bg-accent text-white text-[10px] font-semibold rounded hover:bg-accent/80 transition-colors cursor-pointer"
+                      >
+                        +
+                      </button>
+                    )}
+
+                    {/* Autocomplete Suggestions Dropdown */}
+                    {isSuggestOpen && suggestions.length > 0 && (
+                      <div className="absolute left-0 right-0 top-full mt-1 max-h-48 overflow-y-auto bg-[#161619]/95 backdrop-blur-md border border-app-border rounded-xl shadow-2xl py-1 z-50 animate-in fade-in zoom-in-95 duration-100">
+                        <div className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-txt-tertiary border-b border-app-border/40 mb-0.5">
+                          {t('inspector.suggestions')}
+                        </div>
+                        {suggestions.map((item, idx) => {
+                          const isHighlighted = highlightedIndex === idx;
+                          return (
+                            <button
+                              key={item.name}
+                              type="button"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                handleAddSpecificTag(item.name);
+                              }}
+                              onMouseEnter={() => setHighlightedIndex(idx)}
+                              className={`w-full flex items-center justify-between px-2.5 py-1.5 text-xs transition-colors cursor-pointer text-left ${
+                                isHighlighted ? 'bg-accent text-white' : 'text-txt-primary hover:bg-app-hover'
+                              }`}
+                            >
+                              <div className="flex items-center gap-1.5 truncate">
+                                <Tag className={`w-3 h-3 ${isHighlighted ? 'text-white' : 'text-txt-tertiary'}`} />
+                                <span className="font-medium truncate">{item.name}</span>
+                              </div>
+                              <span className={`text-[10px] font-mono ml-2 ${isHighlighted ? 'text-white/80' : 'text-txt-tertiary'}`}>
+                                {item.count}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
 
             {/* File Info */}
             <div className="bg-app-card border border-app-border rounded-xl p-3 space-y-2">
-              <div className="flex items-center justify-between border-b border-app-border/50 pb-1.5">
-                <span className="text-xs font-semibold text-txt-primary truncate mr-2" title={activeImage.name}>{activeImage.name}</span>
-                <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-medium ${isRaw ? 'bg-accent/15 text-accent' : 'bg-app-panel text-txt-secondary'}`}>
+              <div 
+                onClick={() => toggleSection('fileInfo')}
+                className={`flex items-center justify-between cursor-pointer select-none group ${!isCollapsed('fileInfo') ? 'border-b border-app-border/50 pb-1.5' : ''}`}
+              >
+                <div className="flex items-center gap-1.5 min-w-0">
+                  {isCollapsed('fileInfo') ? (
+                    <ChevronRight className="w-3.5 h-3.5 text-txt-tertiary group-hover:text-txt-secondary transition-colors flex-shrink-0" />
+                  ) : (
+                    <ChevronDown className="w-3.5 h-3.5 text-txt-tertiary group-hover:text-txt-secondary transition-colors flex-shrink-0" />
+                  )}
+                  <span className="text-xs font-semibold text-txt-primary truncate mr-2" title={activeImage.name}>{activeImage.name}</span>
+                </div>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-medium flex-shrink-0 ${isRaw ? 'bg-accent/15 text-accent' : 'bg-app-panel text-txt-secondary'}`}>
                   {extension}
                 </span>
               </div>
-              <div className="grid grid-cols-2 gap-2 text-[11px]">
-                <div>
-                  <span className="text-txt-tertiary block text-[10px]">{t('inspector.size')}</span>
-                  <p className="text-txt-primary font-medium">{(activeImage.size / (1024 * 1024)).toFixed(2)} MB</p>
-                </div>
-                <div>
-                  <span className="text-txt-tertiary block text-[10px]">{t('inspector.date')}</span>
-                  <p className="text-txt-primary font-medium truncate" title={activeImage.date || '—'}>
-                    {activeImage.date ? activeImage.date.replace('T', ' ').substring(0, 19) : '—'}
-                  </p>
-                </div>
-              </div>
-              <div className="pt-1 border-t border-app-border/40">
-                <span className="text-txt-tertiary block text-[10px]">{t('inspector.path')}</span>
-                <p className="text-txt-secondary font-mono text-[10px] truncate" title={activeImage.path}>
-                  {activeImage.path}
-                </p>
-              </div>
+              
+              {!isCollapsed('fileInfo') && (
+                <>
+                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    <div>
+                      <span className="text-txt-tertiary block text-[10px]">{t('inspector.size')}</span>
+                      <p className="text-txt-primary font-medium">{(activeImage.size / (1024 * 1024)).toFixed(2)} MB</p>
+                    </div>
+                    <div>
+                      <span className="text-txt-tertiary block text-[10px]">{t('inspector.date')}</span>
+                      <p className="text-txt-primary font-medium truncate" title={activeImage.date || '—'}>
+                        {activeImage.date ? activeImage.date.replace('T', ' ').substring(0, 19) : '—'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="pt-1 border-t border-app-border/40">
+                    <span className="text-txt-tertiary block text-[10px]">{t('inspector.path')}</span>
+                    <p className="text-txt-secondary font-mono text-[10px] truncate" title={activeImage.path}>
+                      {activeImage.path}
+                    </p>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Camera & Exposure Info */}
             <div className="bg-app-card border border-app-border rounded-xl p-3 space-y-2.5">
-              <h3 className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider">{t('inspector.camera')}</h3>
-              <div className="space-y-2 text-[11px]">
-                <div>
-                  <span className="text-txt-tertiary block text-[10px]">{t('inspector.body')}</span>
-                  <p className="text-txt-primary font-medium truncate" title={activeImage.camera || '—'}>
-                    {activeImage.camera || '—'}
-                  </p>
+              <div 
+                onClick={() => toggleSection('camera')}
+                className="flex items-center justify-between cursor-pointer select-none group"
+              >
+                <div className="flex items-center gap-1.5 min-w-0">
+                  {isCollapsed('camera') ? (
+                    <ChevronRight className="w-3.5 h-3.5 text-txt-tertiary group-hover:text-txt-secondary transition-colors flex-shrink-0" />
+                  ) : (
+                    <ChevronDown className="w-3.5 h-3.5 text-txt-tertiary group-hover:text-txt-secondary transition-colors flex-shrink-0" />
+                  )}
+                  <Camera className="w-3.5 h-3.5 text-txt-tertiary group-hover:text-txt-secondary transition-colors flex-shrink-0" />
+                  <h3 className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider group-hover:text-txt-secondary transition-colors">
+                    {t('inspector.camera')}
+                  </h3>
                 </div>
-                <div>
-                  <span className="text-txt-tertiary block text-[10px]">{t('inspector.lens')}</span>
-                  <p className="text-txt-primary font-medium truncate" title={activeImage.lens || '—'}>
-                    {activeImage.lens || '—'}
-                  </p>
-                </div>
-                <div className="grid grid-cols-3 gap-2 pt-1 border-t border-app-border/40">
-                  <div>
-                    <span className="text-txt-tertiary block text-[10px]">{t('inspector.iso')}</span>
-                    <p className="text-txt-primary font-mono font-medium">{activeImage.iso ? `ISO ${activeImage.iso}` : '—'}</p>
-                  </div>
-                  <div>
-                    <span className="text-txt-tertiary block text-[10px]">{t('inspector.aperture')}</span>
-                    <p className="text-txt-primary font-mono font-medium">{activeImage.aperture || '—'}</p>
-                  </div>
-                  <div>
-                    <span className="text-txt-tertiary block text-[10px]">{t('inspector.shutter')}</span>
-                    <p className="text-txt-primary font-mono font-medium">{activeImage.shutter || '—'}</p>
-                  </div>
-                </div>
+                {isCollapsed('camera') && activeImage.camera && (
+                  <span className="text-[10px] text-txt-tertiary truncate max-w-[140px] font-medium" title={activeImage.camera}>
+                    {activeImage.camera}
+                  </span>
+                )}
               </div>
+
+              {!isCollapsed('camera') && (
+                <div className="space-y-2 text-[11px]">
+                  <div>
+                    <span className="text-txt-tertiary block text-[10px]">{t('inspector.body')}</span>
+                    <p className="text-txt-primary font-medium truncate" title={activeImage.camera || '—'}>
+                      {activeImage.camera || '—'}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-txt-tertiary block text-[10px]">{t('inspector.lens')}</span>
+                    <p className="text-txt-primary font-medium truncate" title={activeImage.lens || '—'}>
+                      {activeImage.lens || '—'}
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 pt-1 border-t border-app-border/40">
+                    <div>
+                      <span className="text-txt-tertiary block text-[10px]">{t('inspector.iso')}</span>
+                      <p className="text-txt-primary font-mono font-medium">{activeImage.iso ? `ISO ${activeImage.iso}` : '—'}</p>
+                    </div>
+                    <div>
+                      <span className="text-txt-tertiary block text-[10px]">{t('inspector.aperture')}</span>
+                      <p className="text-txt-primary font-mono font-medium">{activeImage.aperture || '—'}</p>
+                    </div>
+                    <div>
+                      <span className="text-txt-tertiary block text-[10px]">{t('inspector.shutter')}</span>
+                      <p className="text-txt-primary font-mono font-medium">{activeImage.shutter || '—'}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* GPS / Location Info */}
             <div className="bg-app-card border border-app-border rounded-xl p-3 space-y-2.5">
-              <div className="flex items-center justify-between">
-                <h3 className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider flex items-center gap-1.5">
-                  <MapPin className="w-3 h-3 text-txt-tertiary" />
-                  {t('inspector.location')}
-                </h3>
+              <div 
+                onClick={() => toggleSection('location')}
+                className="flex items-center justify-between cursor-pointer select-none group"
+              >
+                <div className="flex items-center gap-1.5 min-w-0">
+                  {isCollapsed('location') ? (
+                    <ChevronRight className="w-3.5 h-3.5 text-txt-tertiary group-hover:text-txt-secondary transition-colors flex-shrink-0" />
+                  ) : (
+                    <ChevronDown className="w-3.5 h-3.5 text-txt-tertiary group-hover:text-txt-secondary transition-colors flex-shrink-0" />
+                  )}
+                  <MapPin className="w-3.5 h-3.5 text-txt-tertiary group-hover:text-txt-secondary transition-colors flex-shrink-0" />
+                  <h3 className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider group-hover:text-txt-secondary transition-colors">
+                    {t('inspector.location')}
+                  </h3>
+                </div>
                 {activeImage.latitude != null && activeImage.longitude != null && (
                   <button
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation();
                       const lat = activeImage.latitude!;
                       const lon = activeImage.longitude!;
                       const url = gpsMapProvider === 'osm'
@@ -785,30 +956,35 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
                   </button>
                 )}
               </div>
-              {activeImage.latitude != null && activeImage.longitude != null ? (
-                <div className="space-y-1.5 text-[11px]">
-                  <div>
-                    <span className="text-txt-tertiary block text-[10px]">{t('inspector.coordinates')}</span>
-                    <p className="text-txt-primary font-mono text-[11px] font-medium select-text">
-                      {formatDms(activeImage.latitude, true)}, {formatDms(activeImage.longitude, false)}
-                    </p>
-                    <p className="text-txt-tertiary font-mono text-[10px] select-text">
-                      {activeImage.latitude.toFixed(6)}°, {activeImage.longitude.toFixed(6)}°
-                    </p>
-                  </div>
-                  {activeImage.altitude != null && (
-                    <div className="pt-1 border-t border-app-border/40 flex justify-between items-center">
-                      <span className="text-txt-tertiary text-[10px]">{t('inspector.altitude')}</span>
-                      <span className="text-txt-primary font-mono font-medium text-[11px]">
-                        {Math.round(activeImage.altitude)} m
-                      </span>
+
+              {!isCollapsed('location') && (
+                <>
+                  {activeImage.latitude != null && activeImage.longitude != null ? (
+                    <div className="space-y-1.5 text-[11px]">
+                      <div>
+                        <span className="text-txt-tertiary block text-[10px]">{t('inspector.coordinates')}</span>
+                        <p className="text-txt-primary font-mono text-[11px] font-medium select-text">
+                          {formatDms(activeImage.latitude, true)}, {formatDms(activeImage.longitude, false)}
+                        </p>
+                        <p className="text-txt-tertiary font-mono text-[10px] select-text">
+                          {activeImage.latitude.toFixed(6)}°, {activeImage.longitude.toFixed(6)}°
+                        </p>
+                      </div>
+                      {activeImage.altitude != null && (
+                        <div className="pt-1 border-t border-app-border/40 flex justify-between items-center">
+                          <span className="text-txt-tertiary text-[10px]">{t('inspector.altitude')}</span>
+                          <span className="text-txt-primary font-mono font-medium text-[11px]">
+                            {Math.round(activeImage.altitude)} m
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-txt-tertiary">
+                      {t('inspector.noGps')}
                     </div>
                   )}
-                </div>
-              ) : (
-                <div className="text-[11px] text-txt-tertiary">
-                  {t('inspector.noGps')}
-                </div>
+                </>
               )}
             </div>
           </div>

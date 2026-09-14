@@ -10,7 +10,9 @@
     "browseTemp": "Open other folder...",
     "lastImport": "Latest Import",
     "locationsTitle": "Locations",
-    "scanning": "Scanning library..."
+    "scanning": "Scanning library...",
+    "exactLocationTooltip": "Contains the currently selected photo",
+    "ancestorLocationTooltip": "Contains subfolders with the currently selected photo"
   },
   "header": {
     "lastImport": "Latest Import",
@@ -81,12 +83,18 @@
   "delete": {
     "button": "Delete Rejected ({{count}})",
     "buttonTooltip": "Move {{count}} rejected image(s) to Trash",
+    "buttonTooltipPermanent": "Permanently delete {{count}} rejected image(s) from network share",
     "noRejectedTooltip": "No rejected images",
-    "confirmMessage": "Move {{count}} rejected images to the macOS Trash?",
+    "confirmMessage": "Move {{count}} rejected image(s) to the Trash?",
     "confirmTitle": "Confirm Delete",
     "okLabel": "Move to Trash",
     "cancelLabel": "Cancel",
-    "failedError": "Failed to move to trash: "
+    "nasConfirmTitle": "⚠️ WARNING: Permanent Deletion on Network Share (NAS)",
+    "nasConfirmMessage": "The {{count}} rejected image(s) are located on a network share / NAS.\n\nFiles on network shares CANNOT be moved to the Trash!\n\nThey will be PERMANENTLY and IRREVOCABLY deleted from disk.\n\nAre you sure you want to permanently delete these {{count}} image(s) now?",
+    "nasOkLabel": "Permanently Delete",
+    "nasSuccessToast": "Permanently deleted {{count}} image(s) from network share.",
+    "localSuccessToast": "Moved {{count}} image(s) to Trash.",
+    "failedError": "Failed to delete: "
   },
   "empty": "No images found",
   "loading": {
@@ -106,7 +114,12 @@
     "stoppedCount": "Scan stopped at {{count}} photos",
     "continueRest": "Load remaining photos",
     "completedCount": "{{count}} photos indexed",
-    "dismiss": "Dismiss"
+    "dismiss": "Dismiss",
+    "transferSpeedTitle": "Transfer Speed",
+    "live": "Live",
+    "speed": "Speed",
+    "peakSpeed": "Peak Rate",
+    "dataVolume": "Data Volume"
   },
   "dialog": {
     "switchFolderTitle": "Switch Folder?",
@@ -116,6 +129,7 @@
   },
   "inspector": {
     "title": "Inspector",
+    "preview": "Preview",
     "noSelection": "No Image Selected",
     "noSelectionDesc": "Select an image to inspect details.",
     "fileInfo": "File Info",
@@ -173,5 +187,54 @@
     "batchSaveFailed": "Failed to save {{failed}} of {{total}} files.",
     "watcherErrorTitle": "File system watcher interrupted",
     "watcherErrorDesc": "Automatic sidecar updates have been paused (e.g. network share disconnected)."
+  },
+  "folderMenu": {
+    "showInFinder": "Reveal in Finder",
+    "showInExplorer": "Show in Explorer",
+    "selectAllImages": "Select All Images in Folder",
+    "expandSubfolders": "Expand All Subfolders",
+    "collapseSubfolders": "Collapse All Subfolders",
+    "deleteRejectedInFolder": "Delete Only Rejected (X) Images in Folder...",
+    "noRejectedInFolder": "No rejected images in this folder.",
+    "newSubfolder": "New Subfolder...",
+    "newSubfolderIn": "New Subfolder in \"{{name}}\"...",
+    "deleteFolder": "Delete Folder...",
+    "deleteRootProtected": "Root folder cannot be deleted",
+    "createFolderTitle": "New Subfolder",
+    "createFolderPrompt": "Name for the new subfolder:",
+    "createFolderDefault": "New Folder",
+    "createBtn": "Create",
+    "createFolderSuccess": "Folder \"{{name}}\" created.",
+    "createFolderError": "Failed to create folder: ",
+    "renameFolder": "Rename Folder...",
+    "renameFolderTitle": "Rename Folder",
+    "renameFolderPrompt": "New name for the folder:",
+    "renameBtn": "Rename",
+    "renameFolderSuccess": "Folder renamed to \"{{name}}\".",
+    "renameFolderError": "Failed to rename folder: ",
+    "multiHeader": "{{count}} Selected Folders",
+    "selectAllInMultiFolders": "Select All Photos in the {{count}} Folders",
+    "expandSelectedSubfolders": "Expand Selected Folders",
+    "collapseSelectedSubfolders": "Collapse Selected Folders",
+    "deleteRejectedInMultiFolders": "Delete Only Rejected (X) Images in Selection...",
+    "deleteMultiFolders": "Delete {{count}} Selected Folders..."
+  },
+  "folderDelete": {
+    "localTitle": "Move Folder to Trash?",
+    "localMessage": "Do you really want to move folder \"{{name}}\" ({{count}} photos) and all its contents and subfolders to the Trash?",
+    "localOk": "Move to Trash",
+    "localSuccess": "Folder \"{{name}}\" moved to Trash.",
+    "nasTitle": "⚠️ ATTENTION: Permanent Deletion on Network / NAS",
+    "nasMessage": "Folder \"{{name}}\" ({{count}} photos) is located on a network share / NAS.\n\nFiles and folders on network volumes CANNOT be moved to the Trash!\n\nThe entire folder and all contained files and subfolders will be PERMANENTLY and IRREVOCABLY deleted.\n\nDo you really want to permanently delete \"{{name}}\" now?",
+    "nasOk": "Permanently Delete",
+    "nasSuccess": "Folder \"{{name}}\" permanently deleted from network volume.",
+    "multiLocalTitle": "Move {{count}} Folders to Trash?",
+    "multiLocalMessage": "Do you really want to move the {{count}} selected folders (containing {{photoCount}} photos) and all their contents to the Trash?",
+    "multiLocalSuccess": "{{count}} folders moved to Trash.",
+    "multiNasTitle": "⚠️ ATTENTION: Permanent Deletion on Network / NAS",
+    "multiNasMessage": "The {{count}} selected folders (containing {{photoCount}} photos) are located wholly or partially on a network share / NAS.\n\nFiles and folders on network volumes CANNOT be moved to the Trash!\n\nAll selected folders and all their contents and subfolders will be PERMANENTLY and IRREVOCABLY deleted.\n\nDo you really want to permanently delete these {{count}} folders now?",
+    "multiNasSuccess": "{{count}} folders permanently deleted from network volume.",
+    "cancel": "Cancel",
+    "error": "Failed to delete folder: "
   }
 }

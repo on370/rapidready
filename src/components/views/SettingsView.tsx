@@ -1,9 +1,13 @@
 import { useTranslation } from "react-i18next";
-import { Settings, Folder, Plus, Globe, Settings2, Trash2, Edit2, Check, MapPin } from "lucide-react";
+import { Settings, Folder, Plus, Globe, Settings2, Trash2, Edit2, Check, MapPin, Sparkles, RefreshCw, ArrowUpRight, CheckCircle2, AlertCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { useLibraryUIStore } from "../../stores/libraryUIStore";
+import { useUpdateStore } from "../../stores/updateStore";
+import { isCurrentBeta } from "../../services/updateService";
+import buildInfo from "../../build-info.json";
 
 
 function EditableItem({ 
@@ -90,9 +94,12 @@ export function SettingsView() {
     openRapidRaw, setOpenRapidRaw,
     startupView, setStartupView,
     gpsMapProvider, setGpsMapProvider,
+    checkForUpdates, setCheckForUpdates,
+    includeBetaUpdates, setIncludeBetaUpdates,
     locations, addLocation, removeLocation, updateLocation,
     presets, addPreset, removePreset, updatePreset
   } = useSettingsStore();
+  const { isChecking, lastCheckResult, checkNow } = useUpdateStore();
 
   return (
     <div className="flex-1 overflow-auto">
@@ -342,6 +349,113 @@ export function SettingsView() {
             </div>
             <div className={`toggle-track ${openRapidRaw ? 'on' : ''}`} onClick={() => setOpenRapidRaw(!openRapidRaw)}>
               <div className="toggle-knob"></div>
+            </div>
+          </div>
+        </div>
+
+        {/* Software Updates Section */}
+        <div className="bg-app-card border border-app-border rounded-xl overflow-hidden">
+          <div className="px-5 py-3 border-b border-app-border flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-txt-secondary" />
+              <div>
+                <h3 className="text-sm font-semibold text-txt-primary">{t('updates.title')}</h3>
+                <p className="text-xs text-txt-secondary mt-0.5">{t('updates.subtitle')}</p>
+              </div>
+            </div>
+            <span className="text-[11px] font-mono text-txt-tertiary bg-app-deepest px-2 py-0.5 rounded border border-app-border">
+              v{buildInfo.version} (Build {buildInfo.buildNumber})
+            </span>
+          </div>
+
+          <div className="divide-y divide-app-border">
+            {/* Switch 1: Automatically check for updates */}
+            <div className="px-5 py-4 flex items-center justify-between">
+              <div>
+                <p className="text-sm text-txt-primary">{t('updates.checkAutomatically.title')}</p>
+                <p className="text-xs text-txt-tertiary">{t('updates.checkAutomatically.desc')}</p>
+              </div>
+              <div 
+                className={`toggle-track ${checkForUpdates ? 'on' : ''}`} 
+                onClick={() => setCheckForUpdates(!checkForUpdates)}
+              >
+                <div className="toggle-knob"></div>
+              </div>
+            </div>
+
+            {/* Switch 2: Include beta releases */}
+            <div className={`px-5 py-4 flex items-center justify-between transition-opacity ${
+              (!checkForUpdates || !isCurrentBeta) ? 'opacity-40 cursor-not-allowed select-none' : ''
+            }`}>
+              <div>
+                <p className="text-sm text-txt-primary">{t('updates.includeBeta.title')}</p>
+                <p className="text-xs text-txt-tertiary">
+                  {!isCurrentBeta 
+                    ? t('updates.includeBeta.onlyBetaNotice') 
+                    : t('updates.includeBeta.desc')}
+                </p>
+              </div>
+              <div 
+                className={`toggle-track ${(checkForUpdates && isCurrentBeta && includeBetaUpdates) ? 'on' : ''} ${
+                  (!checkForUpdates || !isCurrentBeta) ? 'pointer-events-none' : 'cursor-pointer'
+                }`} 
+                onClick={() => {
+                  if (checkForUpdates && isCurrentBeta) {
+                    setIncludeBetaUpdates(!includeBetaUpdates);
+                  }
+                }}
+              >
+                <div className="toggle-knob"></div>
+              </div>
+            </div>
+
+            {/* Manual Check Button & Result */}
+            <div className="px-5 py-4 flex items-center justify-between bg-app-deepest/30">
+              <div className="text-xs">
+                {isChecking ? (
+                  <span className="text-txt-secondary flex items-center gap-1.5 animate-pulse">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-accent" />
+                    {t('updates.checking')}
+                  </span>
+                ) : lastCheckResult?.hasUpdate && lastCheckResult.latestRelease ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-amber-400 font-medium flex items-center gap-1">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      {t('updates.updateAvailable', { tag: lastCheckResult.latestRelease.tag_name })}
+                    </span>
+                    <button
+                      onClick={() => openUrl(lastCheckResult.latestRelease!.html_url)}
+                      className="px-2 py-0.5 rounded text-[11px] font-semibold bg-accent text-white hover:bg-accent/90 transition-colors flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>{t('updates.download')}</span>
+                      <ArrowUpRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                ) : lastCheckResult && !lastCheckResult.hasUpdate && !lastCheckResult.error ? (
+                  <span className="text-success flex items-center gap-1.5 font-medium">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    {t('updates.upToDate', { version: buildInfo.version })}
+                  </span>
+                ) : lastCheckResult?.error ? (
+                  <span className="text-danger flex items-center gap-1.5">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    {t('updates.checkError', { error: lastCheckResult.error })}
+                  </span>
+                ) : (
+                  <span className="text-txt-tertiary">
+                    {t('updates.currentVersion', { version: buildInfo.version, build: buildInfo.buildNumber })}
+                  </span>
+                )}
+              </div>
+
+              <button
+                disabled={isChecking}
+                onClick={() => checkNow(true)}
+                className="px-3 py-1.5 rounded-lg border border-app-border hover:bg-app-hover text-xs font-medium text-txt-primary flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isChecking ? 'animate-spin' : ''}`} />
+                <span>{t('updates.checkNow')}</span>
+              </button>
             </div>
           </div>
         </div>

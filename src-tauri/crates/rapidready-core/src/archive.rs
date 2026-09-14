@@ -130,6 +130,12 @@ impl ScanController {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArchiveScanResult {
+    pub files: Vec<ArchiveFile>,
+    pub directories: Vec<String>,
+}
+
 pub fn scan_archive_directory_streaming<P, C>(
     dir: &Path,
     existing_paths: Option<&std::collections::HashSet<String>>,
@@ -138,19 +144,21 @@ pub fn scan_archive_directory_streaming<P, C>(
     controller: ScanController,
     mut on_progress: P,
     mut on_chunk: C,
-) -> Result<Vec<ArchiveFile>>
+) -> Result<ArchiveScanResult>
 where
     P: FnMut(ArchiveScanProgress),
-    C: FnMut(Vec<ArchiveFile>),
+    C: FnMut(Vec<ArchiveFile>, Vec<String>),
 {
     let initial_count = existing_paths.map(|s| s.len()).unwrap_or(0);
     let mut files = Vec::new();
+    let mut all_directories = Vec::new();
     let supported_exts = [
         "jpg", "jpeg", "png", "tif", "tiff", "heic", "heif", "hif", "webp", "avif", // Raster
-        "cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2", "pef", "3fr", "x3f", "nrw", // RAW
+        "cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2", "pef", "3fr", "x3f", "nrw", "rwl", "fff", "iiq", "crw", "erf", // RAW
     ];
 
     let mut current_chunk = Vec::with_capacity(100);
+    let mut current_dir_chunk = Vec::new();
     let mut total_bytes = initial_bytes;
     let mut last_progress_time = Instant::now();
     let mut last_chunk_time = Instant::now();
@@ -167,17 +175,39 @@ where
         is_complete: false,
     });
 
-    for entry in WalkDir::new(dir).follow_links(false).into_iter().filter_map(|e| e.ok()) {
+    let walker = WalkDir::new(dir)
+        .follow_links(false)
+        .into_iter()
+        .filter_entry(|e| {
+            if e.file_type().is_dir() {
+                if let Some(name) = e.file_name().to_str() {
+                    if name.starts_with('.') && name != "." {
+                        return false;
+                    }
+                    if name.eq_ignore_ascii_case("$RECYCLE.BIN") || name.eq_ignore_ascii_case("System Volume Information") {
+                        return false;
+                    }
+                }
+            }
+            true
+        });
+
+    for entry in walker.filter_map(|e| e.ok()) {
         if controller.check_pause_or_cancel() {
             break;
         }
 
         let path = entry.path();
         if entry.file_type().is_dir() {
+            if path != dir {
+                let norm_dir = path.to_string_lossy().replace('\\', "/");
+                all_directories.push(norm_dir.clone());
+                current_dir_chunk.push(norm_dir);
+            }
             current_dir_str = path.to_string_lossy().into_owned();
             let chunk_elapsed = last_chunk_time.elapsed().as_millis();
-            if !current_chunk.is_empty() && (current_chunk.len() >= 20 || chunk_elapsed >= 500) {
-                on_chunk(std::mem::take(&mut current_chunk));
+            if (!current_chunk.is_empty() || !current_dir_chunk.is_empty()) && (current_chunk.len() >= 20 || current_dir_chunk.len() >= 20 || chunk_elapsed >= 500) {
+                on_chunk(std::mem::take(&mut current_chunk), std::mem::take(&mut current_dir_chunk));
                 current_chunk = Vec::with_capacity(100);
                 last_chunk_time = Instant::now();
             }
@@ -234,10 +264,10 @@ where
                     let chunk_elapsed = last_chunk_time.elapsed().as_millis();
                     let should_emit_chunk = current_chunk.len() >= 100
                         || (current_chunk.len() >= 20 && chunk_elapsed >= 400)
-                        || (!current_chunk.is_empty() && chunk_elapsed >= 800);
+                        || ((!current_chunk.is_empty() || !current_dir_chunk.is_empty()) && chunk_elapsed >= 800);
 
                     if should_emit_chunk {
-                        on_chunk(std::mem::take(&mut current_chunk));
+                        on_chunk(std::mem::take(&mut current_chunk), std::mem::take(&mut current_dir_chunk));
                         current_chunk = Vec::with_capacity(100);
                         last_chunk_time = Instant::now();
                         last_progress_time = Instant::now();
@@ -270,8 +300,8 @@ where
         }
     }
 
-    if !current_chunk.is_empty() {
-        on_chunk(current_chunk);
+    if !current_chunk.is_empty() || !current_dir_chunk.is_empty() {
+        on_chunk(current_chunk, current_dir_chunk);
     }
 
     let is_cancelled = controller.is_cancelled();
@@ -288,12 +318,17 @@ where
     });
 
     files.par_sort_unstable_by(|a, b| a.path.cmp(&b.path));
-    Ok(files)
+    all_directories.sort_unstable();
+    all_directories.dedup();
+    Ok(ArchiveScanResult {
+        files,
+        directories: all_directories,
+    })
 }
 
-pub fn scan_archive_directory(dir: &Path) -> Result<Vec<ArchiveFile>> {
+pub fn scan_archive_directory(dir: &Path) -> Result<ArchiveScanResult> {
     let controller = ScanController::new();
-    scan_archive_directory_streaming(dir, None, 0, 0, controller, |_| {}, |_| {})
+    scan_archive_directory_streaming(dir, None, 0, 0, controller, |_| {}, |_, _| {})
 }
 
 #[cfg(test)]
@@ -305,9 +340,11 @@ mod tests {
     fn test_scan_archive_directory_basic() {
         let test_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../testdata/dest");
         if test_dir.exists() {
-            let files = scan_archive_directory(&test_dir).expect("Scan must succeed");
+            let res = scan_archive_directory(&test_dir).expect("Scan must succeed");
+            let files = res.files;
             assert!(!files.is_empty(), "Must find test files in testdata/dest");
             assert!(files.iter().any(|f| f.is_raw), "Must contain RAW files");
+            assert!(!res.directories.is_empty(), "Must find directories in testdata/dest");
         }
     }
 
@@ -315,7 +352,8 @@ mod tests {
     fn test_scan_archive_directory_with_existing_paths() {
         let test_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../testdata/dest");
         if test_dir.exists() {
-            let all_files = scan_archive_directory(&test_dir).expect("Scan must succeed");
+            let res = scan_archive_directory(&test_dir).expect("Scan must succeed");
+            let all_files = res.files;
             if all_files.len() > 1 {
                 let first_path = all_files[0].path.replace('\\', "/");
                 let mut existing = std::collections::HashSet::new();
@@ -323,16 +361,17 @@ mod tests {
 
                 let controller = ScanController::new();
                 let mut progress_counts = Vec::new();
-                let remaining_files = scan_archive_directory_streaming(
+                let res2 = scan_archive_directory_streaming(
                     &test_dir,
                     Some(&existing),
                     all_files[0].size,
                     0,
                     controller,
                     |p| progress_counts.push(p.files_found),
-                    |_| {},
+                    |_, _| {},
                 ).expect("Scan with existing paths must succeed");
 
+                let remaining_files = res2.files;
                 // Skipped the first file
                 assert_eq!(remaining_files.len(), all_files.len() - 1);
                 assert!(!remaining_files.iter().any(|f| f.path.replace('\\', "/") == first_path));
@@ -352,17 +391,35 @@ mod tests {
             assert!(controller.is_cancelled());
 
             let mut chunks = Vec::new();
-            let files = scan_archive_directory_streaming(
+            let res = scan_archive_directory_streaming(
                 &test_dir,
                 None,
                 0,
                 0,
                 controller,
                 |_| {},
-                |c| chunks.push(c),
+                |c, _| chunks.push(c),
             ).expect("Scan with pre-cancelled controller should exit cleanly");
-            assert!(files.is_empty(), "Pre-cancelled scan should find 0 files");
+            assert!(res.files.is_empty(), "Pre-cancelled scan should find 0 files");
             assert!(chunks.is_empty());
         }
+    }
+
+    #[test]
+    fn test_scan_archive_discovers_empty_directories() {
+        let temp_dir = std::env::temp_dir().join(format!("rapidready_test_empty_dirs_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(temp_dir.join("sub1/empty_child")).unwrap();
+        std::fs::create_dir_all(temp_dir.join("sub2")).unwrap();
+        std::fs::write(temp_dir.join("sub2/test.jpg"), b"fake jpg").unwrap();
+
+        let res = scan_archive_directory(&temp_dir).expect("Scan must succeed");
+        assert_eq!(res.files.len(), 1);
+        let dirs = res.directories;
+        assert!(dirs.iter().any(|d| d.ends_with("sub1")), "Must find sub1");
+        assert!(dirs.iter().any(|d| d.ends_with("sub1/empty_child")), "Must find empty_child");
+        assert!(dirs.iter().any(|d| d.ends_with("sub2")), "Must find sub2");
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }

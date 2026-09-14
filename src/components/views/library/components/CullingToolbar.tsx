@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { 
   LayoutGrid, Scan, PanelRight, Zap, Star, Trash2, Check, 
   Rocket, FolderOpen, ZoomIn, ZoomOut, RotateCw, RotateCcw, 
@@ -45,6 +45,7 @@ export const CullingToolbar = React.memo(function CullingToolbar({
   // Domain Store
   const {
     activeFolderPath,
+    selectedFolderPaths,
     isViewingLastImport,
     filterMode,
     setFilterMode,
@@ -105,13 +106,45 @@ export const CullingToolbar = React.memo(function CullingToolbar({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const topLevelSelection = useMemo(() => {
+    if (!selectedFolderPaths || selectedFolderPaths.size === 0) return { count: 0, singleTopPath: null };
+    let count = 0;
+    let singleTopPath: string | null = null;
+    for (const path of selectedFolderPaths) {
+      let hasAncestorInSet = false;
+      let cur = path;
+      while (true) {
+        const slash = cur.lastIndexOf('/');
+        if (slash <= 0) break;
+        cur = cur.substring(0, slash);
+        if (selectedFolderPaths.has(cur)) {
+          hasAncestorInSet = true;
+          break;
+        }
+      }
+      if (!hasAncestorInSet) {
+        count++;
+        singleTopPath = path;
+      }
+    }
+    return { count, singleTopPath };
+  }, [selectedFolderPaths]);
+
   return (
     <>
       {/* 1. Header Bar: Title, Stats, AutoAdvance, Zoom, View Mode */}
       <div className="px-6 py-4 border-b border-app-border flex items-center justify-between flex-shrink-0">
         <div>
           <h2 className="text-lg font-bold text-txt-primary truncate max-w-[400px]">
-            {isViewingLastImport ? t('header.lastImport') : activeFolderPath ? normalizeSlash(activeFolderPath).split('/').pop() : t('header.allImages')}
+            {isViewingLastImport 
+              ? t('header.lastImport') 
+              : topLevelSelection.count > 1
+                ? t('header.multipleFolders', { count: topLevelSelection.count, defaultValue: `${topLevelSelection.count} Ordner` })
+                : topLevelSelection.count === 1 && topLevelSelection.singleTopPath
+                  ? (normalizeSlash(topLevelSelection.singleTopPath).split('/').pop() || topLevelSelection.singleTopPath)
+                  : activeFolderPath 
+                    ? normalizeSlash(activeFolderPath).split('/').pop() 
+                    : t('header.allImages')}
           </h2>
           <p className="text-xs text-txt-tertiary mt-0.5">
             {displayedImages.length} {t('previewFiles', 'files')} · {(displayedImages.reduce((acc, img) => acc + img.size, 0) / (1024 * 1024)).toFixed(1)} MB

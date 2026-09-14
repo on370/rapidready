@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
-import { normalizePath } from '../utils/image';
+import { normalizePath, normalizeSlash } from '../utils/image';
 import { useLibraryUIStore } from './libraryUIStore';
 
 export interface CullingState {
@@ -43,6 +43,7 @@ export interface ArchiveScanProgress {
 export interface ArchiveChunkPayload {
   scan_id?: number;
   files: LibraryImage[];
+  directories?: string[];
 }
 
 interface LibraryStore {
@@ -54,14 +55,24 @@ interface LibraryStore {
   
   activeImageIndex: number;
   activeFolderPath: string | null;
+  selectedFolderPaths: Set<string>;
+  discoveredFolders: Set<string>;
   setActiveFolderPath: (path: string | null) => void;
+  setSelectedFolderPaths: (paths: Set<string>) => void;
+  addDiscoveredFolders: (folders: string[]) => void;
+  removeFolder: (folderPath: string) => void;
   setActiveImageIndex: (index: number) => void;
+  renameFolderPath: (oldPath: string, newPath: string) => void;
 
   selectedPaths: Set<string>;
   setSelectedPaths: (paths: Set<string>) => void;
   toggleSelectedPath: (path: string) => void;
   selectRange: (fromIndex: number, toIndex: number, displayedImages: LibraryImage[]) => void;
   selectAll: (displayedImages: LibraryImage[]) => void;
+  selectAllInFolder: (folderPath: string, allFolderPaths?: string[]) => void;
+  selectAllInFolders: (topPaths: string[], allFolderPaths: string[]) => void;
+  pendingSelectAll: boolean;
+  setPendingSelectAll: (val: boolean) => void;
   clearSelection: () => void;
   updateBatchCullingState: (paths: string[], partialState: Partial<CullingState>) => void;
   updateImageCullings: (items: Array<{ path: string; culling: CullingState }>) => void;
@@ -91,7 +102,7 @@ interface LibraryStore {
   activeScanId: number | null;
   scanState: 'idle' | 'connecting' | 'scanning' | 'paused' | 'stopped' | 'completed';
   scanProgress: ArchiveScanProgress | null;
-  appendImageChunk: (chunk: LibraryImage[]) => void;
+  appendImageChunk: (chunk: LibraryImage[], dirs?: string[]) => void;
   setScanState: (state: 'idle' | 'connecting' | 'scanning' | 'paused' | 'stopped' | 'completed') => void;
   setScanProgress: (progress: ArchiveScanProgress | null) => void;
   pauseScan: () => void;
@@ -126,7 +137,7 @@ const getSavedThumbSize = (): number => {
 
 let nextScanCounter = 1;
 
-export const useLibraryStore = create<LibraryStore>((set) => ({
+export const useLibraryStore = create<LibraryStore>((set, get) => ({
   images: [],
   imageIndexMap: new Map<string, number>(),
   rootPath: null,
@@ -144,8 +155,53 @@ export const useLibraryStore = create<LibraryStore>((set) => ({
   activeScanId: null,
   scanState: 'idle',
   scanProgress: null,
-  appendImageChunk: (chunk) => set((state) => {
-    if (chunk.length === 0) return state;
+  discoveredFolders: new Set<string>(),
+  addDiscoveredFolders: (folders) => set((state) => {
+    if (!folders || folders.length === 0) return state;
+    const next = new Set(state.discoveredFolders);
+    let changed = false;
+    for (const f of folders) {
+      const norm = normalizePath(f);
+      if (!next.has(norm)) {
+        next.add(norm);
+        changed = true;
+      }
+    }
+    return changed ? { discoveredFolders: next } : state;
+  }),
+  removeFolder: (folderPath) => set((state) => {
+    const norm = normalizePath(folderPath);
+    const prefix = norm + '/';
+    const next = new Set<string>();
+    let changed = false;
+    for (const f of state.discoveredFolders) {
+      if (f === norm || f.startsWith(prefix)) {
+        changed = true;
+      } else {
+        next.add(f);
+      }
+    }
+    return changed ? { discoveredFolders: next } : state;
+  }),
+  appendImageChunk: (chunk, dirs = []) => set((state) => {
+    let nextFolders = state.discoveredFolders;
+    if (dirs && dirs.length > 0) {
+      const updated = new Set(state.discoveredFolders);
+      let fChanged = false;
+      for (const d of dirs) {
+        const normD = normalizePath(d);
+        if (!updated.has(normD)) {
+          updated.add(normD);
+          fChanged = true;
+        }
+      }
+      if (fChanged) nextFolders = updated;
+    }
+
+    if (chunk.length === 0) {
+      return nextFolders !== state.discoveredFolders ? { discoveredFolders: nextFolders } : state;
+    }
+
     const validChunk = state.rootPath
       ? chunk.filter(img => {
           const normRoot = normalizePath(state.rootPath!);
@@ -153,7 +209,9 @@ export const useLibraryStore = create<LibraryStore>((set) => ({
           return normPath.startsWith(normRoot.endsWith('/') ? normRoot : normRoot + '/') || normPath === normRoot;
         })
       : chunk;
-    if (validChunk.length === 0) return state;
+    if (validChunk.length === 0) {
+      return nextFolders !== state.discoveredFolders ? { discoveredFolders: nextFolders } : state;
+    }
 
     const startIdx = state.images.length;
     const nextMap = new Map(state.imageIndexMap);
@@ -163,6 +221,7 @@ export const useLibraryStore = create<LibraryStore>((set) => ({
     return {
       images: [...state.images, ...validChunk],
       imageIndexMap: nextMap,
+      discoveredFolders: nextFolders,
     };
   }),
   setScanState: (scanState) => set({ scanState }),
@@ -185,7 +244,14 @@ export const useLibraryStore = create<LibraryStore>((set) => ({
     invoke('cancel_archive_scan').catch(console.error);
     set((s) => {
       const count = s.scanProgress?.files_found ?? s.images.length;
+      const sortedImages = [...s.images].sort((a, b) => a.path.localeCompare(b.path));
+      const imageIndexMap = new Map<string, number>();
+      for (let i = 0; i < sortedImages.length; i++) {
+        imageIndexMap.set(normalizePath(sortedImages[i].path), i);
+      }
       return {
+        images: sortedImages,
+        imageIndexMap,
         scanState: count > 0 ? 'stopped' : 'idle',
         isLoading: false,
         scanProgress: s.scanProgress ? { ...s.scanProgress, is_cancelled: true } : null,
@@ -203,6 +269,8 @@ export const useLibraryStore = create<LibraryStore>((set) => ({
       activeScanId: scanId,
       rootPath: path,
       activeFolderPath: path,
+      selectedFolderPaths: path ? new Set([normalizePath(path)]) : new Set(),
+      discoveredFolders: isContinuing ? s.discoveredFolders : (path ? new Set([normalizePath(path)]) : new Set()),
       viewMode: 'grid',
       isLoading: true,
       scanState: isContinuing ? 'scanning' : 'connecting',
@@ -219,45 +287,56 @@ export const useLibraryStore = create<LibraryStore>((set) => ({
       imageIndexMap: isContinuing ? s.imageIndexMap : new Map<string, number>(),
     }));
     try {
-      const loadedImages = (await invoke('scan_archive_directory', {
+      const scanResult = (await invoke('scan_archive_directory', {
         path,
         scanId,
         existingPaths,
         initialBytes: initialBytes > 0 ? initialBytes : null,
-      })) as LibraryImage[];
+      })) as { files: LibraryImage[]; directories: string[] };
 
       if (useLibraryStore.getState().activeScanId !== scanId) {
         return;
       }
 
+      const loadedImages = scanResult.files || [];
+      const loadedDirs = scanResult.directories || [];
+
       const currentScanState = useLibraryStore.getState().scanState;
-      const nextScanState = currentScanState === 'completed' ? 'completed' : 'idle';
-      if (currentScanState !== 'stopped') {
-        if (isContinuing) {
-          set((state) => {
-            const map = new Map<string, LibraryImage>();
-            for (const img of state.images) {
-              map.set(normalizePath(img.path), img);
-            }
-            for (const img of loadedImages) {
-              map.set(normalizePath(img.path), img);
-            }
-            const allImages = Array.from(map.values()).sort((a, b) => a.path.localeCompare(b.path));
-            const imageIndexMap = new Map<string, number>();
-            for (let i = 0; i < allImages.length; i++) {
-              imageIndexMap.set(normalizePath(allImages[i].path), i);
-            }
-            return { images: allImages, imageIndexMap, isLoading: false, scanState: nextScanState };
-          });
-        } else {
-          const imageIndexMap = new Map<string, number>();
-          for (let i = 0; i < loadedImages.length; i++) {
-            imageIndexMap.set(normalizePath(loadedImages[i].path), i);
+      const nextScanState = currentScanState === 'completed' ? 'completed' : currentScanState === 'stopped' ? 'stopped' : 'idle';
+      if (isContinuing) {
+        set((state) => {
+          const map = new Map<string, LibraryImage>();
+          for (const img of state.images) {
+            map.set(normalizePath(img.path), img);
           }
-          set({ images: loadedImages, imageIndexMap, isLoading: false, scanState: nextScanState });
-        }
+          for (const img of loadedImages) {
+            map.set(normalizePath(img.path), img);
+          }
+          const allImages = Array.from(map.values()).sort((a, b) => a.path.localeCompare(b.path));
+          const imageIndexMap = new Map<string, number>();
+          for (let i = 0; i < allImages.length; i++) {
+            imageIndexMap.set(normalizePath(allImages[i].path), i);
+          }
+          const nextFolders = new Set(state.discoveredFolders);
+          for (const d of loadedDirs) {
+            nextFolders.add(normalizePath(d));
+          }
+          return { images: allImages, imageIndexMap, discoveredFolders: nextFolders, isLoading: false, scanState: nextScanState };
+        });
       } else {
-        set({ isLoading: false });
+        const sorted = (loadedImages && loadedImages.length > 0 ? loadedImages : useLibraryStore.getState().images)
+          .slice()
+          .sort((a, b) => a.path.localeCompare(b.path));
+        const imageIndexMap = new Map<string, number>();
+        for (let i = 0; i < sorted.length; i++) {
+          imageIndexMap.set(normalizePath(sorted[i].path), i);
+        }
+        const nextFolders = new Set(useLibraryStore.getState().discoveredFolders);
+        if (path) nextFolders.add(normalizePath(path));
+        for (const d of loadedDirs) {
+          nextFolders.add(normalizePath(d));
+        }
+        set({ images: sorted, imageIndexMap, discoveredFolders: nextFolders, isLoading: false, scanState: nextScanState });
       }
     } catch (e) {
       if (useLibraryStore.getState().activeScanId === scanId) {
@@ -277,8 +356,180 @@ export const useLibraryStore = create<LibraryStore>((set) => ({
   
   activeImageIndex: 0,
   activeFolderPath: null,
-  setActiveFolderPath: (path) => set({ activeFolderPath: path, isViewingLastImport: false, activeImageIndex: 0, selectedPaths: new Set(), selectedRatingFilter: null, selectedColorFilter: null, selectedTagFilter: null }),
+  selectedFolderPaths: new Set<string>(),
+  pendingSelectAll: false,
+  setPendingSelectAll: (val) => set({ pendingSelectAll: val }),
+  setActiveFolderPath: (path) => {
+    const norm = path ? normalizePath(path) : null;
+    set({
+      activeFolderPath: path,
+      selectedFolderPaths: norm ? new Set([norm]) : new Set(),
+      isViewingLastImport: false,
+      activeImageIndex: 0,
+      selectedPaths: new Set(),
+      selectedRatingFilter: null,
+      selectedColorFilter: null,
+      selectedTagFilter: null,
+    });
+  },
+  setSelectedFolderPaths: (paths) => {
+    const normPaths = new Set(Array.from(paths).map(p => normalizePath(p)));
+    const first = normPaths.size > 0 ? Array.from(normPaths)[0] : null;
+    set({
+      selectedFolderPaths: normPaths,
+      activeFolderPath: first,
+      isViewingLastImport: false,
+      activeImageIndex: 0,
+      selectedPaths: new Set(),
+      selectedRatingFilter: null,
+      selectedColorFilter: null,
+      selectedTagFilter: null,
+    });
+  },
   setActiveImageIndex: (index) => set({ activeImageIndex: index }),
+  selectAllInFolder: (folderPath, allFolderPaths) => {
+    const normTarget = normalizePath(folderPath);
+    const { images } = get();
+    const matching = images.filter(img => {
+      const p = normalizePath(img.path);
+      return p.startsWith(normTarget + '/') || p === normTarget;
+    });
+    const nextSelected = new Set(matching.map(i => i.path));
+    const folderSet = allFolderPaths && allFolderPaths.length > 0
+      ? new Set(allFolderPaths.map(p => normalizePath(p)))
+      : new Set([normTarget]);
+    set({
+      activeFolderPath: folderPath,
+      selectedFolderPaths: folderSet,
+      isViewingLastImport: false,
+      activeImageIndex: 0,
+      selectedPaths: nextSelected,
+      selectedRatingFilter: null,
+      selectedColorFilter: null,
+      selectedTagFilter: null,
+      pendingSelectAll: true,
+    });
+  },
+  selectAllInFolders: (topPaths, allFolderPaths) => {
+    const folderSet = new Set(allFolderPaths.map(p => normalizePath(p)));
+    const { images } = get();
+    const matching = images.filter(img => {
+      const p = normalizePath(img.path);
+      const lastSlash = p.lastIndexOf('/');
+      const dir = lastSlash > 0 ? p.substring(0, lastSlash) : p;
+      return folderSet.has(dir);
+    });
+    const nextSelected = new Set(matching.map(i => i.path));
+    set({
+      activeFolderPath: topPaths[0] || null,
+      selectedFolderPaths: folderSet,
+      isViewingLastImport: false,
+      activeImageIndex: 0,
+      selectedPaths: nextSelected,
+      selectedRatingFilter: null,
+      selectedColorFilter: null,
+      selectedTagFilter: null,
+      pendingSelectAll: true,
+    });
+  },
+  renameFolderPath: (oldPath: string, newPath: string) => {
+    const normOld = normalizeSlash(oldPath);
+    const normNew = normalizeSlash(newPath);
+    const oldPrefix = normOld + '/';
+    const newPrefix = normNew + '/';
+
+    set((state) => {
+      let anyChanged = false;
+      const updatedImages = state.images.map((img) => {
+        const normImg = normalizeSlash(img.path);
+        if (normImg.startsWith(oldPrefix)) {
+          anyChanged = true;
+          const rel = normImg.substring(oldPrefix.length);
+          return {
+            ...img,
+            path: newPrefix + rel,
+          };
+        } else if (normImg === normOld) {
+          anyChanged = true;
+          return {
+            ...img,
+            path: normNew,
+          };
+        }
+        return img;
+      });
+
+      const updatedSelectedFolderPaths = new Set<string>();
+      for (const p of state.selectedFolderPaths) {
+        const normP = normalizeSlash(p);
+        if (normP.startsWith(oldPrefix)) {
+          const rel = normP.substring(oldPrefix.length);
+          updatedSelectedFolderPaths.add(normalizePath(newPrefix + rel));
+        } else if (normP === normOld) {
+          updatedSelectedFolderPaths.add(normalizePath(normNew));
+        } else {
+          updatedSelectedFolderPaths.add(p);
+        }
+      }
+
+      let updatedActiveFolder = state.activeFolderPath;
+      if (updatedActiveFolder) {
+        const normActive = normalizeSlash(updatedActiveFolder);
+        if (normActive.startsWith(oldPrefix)) {
+          updatedActiveFolder = newPrefix + normActive.substring(oldPrefix.length);
+        } else if (normActive === normOld) {
+          updatedActiveFolder = normNew;
+        }
+      }
+
+      const updatedSelectedPaths = new Set<string>();
+      for (const p of state.selectedPaths) {
+        const normP = normalizeSlash(p);
+        if (normP.startsWith(oldPrefix)) {
+          const rel = normP.substring(oldPrefix.length);
+          updatedSelectedPaths.add(newPrefix + rel);
+        } else if (normP === normOld) {
+          updatedSelectedPaths.add(normNew);
+        } else {
+          updatedSelectedPaths.add(p);
+        }
+      }
+
+      const updatedDiscoveredFolders = new Set<string>();
+      let foldersChanged = false;
+      for (const p of state.discoveredFolders) {
+        const normP = normalizeSlash(p);
+        if (normP.startsWith(oldPrefix)) {
+          const rel = normP.substring(oldPrefix.length);
+          updatedDiscoveredFolders.add(normalizePath(newPrefix + rel));
+          foldersChanged = true;
+        } else if (normP === normOld) {
+          updatedDiscoveredFolders.add(normalizePath(normNew));
+          foldersChanged = true;
+        } else {
+          updatedDiscoveredFolders.add(p);
+        }
+      }
+
+      if (!anyChanged && !foldersChanged && updatedSelectedFolderPaths.size === state.selectedFolderPaths.size && updatedActiveFolder === state.activeFolderPath) {
+        return state;
+      }
+
+      const newIndexMap = new Map<string, number>();
+      for (let i = 0; i < updatedImages.length; i++) {
+        newIndexMap.set(normalizePath(updatedImages[i].path), i);
+      }
+
+      return {
+        images: updatedImages,
+        imageIndexMap: newIndexMap,
+        selectedFolderPaths: updatedSelectedFolderPaths,
+        activeFolderPath: updatedActiveFolder,
+        selectedPaths: updatedSelectedPaths,
+        discoveredFolders: updatedDiscoveredFolders,
+      };
+    });
+  },
 
   selectedPaths: new Set<string>(),
   setSelectedPaths: (paths) => set({ selectedPaths: paths }),

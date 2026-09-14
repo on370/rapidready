@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useState, useRef } from "react";
+import React, { useEffect, useCallback, useState, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useLibraryStore, LibraryImage, CullingState } from "../../../stores/libraryStore";
 import { ContextMenu } from "./ContextMenu";
@@ -15,6 +15,7 @@ import { useLibraryShortcuts } from "./hooks/useLibraryShortcuts";
 
 import { useLibraryUIStore } from "../../../stores/libraryUIStore";
 import { useToastStore } from "../../../stores/toastStore";
+import { useDialogStore } from "../../../stores/dialogStore";
 
 interface LibraryCenterProps {
   viewMode?: 'grid' | 'loupe';
@@ -43,8 +44,8 @@ export function LibraryCenter({
   const { 
     images, activeImageIndex, setActiveImageIndex, autoAdvance, 
     updateCullingState, updateBatchCullingState, updateImageCullings,
-    selectedPaths, setSelectedPaths, toggleSelectedPath, selectRange, selectAll,
-    activeFolderPath, filterMode,
+    selectedPaths, setSelectedPaths, selectRange, selectAll,
+    activeFolderPath, selectedFolderPaths, filterMode,
     selectedRatingFilter,
     selectedColorFilter,
     selectedTagFilter,
@@ -66,15 +67,32 @@ export function LibraryCenter({
   }, [rootPath]);
 
   const scopedImages = React.useMemo(() => {
-    return isViewingLastImport
-      ? images.filter(img => normLastImport.has(normalizePath(img.path)))
-      : normActiveFolder && normActiveFolder !== normRoot
-        ? images.filter(img => {
-            const p = normalizePath(img.path);
-            return p.startsWith(normActiveFolder + '/') || p === normActiveFolder;
-          })
-        : images;
-  }, [images, isViewingLastImport, normLastImport, normActiveFolder, normRoot]);
+    let list: LibraryImage[];
+    if (isViewingLastImport) {
+      list = images.filter(img => normLastImport.has(normalizePath(img.path)));
+    } else if (
+      selectedFolderPaths && 
+      selectedFolderPaths.size > 0 && 
+      !(selectedFolderPaths.size === 1 && normRoot && selectedFolderPaths.has(normRoot))
+    ) {
+      list = images.filter((img) => {
+        const p = normalizePath(img.path);
+        const lastSlash = p.lastIndexOf('/');
+        const dir = lastSlash > 0 ? p.substring(0, lastSlash) : p;
+        return selectedFolderPaths.has(dir);
+      });
+    } else if (normActiveFolder && normActiveFolder !== normRoot) {
+      list = images.filter((img) => {
+        const p = normalizePath(img.path);
+        return p.startsWith(normActiveFolder + '/') || p === normActiveFolder;
+      });
+    } else {
+      list = images;
+    }
+
+    // Always guarantee alphabetical sorting by path so order is 100% deterministic!
+    return list.slice().sort((a, b) => a.path.localeCompare(b.path));
+  }, [images, isViewingLastImport, normLastImport, selectedFolderPaths, normActiveFolder, normRoot]);
 
   const displayedImages = React.useMemo(() => {
     return scopedImages.filter(img => {
@@ -130,7 +148,7 @@ export function LibraryCenter({
     return counts;
   }, [scopedImages]);
 
-  const activeImage = displayedImages[activeImageIndex];
+  const activeImage = selectedPaths.size > 0 ? displayedImages[activeImageIndex] : undefined;
 
   // Sync active photo folder with libraryStore so sidebar tree highlights and scrolls to location
   useEffect(() => {
@@ -146,14 +164,31 @@ export function LibraryCenter({
 
   // When active folder or collection changes, always select and display the first image in the folder
   const prevFolderRef = useRef(activeFolderPath);
+  const prevFoldersKeyRef = useRef('');
   const prevLastImportRef = useRef(isViewingLastImport);
 
+  const selectedFoldersKey = useMemo(() => {
+    return Array.from(selectedFolderPaths || []).sort().join(';');
+  }, [selectedFolderPaths]);
+
   useEffect(() => {
-    if (prevFolderRef.current !== activeFolderPath || prevLastImportRef.current !== isViewingLastImport) {
+    if (
+      prevFolderRef.current !== activeFolderPath || 
+      prevFoldersKeyRef.current !== selectedFoldersKey ||
+      prevLastImportRef.current !== isViewingLastImport
+    ) {
       prevFolderRef.current = activeFolderPath;
+      prevFoldersKeyRef.current = selectedFoldersKey;
       prevLastImportRef.current = isViewingLastImport;
       setGridScrollTop(0);
       
+      const isPendingSelectAll = useLibraryStore.getState().pendingSelectAll;
+      if (isPendingSelectAll) {
+        useLibraryStore.getState().setPendingSelectAll(false);
+        setActiveImageIndex(0);
+        return;
+      }
+
       if (displayedImages.length > 0) {
         setActiveImageIndex(0);
         setSelectedPaths(new Set([displayedImages[0].path]));
@@ -162,7 +197,7 @@ export function LibraryCenter({
         setSelectedPaths(new Set());
       }
     }
-  }, [activeFolderPath, isViewingLastImport, displayedImages, setActiveImageIndex, setSelectedPaths, setGridScrollTop]);
+  }, [activeFolderPath, selectedFoldersKey, isViewingLastImport, displayedImages, setActiveImageIndex, setSelectedPaths, setGridScrollTop]);
 
   // Safeguard: keep activeImageIndex within valid range if displayedImages shrinks (e.g. filter change or deletes)
   useEffect(() => {
@@ -303,39 +338,120 @@ export function LibraryCenter({
   }, [scopedImages]);
   const rejectedCount = rejectedImages.length;
 
-  const handleDeleteRejected = useCallback(() => {
+  const handleDeleteRejected = useCallback(async () => {
     if (rejectedCount === 0) return;
-    ask(t('delete.confirmMessage', { count: rejectedCount }), {
-      title: t('delete.confirmTitle'),
-      kind: 'warning',
-      okLabel: t('delete.okLabel'),
-      cancelLabel: t('delete.cancelLabel')
-    }).then(confirmed => {
+
+    // Check if any of the rejected images reside on a network share / NAS
+    const samplePaths = rejectedImages.slice(0, 5).map(i => i.path);
+    const isNetwork = await invoke<boolean>('are_any_network_paths', { paths: samplePaths }).catch(() => false);
+
+    if (isNetwork) {
+      // Prominent permanent deletion warning for network shares / NAS with Cancel as default button
+      const confirmed = await useDialogStore.getState().confirmDestructive({
+        title: t('delete.nasConfirmTitle', { defaultValue: '⚠️ ACHTUNG: Dauerhaftes Löschen auf NAS / Netzwerk' }),
+        message: t('delete.nasConfirmMessage', {
+          count: rejectedCount,
+          defaultValue: `Die ${rejectedCount} verworfenen Bilder liegen auf einer Netzwerkfreigabe (NAS).\n\nDateien auf Netzwerklaufwerken können NICHT in den Papierkorb verschoben werden!\n\nSie werden DAUERHAFT und UNWIDERRUFLICH von der Festplatte gelöscht.\n\nMöchtest du diese ${rejectedCount} Bilder jetzt wirklich unwiderruflich löschen?`
+        }),
+        confirmLabel: t('delete.nasOkLabel', { defaultValue: 'Unwiderruflich löschen' }),
+        cancelLabel: t('delete.cancelLabel', { defaultValue: 'Abbrechen' })
+      });
+
+      if (confirmed) {
+        invoke('delete_files', { paths: rejectedImages.map(i => i.path), toTrash: false }).then(() => {
+          const rejectedPathSet = new Set(rejectedImages.map(i => i.path));
+          const remaining = images.filter(i => !rejectedPathSet.has(i.path));
+          useLibraryStore.getState().setImages(remaining);
+          useToastStore.getState().showSuccess(
+            t('delete.nasSuccessToast', { count: rejectedCount, defaultValue: `${rejectedCount} Bild(er) dauerhaft vom Netzwerklaufwerk gelöscht.` })
+          );
+        }).catch(err => {
+          console.error('Failed to permanently delete from network share:', err);
+          useToastStore.getState().showError(t('delete.failedError', { defaultValue: 'Löschen fehlgeschlagen: ' }) + err);
+        });
+      }
+    } else {
+      // Standard confirmation for local drives with OS Trash support
+      const confirmed = await ask(
+        t('delete.confirmMessage', {
+          count: rejectedCount,
+          defaultValue: `Möchtest du ${rejectedCount} verworfene(s) Bild(er) in den Papierkorb verschieben?`
+        }),
+        {
+          title: t('delete.confirmTitle', { defaultValue: 'Löschen bestätigen' }),
+          kind: 'warning',
+          okLabel: t('delete.okLabel', { defaultValue: 'In den Papierkorb' }),
+          cancelLabel: t('delete.cancelLabel', { defaultValue: 'Abbrechen' })
+        }
+      );
+
       if (confirmed) {
         invoke('delete_files', { paths: rejectedImages.map(i => i.path), toTrash: true }).then(() => {
           const rejectedPathSet = new Set(rejectedImages.map(i => i.path));
           const remaining = images.filter(i => !rejectedPathSet.has(i.path));
           useLibraryStore.getState().setImages(remaining);
+          useToastStore.getState().showSuccess(
+            t('delete.localSuccessToast', { count: rejectedCount, defaultValue: `${rejectedCount} Bild(er) in den Papierkorb verschoben.` })
+          );
         }).catch(err => {
-          console.error(err);
-          alert(t('delete.failedError') + err);
+          console.error('Failed to move to trash:', err);
+          useToastStore.getState().showError(t('delete.failedError', { defaultValue: 'Verschieben in den Papierkorb fehlgeschlagen: ' }) + err);
         });
       }
-    });
+    }
   }, [rejectedCount, rejectedImages, images, t]);
 
   const handleItemClick = useCallback((e: React.MouseEvent, clickedIndex: number, img: LibraryImage) => {
-    if (e.metaKey || e.ctrlKey) {
-      toggleSelectedPath(img.path);
-      setActiveImageIndex(clickedIndex);
-    } else if (e.shiftKey) {
-      selectRange(activeImageIndex, clickedIndex, displayedImages);
+    const isMetaOrCtrl = e.metaKey || e.ctrlKey;
+    const isShift = e.shiftKey;
+
+    if (isMetaOrCtrl) {
+      const nextSelected = new Set(selectedPaths);
+      const isCurrentlySelected = nextSelected.has(img.path);
+
+      if (isCurrentlySelected) {
+        // Deselect clicked item
+        nextSelected.delete(img.path);
+        setSelectedPaths(nextSelected);
+
+        // If the active item was deselected, shift active index to nearest remaining selected photo
+        if (clickedIndex === activeImageIndex) {
+          if (nextSelected.size > 0) {
+            let nearestIdx = -1;
+            for (let dist = 1; dist < displayedImages.length; dist++) {
+              const fwd = clickedIndex + dist;
+              if (fwd < displayedImages.length && nextSelected.has(displayedImages[fwd].path)) {
+                nearestIdx = fwd;
+                break;
+              }
+              const bwd = clickedIndex - dist;
+              if (bwd >= 0 && nextSelected.has(displayedImages[bwd].path)) {
+                nearestIdx = bwd;
+                break;
+              }
+            }
+            if (nearestIdx !== -1) {
+              setActiveImageIndex(nearestIdx);
+            }
+          }
+        }
+      } else {
+        // Add clicked item to selection and set as primary active item
+        nextSelected.add(img.path);
+        setSelectedPaths(nextSelected);
+        setActiveImageIndex(clickedIndex);
+      }
+    } else if (isShift) {
+      // Range selection (anchor to clicked)
+      const anchor = activeImageIndex >= 0 && activeImageIndex < displayedImages.length ? activeImageIndex : 0;
+      selectRange(anchor, clickedIndex, displayedImages);
       setActiveImageIndex(clickedIndex);
     } else {
+      // Single selection
       setSelectedPaths(new Set([img.path]));
       setActiveImageIndex(clickedIndex);
     }
-  }, [activeImageIndex, displayedImages, toggleSelectedPath, selectRange, setSelectedPaths, setActiveImageIndex]);
+  }, [activeImageIndex, displayedImages, selectedPaths, selectRange, setSelectedPaths, setActiveImageIndex]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent, path: string, index: number) => {
     e.preventDefault();
@@ -399,6 +515,7 @@ export function LibraryCenter({
               setViewMode('loupe');
             }}
             onContextMenu={handleContextMenu}
+            onClearSelection={() => setSelectedPaths(new Set())}
             viewMode={viewMode}
           />
         </div>

@@ -229,6 +229,8 @@ pub struct ArchiveScanState {
 pub struct ArchiveChunkPayload {
     pub scan_id: u64,
     pub files: Vec<rapidready_core::archive::ArchiveFile>,
+    #[serde(default)]
+    pub directories: Vec<String>,
 }
 
 pub fn start_watching_dir_internal(
@@ -286,8 +288,19 @@ pub fn start_watching_directory(
     path: String,
     state: tauri::State<'_, SidecarWatcherState>,
 ) -> Result<(), String> {
-    let dir = PathBuf::from(path);
+    let dir = PathBuf::from(&path);
     start_watching_dir_internal(&app, &dir, &state)
+}
+
+#[tauri::command]
+pub fn stop_watching_directory(
+    state: tauri::State<'_, SidecarWatcherState>,
+) -> Result<(), String> {
+    let mut watcher = state.watcher.lock().unwrap();
+    *watcher = None;
+    let mut watched_dir = state.watched_dir.lock().unwrap();
+    *watched_dir = None;
+    Ok(())
 }
 
 #[tauri::command]
@@ -305,7 +318,7 @@ pub async fn scan_archive_directory(
     initial_bytes: Option<u64>,
     state: tauri::State<'_, SidecarWatcherState>,
     scan_state: tauri::State<'_, ArchiveScanState>,
-) -> Result<Vec<rapidready_core::archive::ArchiveFile>, String> {
+) -> Result<rapidready_core::archive::ArchiveScanResult, String> {
     let dir = PathBuf::from(&path);
     let _ = start_watching_dir_internal(&app, &dir, &state);
 
@@ -347,10 +360,11 @@ pub async fn scan_archive_directory(
             move |progress| {
                 let _ = app_for_prog.emit("archive_scan_progress", progress);
             },
-            move |chunk| {
+            move |chunk, dirs| {
                 let _ = app_for_chunk.emit("archive_scan_chunk", ArchiveChunkPayload {
                     scan_id,
                     files: chunk,
+                    directories: dirs,
                 });
             },
         )
@@ -468,6 +482,170 @@ pub async fn delete_files(paths: Vec<String>, to_trash: bool) -> Result<(), Stri
 }
 
 #[tauri::command]
+pub async fn delete_folder(path: String, to_trash: bool) -> Result<(), String> {
+    let folder_path = PathBuf::from(&path);
+    if !folder_path.exists() {
+        return Err("Folder does not exist".to_string());
+    }
+    if !folder_path.is_dir() {
+        return Err("Path is not a directory".to_string());
+    }
+
+    if to_trash {
+        trash::delete(&folder_path).map_err(|e| format!("Failed to move folder to trash: {}", e))?;
+    } else {
+        std::fs::remove_dir_all(&folder_path).map_err(|e| format!("Failed to permanently delete folder: {}", e))?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn delete_folders(paths: Vec<String>, to_trash: bool) -> Result<(), String> {
+    for path_str in paths {
+        let folder_path = PathBuf::from(&path_str);
+        if folder_path.exists() && folder_path.is_dir() {
+            if to_trash {
+                trash::delete(&folder_path).map_err(|e| format!("Failed to move folder to trash: {}", e))?;
+            } else {
+                std::fs::remove_dir_all(&folder_path).map_err(|e| format!("Failed to permanently delete folder: {}", e))?;
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn create_folder(parent_path: String, name: String) -> Result<String, String> {
+    let parent = PathBuf::from(&parent_path);
+    if !parent.exists() || !parent.is_dir() {
+        return Err("Parent directory does not exist".to_string());
+    }
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err("Folder name cannot be empty".to_string());
+    }
+    if trimmed.contains('/') || trimmed.contains('\\') || trimmed.contains("..") {
+        return Err("Folder name contains invalid characters".to_string());
+    }
+    let new_folder = parent.join(trimmed);
+    if new_folder.exists() {
+        return Err("A folder with this name already exists".to_string());
+    }
+    std::fs::create_dir(&new_folder).map_err(|e| format!("Failed to create folder: {}", e))?;
+    Ok(new_folder.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn rename_folder(old_path: String, new_name: String) -> Result<String, String> {
+    let source = PathBuf::from(&old_path);
+    if !source.exists() || !source.is_dir() {
+        return Err("Source directory does not exist".to_string());
+    }
+    let trimmed = new_name.trim();
+    if trimmed.is_empty() {
+        return Err("Folder name cannot be empty".to_string());
+    }
+    if trimmed.contains('/') || trimmed.contains('\\') || trimmed.contains("..") {
+        return Err("Folder name contains invalid characters".to_string());
+    }
+    let parent = source.parent().ok_or_else(|| "Cannot rename root directory".to_string())?;
+    let target = parent.join(trimmed);
+    if target.exists() && target != source {
+        return Err("A folder with this name already exists".to_string());
+    }
+    if target != source {
+        std::fs::rename(&source, &target).map_err(|e| format!("Failed to rename folder: {}", e))?;
+    }
+    Ok(target.to_string_lossy().to_string())
+}
+
+pub fn is_network_or_remote_path(path: &Path) -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        let path_str = path.to_string_lossy();
+        // 1. UNC network path: starts with \\ or // or \??\UNC
+        if path_str.starts_with(r"\\") || path_str.starts_with("//") || path_str.starts_with(r"\??\UNC") {
+            return true;
+        }
+
+        // 2. Mapped drive: check drive root e.g. "Z:\" with GetDriveTypeW (DRIVE_REMOTE = 4)
+        use std::os::windows::ffi::OsStrExt;
+        if let Some(component) = path.components().next() {
+            let mut drive: Vec<u16> = component.as_os_str().encode_wide().collect();
+            if !drive.ends_with(&[b'\\' as u16]) {
+                drive.push(b'\\' as u16);
+            }
+            drive.push(0);
+
+            extern "system" {
+                fn GetDriveTypeW(lpRootPathName: *const u16) -> u32;
+            }
+            unsafe {
+                if GetDriveTypeW(drive.as_ptr()) == 4 {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+
+        let existing_path = path.ancestors().find(|a| a.exists()).unwrap_or(path);
+
+        if let Ok(c_path) = CString::new(existing_path.as_os_str().as_bytes()) {
+            let mut stat: libc::statfs = unsafe { std::mem::zeroed() };
+            if unsafe { libc::statfs(c_path.as_ptr(), &mut stat) } == 0 {
+                // MNT_LOCAL = 0x00001000 in macOS sys/mount.h
+                const MNT_LOCAL: u32 = 0x00001000;
+                if (stat.f_flags & MNT_LOCAL) == 0 {
+                    return true;
+                }
+                let fstype = unsafe {
+                    std::ffi::CStr::from_ptr(stat.f_fstypename.as_ptr()).to_string_lossy()
+                };
+                if fstype == "smbfs" || fstype == "nfs" || fstype == "afpfs" || fstype == "cifs" || fstype == "webdav" {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+
+        let existing_path = path.ancestors().find(|a| a.exists()).unwrap_or(path);
+
+        if let Ok(c_path) = CString::new(existing_path.as_os_str().as_bytes()) {
+            let mut stat: libc::statfs = unsafe { std::mem::zeroed() };
+            if unsafe { libc::statfs(c_path.as_ptr(), &mut stat) } == 0 {
+                let f_type = stat.f_type as i64;
+                if f_type == 0x6969 || f_type == 0x517B || f_type == 0xFF534D42 {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+}
+
+#[tauri::command]
+pub fn is_network_path(path: String) -> bool {
+    is_network_or_remote_path(Path::new(&path))
+}
+
+#[tauri::command]
+pub fn are_any_network_paths(paths: Vec<String>) -> bool {
+    paths.iter().any(|p| is_network_or_remote_path(Path::new(p)))
+}
+
+#[tauri::command]
 pub fn show_in_finder(path: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
@@ -489,6 +667,39 @@ pub fn show_in_finder(path: String) -> Result<(), String> {
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         let _ = path;
+        Ok(())
+    }
+}
+
+#[tauri::command]
+pub fn show_in_finder_batch(paths: Vec<String>) -> Result<(), String> {
+    if paths.is_empty() {
+        return Ok(());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let mut cmd = std::process::Command::new("open");
+        cmd.arg("-R");
+        for p in &paths {
+            cmd.arg(p);
+        }
+        cmd.spawn()
+            .map_err(|e| format!("Failed to reveal in Finder: {}", e))?;
+        Ok(())
+    }
+    #[cfg(target_os = "windows")]
+    {
+        for p in &paths {
+            let win_path = p.replace('/', "\\");
+            let _ = std::process::Command::new("explorer")
+                .arg(format!("/select,{}", win_path))
+                .spawn();
+        }
+        Ok(())
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let _ = paths;
         Ok(())
     }
 }
@@ -656,6 +867,17 @@ pub async fn set_culling_state_batch(
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_network_or_remote_path_local() {
+        let current = std::env::current_dir().unwrap();
+        assert!(!is_network_or_remote_path(&current));
+    }
 }
 
 

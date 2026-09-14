@@ -31,6 +31,9 @@ tauri-plugin-window-state = "2.4.1"
 notify = "8.2.0"
 open = "5"
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 
 [workspace]
 members = ["crates/rapidready-core"]
