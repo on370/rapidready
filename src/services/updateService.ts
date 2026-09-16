@@ -1,5 +1,6 @@
 import buildInfo from '../build-info.json';
 import { useSettingsStore } from '../stores/settingsStore';
+import i18n from '../i18n';
 
 export interface GitHubRelease {
   id: number;
@@ -18,28 +19,38 @@ export interface ParsedVersion {
   patch: number;
   isBeta: boolean;
   betaNumber: number;
+  isRc: boolean;
+  rcNumber: number;
 }
 
 export function parseVersion(ver: string): ParsedVersion {
   const clean = ver.trim().replace(/^v/i, '');
   const [core, ...preParts] = clean.split('-');
-  const [majStr, minStr, patStr] = core.split('.');
+  const [majStr, minStr, patStr] = (core || '').split('.');
   const major = parseInt(majStr, 10) || 0;
   const minor = parseInt(minStr, 10) || 0;
   const patch = parseInt(patStr, 10) || 0;
 
   const pre = preParts.join('-').toLowerCase();
-  const isBeta = pre.includes('beta') || pre.includes('alpha') || pre.includes('rc');
-
-  let betaNumber = 0;
-  if (isBeta) {
-    const numMatch = pre.match(/beta\.?(\d+)/i);
-    if (numMatch) {
-      betaNumber = parseInt(numMatch[1], 10);
+  const isRc = /rc/i.test(pre);
+  let rcNumber = 0;
+  if (isRc) {
+    const rcMatch = pre.match(/rc\.?(\d+)/i);
+    if (rcMatch) {
+      rcNumber = parseInt(rcMatch[1], 10);
     }
   }
 
-  return { major, minor, patch, isBeta, betaNumber };
+  const isBeta = pre.length > 0;
+  let betaNumber = 0;
+  if (pre.includes('beta')) {
+    const betaMatch = pre.match(/beta\.?(\d+)/i);
+    if (betaMatch) {
+      betaNumber = parseInt(betaMatch[1], 10);
+    }
+  }
+
+  return { major, minor, patch, isBeta, betaNumber, isRc, rcNumber };
 }
 
 export function compareVersions(aStr: string, bStr: string): number {
@@ -50,18 +61,35 @@ export function compareVersions(aStr: string, bStr: string): number {
   if (a.minor !== b.minor) return a.minor - b.minor;
   if (a.patch !== b.patch) return a.patch - b.patch;
 
-  // Equal core version: stable release is newer than beta
+  // Equal core version: stable release is newer than any beta / pre-release
   if (!a.isBeta && b.isBeta) return 1;
   if (a.isBeta && !b.isBeta) return -1;
+  if (!a.isBeta && !b.isBeta) return 0;
 
-  if (a.isBeta && b.isBeta) {
+  // Both are pre-releases:
+  // If betaNumbers differ (e.g. beta.2 vs beta.1):
+  if (a.betaNumber !== b.betaNumber) {
     return a.betaNumber - b.betaNumber;
+  }
+
+  // Same beta level:
+  // A release candidate (RC) is older than a full/final beta release!
+  // e.g. 0.3.7-beta (isRc = false) > 0.3.7-beta-RC1 (isRc = true)
+  if (!a.isRc && b.isRc) return 1;
+  if (a.isRc && !b.isRc) return -1;
+
+  // If both are RCs, compare RC numbers (e.g. RC2 > RC1)
+  if (a.isRc && b.isRc) {
+    return a.rcNumber - b.rcNumber;
   }
 
   return 0;
 }
 
 export const isCurrentBeta = parseVersion(buildInfo.version).isBeta;
+
+export const STABLE_TAG_REGEX = /^v?\d+\.\d+\.\d+$/;
+export const BETA_TAG_REGEX = /^v?\d+\.\d+\.\d+-beta(?:\.?\d+)?$/i;
 
 export interface CheckUpdateResult {
   hasUpdate: boolean;
@@ -92,18 +120,25 @@ export async function checkAppUpdate(manual = false): Promise<CheckUpdateResult>
       return { hasUpdate: false, currentVersion: buildInfo.version };
     }
 
-    // Filter eligible releases
+    // Filter eligible releases: only accept tags matching x.y.z or x.y.z-beta
     const eligibleReleases = releases.filter((r) => {
       if (r.draft) return false;
-      const isReleaseBeta = r.prerelease || r.tag_name.toLowerCase().includes('beta');
+
+      const isStable = STABLE_TAG_REGEX.test(r.tag_name);
+      const isBetaRelease = BETA_TAG_REGEX.test(r.tag_name);
+
+      // Only official release schemas are considered
+      if (!isStable && !isBetaRelease) {
+        return false;
+      }
 
       // If current app is not a beta, NEVER consider beta releases
-      if (!isCurrentBeta && isReleaseBeta) {
+      if (!isCurrentBeta && isBetaRelease) {
         return false;
       }
 
       // If current app is beta, but user disabled beta update notifications:
-      if (isCurrentBeta && isReleaseBeta && !settings.includeBetaUpdates) {
+      if (isCurrentBeta && isBetaRelease && !settings.includeBetaUpdates) {
         return false;
       }
 
@@ -126,10 +161,16 @@ export async function checkAppUpdate(manual = false): Promise<CheckUpdateResult>
     };
   } catch (err: any) {
     console.error('Failed to check for updates:', err);
+    let errMsg = err?.message || 'Network error';
+    if (errMsg === 'Load failed' || errMsg.toLowerCase().includes('failed to fetch')) {
+      errMsg = i18n.t('settings:updates.connectionError', {
+        defaultValue: 'Keine Verbindung zu GitHub möglich (Offline oder Anfrage blockiert)'
+      });
+    }
     return {
       hasUpdate: false,
       currentVersion: buildInfo.version,
-      error: err?.message || 'Network error',
+      error: errMsg,
     };
   }
 }

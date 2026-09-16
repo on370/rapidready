@@ -171,7 +171,18 @@
     "altitude": "Höhe",
     "noGps": "Keine GPS-Daten vorhanden",
     "openInMaps": "Auf Karte zeigen",
-    "openInMapsTooltip": "Koordinaten in Google Maps öffnen"
+    "openInMapsTooltip": "Koordinaten in Google Maps öffnen",
+    "addGps": "Koordinaten hinzufügen...",
+    "editGps": "GPS bearbeiten",
+    "removeGps": "GPS entfernen",
+    "gpsInputPlaceholder": "Google Maps Link oder Koordinaten einfügen...",
+    "gpsInputHint": "Füge einen Link aus Google/Apple Maps oder Koordinaten (DMS, DD, DMM) ein",
+    "gpsBatchBadge": "Wird auf alle {{count}} ausgewählten Bilder angewendet",
+    "gpsApply": "Übernehmen",
+    "gpsCancel": "Abbrechen",
+    "gpsAppliedToast": "GPS-Koordinaten für {{count}} Bild(er) gespeichert.",
+    "gpsRemovedToast": "GPS-Koordinaten für {{count}} Bild(er) entfernt.",
+    "gpsSaveFailed": "Fehler beim Speichern der GPS-Koordinaten"
   },
   "colors": {
     "none": "Keine Farbe",

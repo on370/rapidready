@@ -177,14 +177,25 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
     let sidecar_path = crate::culling::get_sidecar_path(path);
     if let Ok(contents) = std::fs::read_to_string(&sidecar_path) {
         if let Ok(val) = serde_json::from_str::<serde_json::Value>(&contents) {
-            if let Some(gps_obj) = val.get("gps").and_then(|v| v.as_object()) {
-                if let (Some(lat), Some(lon)) = (
-                    gps_obj.get("latitude").and_then(|v| v.as_f64()),
-                    gps_obj.get("longitude").and_then(|v| v.as_f64()),
-                ) {
-                    meta.latitude = Some(lat);
-                    meta.longitude = Some(lon);
-                    meta.altitude = gps_obj.get("altitude").and_then(|v| v.as_f64());
+            if let Some(gps_val) = val.get("gps") {
+                if gps_val.is_null() {
+                    // Explicit removal/clearing of GPS overrides camera EXIF
+                    meta.latitude = None;
+                    meta.longitude = None;
+                    meta.altitude = None;
+                } else if let Some(gps_obj) = gps_val.as_object() {
+                    if let (Some(lat), Some(lon)) = (
+                        gps_obj.get("latitude").and_then(|v| v.as_f64()),
+                        gps_obj.get("longitude").and_then(|v| v.as_f64()),
+                    ) {
+                        meta.latitude = Some(lat);
+                        meta.longitude = Some(lon);
+                        meta.altitude = gps_obj.get("altitude").and_then(|v| v.as_f64());
+                    } else if gps_obj.get("latitude").map_or(false, |v| v.is_null()) {
+                        meta.latitude = None;
+                        meta.longitude = None;
+                        meta.altitude = None;
+                    }
                 }
             }
         }

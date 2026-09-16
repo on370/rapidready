@@ -85,6 +85,7 @@
     "upToDate": "RapidReady ist auf dem neuesten Stand (v{{version}}).",
     "updateAvailable": "Neue Version verfügbar: {{tag}}",
     "download": "Herunterladen",
-    "checkError": "Fehler beim Prüfen auf Updates: {{error}}"
+    "checkError": "Fehler beim Prüfen auf Updates: {{error}}",
+    "connectionError": "Keine Verbindung zu GitHub möglich (Offline oder Anfrage blockiert)"
   }
 }

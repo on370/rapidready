@@ -157,7 +157,7 @@
 
 ---
 
-- [ ] **GEO Part 1: Universal Geotagging & Intelligent GPS Coordinate Editor:**
+- [x] **GEO Part 1: Universal Geotagging & Intelligent GPS Coordinate Editor (`v0.3.6-beta` / Build `009C`):**
   - **Context & Goal:**
     Photographers frequently shoot with mirrorless or medium format cameras without built-in GPS (e.g. Fuji X-T5, Leica M, Hasselblad, older DSLRs), or require manual location corrections. Pasting coordinates from disparate sources (Google Maps URLs, Apple Maps, OpenStreetMap, German comma notation, degrees-minutes-seconds) is traditionally painful and error-prone.
   - **Universal Input Parser (Pure Client-Side Engine):**
@@ -320,6 +320,100 @@
       - Display a clean dialog or notification banner indicating the new version number and brief release headline.
       - Provide a primary action button to open `https://github.com/on370/RapidReady/releases/latest` in the user's default browser via `@tauri-apps/plugin-opener`.
       - Include dismiss options: `[ Remind Me Later ]` and `[ Skip This Version ]` (stored in settings to avoid recurring prompts for a skipped version).
+
+---
+
+### Milestone: Onboarding & Guided First-Time User Experience (FTUX)
+- [ ] **Interactive Guided Onboarding Tour with Dynamic Spotlight Callouts ("Wandernde Erklär-Blasen"):**
+  - **Context & Goal:**
+    First-time users, photographers migrating from legacy photo managers, or users unfamiliar with modern multi-panel layouts (such as the compact left icon sidebar or non-destructive culling sidecars) benefit from an interactive, lightweight guided tour that introduces the core GUI touchpoints in under 60 seconds without overwhelming them.
+  - **Best-Practice Lifecycle & Triggering Architecture:**
+    1. *First-Launch Detection:*
+       - Track `hasCompletedOnboarding: boolean` (or `onboardingState: 'unseen' | 'completed' | 'dismissed'`) in `settingsStore` (persisted to `localStorage` / settings).
+       - When the app is launched for the very first time, after the 2.5s splashscreen fades out, present a friendly, non-intrusive welcome prompt:
+         - *"Welcome to RapidReady! Would you like a quick 1-minute guided tour of the key features?"*
+         - Primary action: `[ Start Guided Tour ]` | Secondary action: `[ Skip / Maybe Later ]`.
+    2. *Dismissal & Cancellation Handling (Best Practice):*
+       - The tour can be dismissed at any step via an `[ × ]` close button or `[ Skip Tour ]`.
+       - **Standing Rule:** Never nag users on subsequent application restarts if they explicitly cancelled! Once cancelled or finished, `hasCompletedOnboarding` is set to `true`.
+       - When skipped, show a subtle confirmation toast:
+         - *"Tour skipped. You can restart the tour anytime via Help → 'Start Guided Tour...'."*
+    3. *Manual Replay Anytime:*
+       - Add a permanent entry in the native **Help Menu**:
+         - *"Start Guided Tour..."* (`CmdOrCtrl+Shift+T` or under Help).
+       - Provide a quick button in **Settings View** under *About* or *General*:
+         - *"Replay Guided Tour"*.
+       - Triggering the replay resets the tour to Step 1, navigates to the initial view, and launches the spotlight overlay immediately.
+  - **Visual Design & Overlay Architecture:**
+    1. *Spotlight & Dimmed Backdrop Cutout:*
+       - Semi-transparent backdrop (`rgba(0, 0, 0, 0.65)` with CSS backdrop-blur) dims irrelevant workspace areas.
+       - Dynamic SVG/CSS mask cutout highlighting the target UI element with a subtle, pulsating accent glow border (`ring-2 ring-accent/60 animate-pulse`).
+    2. *Floating Anchored Callout / Popover:*
+       - Dynamically positioned relative to the target element (`top`, `bottom`, `left`, `right` with automatic viewport flip/shift prevention).
+       - Directional pointer arrow pointing directly toward the highlighted control.
+    3. *Step Navigation & Header Controls:*
+       - Title and concise explanation localized via `i18n` (`locales/{de,en}/onboarding.json`).
+       - Step indicator & progress dots: e.g. `Step 2 of 6` (`••○•••`).
+       - Navigation buttons:
+         - `[ ← Previous ]` (disabled on Step 1).
+         - `[ Next → ]` (transitions smoothly to the next spotlight target; transforms to `[ Get Started! ]` on the final step).
+         - `[ Skip ]` / `[ × ]` to exit early.
+       - Keyboard support: `Enter` / `ArrowRight` (Next), `ArrowLeft` (Previous), `Escape` (Exit).
+  - **Curated Tour Stops (Key Touchpoints of the RapidReady GUI):**
+    1. **Stop 1: Navigation Sidebar (`Sidebar.tsx`):**
+       - Target: Left icon sidebar.
+       - Highlight: Direct switching between *Import*, *Library / Archive*, and *Settings*, plus quick access to Help & About.
+    2. **Stop 2: Archive Locations & Folder Tree (`LibraryLeftSidebar.tsx`):**
+       - Target: Folder tree panel.
+       - Highlight: Fast browsing across SSDs, memory cards, and NAS network shares. Right-click context menu for Finder/Explorer Reveal and folder management.
+    3. **Stop 3: Rapid Culling & Filter Bar (`LibraryCenter.tsx` / `FilterBar`):**
+       - Target: Top filter bar.
+       - Highlight: Instant zero-lag filtering by Ratings (1–5), Picks (`P`), Rejects (`X`), and Color Labels (`6`–`9`).
+    4. **Stop 4: Instant 1:1 Sensor Zoom & Viewport (`LoupeViewer.tsx`):**
+       - Target: Grid/Loupe switcher or central viewer.
+       - Highlight: Toggle Grid (`G`) and Loupe (`E`). Press `Z` for instant 1:1 pixel peeping directly from embedded sensor JPEGs without conversion lag.
+    5. **Stop 5: Non-Destructive Inspector & Geotagging (`LibraryInspector.tsx`):**
+       - Target: Right sidebar (Inspector).
+       - Highlight: Technical EXIF, non-destructive ratings in `.rrdata` sidecars, and universal GPS editor with 1-click map opening.
+    6. **Stop 6: RapidRAW Bridge & Help (`Sidebar.tsx` / Help):**
+       - Target: Help icon / status bar.
+       - Highlight: One-key handover to RapidRAW (`R`) for RAW processing, and full shortcut reference via `Cmd+/` or `F1`.
+  - **Multi-View State Awareness:**
+    - The tour controller intelligently switches `activeView` if a tour stop targets an element in another view (e.g. automatically navigating from Import to Library when introducing the Folder Tree or Inspector).
+
+---
+
+### Milestone: Local Intelligent AI Ingest, Semantic Search & Facial Recognition
+- [ ] **On-Device Private AI Engine for Semantic Discovery, Smart Tagging & People Clustering:**
+  - **Context & Goal:**
+    Managing and retrieving photos across multi-terabyte collections (weddings, client events, sports, family archives, wildlife) traditionally requires tedious manual keyword tagging. RapidReady will introduce a privacy-first, 100% on-device AI engine that automatically extracts semantic visual features and clusters human faces, providing Google Photos- and Apple Photos-grade search capabilities without transmitting any data over the network.
+  - **The Two Functional Pillars:**
+    1. **Pillar A: Facial Detection, Recognition & People Clustering (Apple Photos Paradigm):**
+       - *Face Detection & Landmarks:* Ultra-fast, lightweight detector (e.g. SCRFD or YuNet, ~2–3 MB ONNX model) locating face bounding boxes and facial landmarks.
+       - *Face Embeddings:* Normalized feature representation (e.g. MobileFaceNet or ArcFace) generating a compact 128- or 512-dimensional vector per face.
+       - *Automated Rust Clustering (DBSCAN / HNSW):* High-speed vector grouping in `rapidready-core` linking similar faces across thousands of images into identity clusters (*"Person with 98% similarity on 215 photos"*).
+       - *People UI:* Dedicated *People View / Tab* displaying circular avatar bubbles sorted by frequency. Supports one-click naming (*"Anna"*), merging duplicate identity bubbles, hiding unnamed strangers, and combined filtering (`Person: Anna AND Ben`).
+    2. **Pillar B: Zero-Shot Semantic Vector Search & Content Understanding (CLIP Paradigm):**
+       - *Vision-Language Embedding:* Quantized on-device model (e.g. MobileCLIP or ViT-B/32 ONNX) projecting image thumbnails and arbitrary text queries into a shared embedding space.
+       - *Instant Natural Language Querying:* Global search bar in Library view supporting descriptive searches without prior manual labeling (e.g. `"vintage red car"`, `"dog running on beach"`, `"bride and groom sunset"`, `"night skyline with fireworks"`).
+       - *Ranking & Speed:* Cosine similarity comparisons executed in milliseconds directly in SQLite or Rust RAM index, sorting the photo grid by relevance score.
+  - **Opt-In Model Delivery (RapidRAW Parity & Lightweight Installer):**
+    - The base RapidReady installer remains feather-light (~45 MB), shipping only the native runtime bindings (`libonnxruntime` or pure Rust Candle).
+    - AI features are disabled by default. Enabling *"Local AI Search & Facial Recognition"* in Settings triggers an asynchronous one-time download of the quantized ONNX models (~50–80 MB total) into the workstation's standard application support directory (`~/Library/Application Support/io.github.on370.rapidready/models/` on macOS, `%LOCALAPPDATA%` on Windows).
+    - Displays a clean progress bar during provisioning, ensuring users on low-bandwidth connections or older hardware retain full control over disk usage.
+  - **Strict Separation: SQLite Index vs. Non-Destructive Sidecars:**
+    - *Internal SQLite Index (`import_index.db`):*
+      - High-dimensional vector embeddings, face bounding boxes, and clustering graph nodes reside strictly in internal database tables (`faces`, `people`, `image_embeddings`).
+      - Enables instantaneous searches without modifying files on disk or cluttering directory trees.
+    - *Explicit Smart Suggestions in Inspector (`LibraryInspector.tsx`):*
+      - To prevent polluting `.rrdata` / `.xmp` sidecars with speculative AI classifications, detected keywords and identities are presented as interactive **Smart Suggestion Chips**:
+        - **Suggested Tags:** `AI Suggestions: [ + Mountain ] [ + Sunset ] [ + Golden Hour ]`.
+        - **Detected People:** `Detected: [ + Anna ] [ + Lukas ]`.
+      - Clicking any chip promotes it into an official user tag committed to the `.rrdata` / `.xmp` sidecar.
+      - Includes a `[ Accept All Suggestions ]` shortcut for fast batch approval on selected photos.
+  - **High-Throughput, Zero-Impact Ingest Architecture:**
+    - **No RAW Conversion Overhead:** The AI engine analyzes pre-cached 256/512px thumbnails or embedded camera sensor JPEGs already extracted by the ingest pipeline. Inference requires only 5–15 ms per photo on Apple Silicon (via CoreML / Apple Neural Engine) or modern PC hardware (DirectML / CUDA / AVX2).
+    - **Idle Background Worker:** Scanning executes strictly in background threads with low OS scheduling priority. Automatically pauses during user interactions (culling, scrolling, zoom peeping, or RapidRAW handover) ensuring 100% fluid 60 FPS UI responsiveness.
 
 
 

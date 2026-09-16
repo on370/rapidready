@@ -75,6 +75,10 @@ interface LibraryStore {
   setPendingSelectAll: (val: boolean) => void;
   clearSelection: () => void;
   updateBatchCullingState: (paths: string[], partialState: Partial<CullingState>) => void;
+  updateBatchGps: (
+    paths: string[],
+    coords: { latitude: number | null; longitude: number | null; altitude?: number | null }
+  ) => void;
   updateImageCullings: (items: Array<{ path: string; culling: CullingState }>) => void;
   
   viewMode: 'grid' | 'loupe';
@@ -581,6 +585,23 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
             ...newImages[idx].culling,
             ...partialState
           }
+        };
+        changed = true;
+      }
+    }
+    return changed ? { images: newImages } : state;
+  }),
+  updateBatchGps: (paths, coords) => set((state) => {
+    const newImages = [...state.images];
+    let changed = false;
+    for (const path of paths) {
+      const idx = state.imageIndexMap.get(normalizePath(path));
+      if (idx !== undefined && newImages[idx]) {
+        newImages[idx] = {
+          ...newImages[idx],
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          altitude: coords.altitude !== undefined ? coords.altitude : (coords.latitude === null ? null : newImages[idx].altitude),
         };
         changed = true;
       }

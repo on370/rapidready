@@ -24,17 +24,44 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 cd "${ROOT_DIR}"
 
+# ------------------------------------------------------------------------------
+# Toolchain Auto-Detection (mise / local / global)
+# ------------------------------------------------------------------------------
+MISE_BIN=""
+if command -v mise >/dev/null 2>&1; then
+  MISE_BIN="$(command -v mise)"
+elif [ -x "$HOME/.local/bin/mise" ]; then
+  MISE_BIN="$HOME/.local/bin/mise"
+elif [ -x "/opt/homebrew/bin/mise" ]; then
+  MISE_BIN="/opt/homebrew/bin/mise"
+elif [ -x "$HOME/.cargo/bin/mise" ]; then
+  MISE_BIN="$HOME/.cargo/bin/mise"
+fi
+
+if [ -n "$MISE_BIN" ]; then
+  # Load environment for this directory (activates Node & Rust from mise.toml)
+  eval "$("$MISE_BIN" env -s bash 2>/dev/null || true)"
+fi
+
 echo "⚡ [RapidReady] Checking development environment..."
 
 command -v node >/dev/null 2>&1 || {
   echo "❌ [ERROR] Node.js is not installed or not in PATH."
-  echo "Please install Node.js LTS from https://nodejs.org/"
+  if [ -n "$MISE_BIN" ]; then
+    echo "    (mise was found at $MISE_BIN, but 'node' is not active. Run: mise install)"
+  else
+    echo "    Please install Node.js LTS from https://nodejs.org/ or mise from https://mise.jdx.dev/"
+  fi
   exit 1
 }
 
 command -v cargo >/dev/null 2>&1 || {
   echo "❌ [ERROR] Rust (cargo) is not installed or not in PATH."
-  echo "Please install Rust from https://rustup.rs/"
+  if [ -n "$MISE_BIN" ]; then
+    echo "    (mise was found at $MISE_BIN, but 'cargo' is not active. Run: mise install)"
+  else
+    echo "    Please install Rust from https://rustup.rs/ or mise from https://mise.jdx.dev/"
+  fi
   exit 1
 }
 

@@ -27,6 +27,8 @@
       "grid": "Grid View",
       "fullscreen": "Toggle Fullscreen",
       "selectAll": "Select All Images",
+      "import": "Import View",
+      "library": "Library View",
       "zoom": "Toggle Zoom",
       "zoomIn": "Zoom In",
       "zoomOut": "Zoom Out",

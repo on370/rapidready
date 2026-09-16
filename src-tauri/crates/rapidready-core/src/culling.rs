@@ -202,6 +202,82 @@ pub fn write_sidecar(original_path: &Path, state: &CullingState) -> anyhow::Resu
     Ok(())
 }
 
+/// Atomically updates or clears GPS coordinates in the .rrdata sidecar.
+/// If latitude and longitude are Some, writes or updates `"gps": { "latitude": ..., "longitude": ..., "altitude": ... }`.
+/// If latitude and longitude are None, sets `"gps": null` to explicitly override/remove location.
+/// Preserves all existing culling metadata (ratings, flags, tags, color, orientation, adjustments).
+pub fn write_gps_sidecar(
+    original_path: &Path,
+    latitude: Option<f64>,
+    longitude: Option<f64>,
+    altitude: Option<f64>,
+) -> anyhow::Result<()> {
+    let sidecar_path = get_sidecar_path(original_path);
+
+    // Load existing JSON if available, or create new default map
+    let mut root: serde_json::Value = if sidecar_path.exists() {
+        if let Ok(contents) = fs::read_to_string(&sidecar_path) {
+            serde_json::from_str(&contents).unwrap_or_else(|_| serde_json::json!({}))
+        } else {
+            serde_json::json!({})
+        }
+    } else {
+        serde_json::json!({})
+    };
+
+    let obj = root.as_object_mut().ok_or_else(|| anyhow::anyhow!("Root is not a JSON object"))?;
+
+    // 1. Ensure version is set (RapidRAW expects version 1)
+    if !obj.contains_key("version") {
+        obj.insert("version".to_string(), serde_json::json!(1));
+    }
+
+    // 2. If adjustments does not exist, initialize with null (RapidRAW format)
+    if !obj.contains_key("adjustments") {
+        obj.insert("adjustments".to_string(), serde_json::Value::Null);
+    }
+
+    // 3. Update or clear gps object
+    match (latitude, longitude) {
+        (Some(lat), Some(lon)) => {
+            let mut gps_map = serde_json::Map::new();
+            gps_map.insert("latitude".to_string(), serde_json::json!(lat));
+            gps_map.insert("longitude".to_string(), serde_json::json!(lon));
+            if let Some(alt) = altitude {
+                gps_map.insert("altitude".to_string(), serde_json::json!(alt));
+            }
+            obj.insert("gps".to_string(), serde_json::Value::Object(gps_map));
+        }
+        _ => {
+            // Explicit null to override camera EXIF if present
+            obj.insert("gps".to_string(), serde_json::Value::Null);
+        }
+    }
+
+    // 4. Write back formatted JSON atomically
+    let json = serde_json::to_string_pretty(&root)?;
+    let parent = sidecar_path.parent().unwrap_or_else(|| Path::new("."));
+    let pid = std::process::id();
+    let thread_id = std::thread::current().id();
+    let file_stem = sidecar_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("sidecar");
+    let tmp_path = parent.join(format!(".{}.tmp.{:?}.{}", file_stem, thread_id, pid));
+
+    if let Err(e) = fs::write(&tmp_path, json) {
+        let _ = fs::remove_file(&tmp_path);
+        return Err(e.into());
+    }
+
+    if let Err(e) = fs::rename(&tmp_path, &sidecar_path) {
+        let _ = fs::remove_file(&tmp_path);
+        return Err(e.into());
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -465,6 +541,91 @@ mod tests {
         assert_eq!(read.rating, 5);
         assert_eq!(read.flag, Some(1));
         assert_eq!(read.color, Some("purple".to_string()));
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_write_gps_sidecar_and_override() {
+        let temp_dir = std::env::temp_dir().join(format!("rr_gps_write_test_{}", std::process::id()));
+        let _ = fs::create_dir_all(&temp_dir);
+        let img_path = temp_dir.join("test_gps.cr2");
+        let sidecar_path = temp_dir.join("test_gps.cr2.rrdata");
+
+        // Write GPS coordinates
+        write_gps_sidecar(&img_path, Some(48.137154), Some(11.575421), Some(520.0)).unwrap();
+        assert!(sidecar_path.exists());
+
+        // Verify JSON contents
+        let contents = fs::read_to_string(&sidecar_path).unwrap();
+        let val: serde_json::Value = serde_json::from_str(&contents).unwrap();
+        let gps = val.get("gps").and_then(|v| v.as_object()).unwrap();
+        assert_eq!(gps.get("latitude").and_then(|v| v.as_f64()), Some(48.137154));
+        assert_eq!(gps.get("longitude").and_then(|v| v.as_f64()), Some(11.575421));
+        assert_eq!(gps.get("altitude").and_then(|v| v.as_f64()), Some(520.0));
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_clear_gps_sidecar() {
+        let temp_dir = std::env::temp_dir().join(format!("rr_gps_clear_test_{}", std::process::id()));
+        let _ = fs::create_dir_all(&temp_dir);
+        let img_path = temp_dir.join("test_clear.cr2");
+        let sidecar_path = temp_dir.join("test_clear.cr2.rrdata");
+
+        // First write coordinates
+        write_gps_sidecar(&img_path, Some(48.137154), Some(11.575421), None).unwrap();
+        
+        // Then clear coordinates (None, None, None)
+        write_gps_sidecar(&img_path, None, None, None).unwrap();
+
+        let contents = fs::read_to_string(&sidecar_path).unwrap();
+        let val: serde_json::Value = serde_json::from_str(&contents).unwrap();
+        assert!(val.get("gps").unwrap().is_null(), "GPS should be explicit null");
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_gps_sidecar_preserves_culling() {
+        let temp_dir = std::env::temp_dir().join(format!("rr_gps_pres_test_{}", std::process::id()));
+        let _ = fs::create_dir_all(&temp_dir);
+        let img_path = temp_dir.join("test_pres.cr2");
+
+        // 1. Write culling state
+        let culling = CullingState {
+            flag: Some(1),
+            rating: 4,
+            color: Some("yellow".to_string()),
+            tags: vec!["Vacation".to_string(), "Munich".to_string()],
+            orientation: Some(6),
+        };
+        write_sidecar(&img_path, &culling).unwrap();
+
+        // 2. Write GPS coordinates
+        write_gps_sidecar(&img_path, Some(48.137154), Some(11.575421), Some(515.0)).unwrap();
+
+        // 3. Verify culling is preserved
+        let read_culling = read_sidecar(&img_path);
+        assert_eq!(read_culling.rating, 4);
+        assert_eq!(read_culling.flag, Some(1));
+        assert_eq!(read_culling.color, Some("yellow".to_string()));
+        assert_eq!(read_culling.tags, vec!["Vacation", "Munich"]);
+        assert_eq!(read_culling.orientation, Some(6));
+
+        // 4. Update culling rating to 5
+        let mut updated_culling = read_culling;
+        updated_culling.rating = 5;
+        write_sidecar(&img_path, &updated_culling).unwrap();
+
+        // 5. Verify GPS is still preserved in sidecar
+        let sidecar_path = get_sidecar_path(&img_path);
+        let contents = fs::read_to_string(&sidecar_path).unwrap();
+        let val: serde_json::Value = serde_json::from_str(&contents).unwrap();
+        let gps = val.get("gps").and_then(|v| v.as_object()).unwrap();
+        assert_eq!(gps.get("latitude").and_then(|v| v.as_f64()), Some(48.137154));
+        assert_eq!(gps.get("longitude").and_then(|v| v.as_f64()), Some(11.575421));
 
         let _ = fs::remove_dir_all(&temp_dir);
     }

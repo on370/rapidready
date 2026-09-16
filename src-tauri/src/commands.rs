@@ -869,6 +869,47 @@ pub async fn set_culling_state_batch(
     .map_err(|e| e.to_string())?
 }
 
+#[tauri::command]
+pub async fn set_gps_batch(
+    paths: Vec<String>,
+    latitude: Option<f64>,
+    longitude: Option<f64>,
+    altitude: Option<f64>,
+) -> Result<BatchCullingResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let total = paths.len();
+        let mut succeeded = 0;
+        let mut failed = 0;
+        let mut first_error = None;
+
+        for path_str in paths {
+            let p = PathBuf::from(&path_str);
+            match rapidready_core::culling::write_gps_sidecar(&p, latitude, longitude, altitude) {
+                Ok(_) => succeeded += 1,
+                Err(e) => {
+                    failed += 1;
+                    if first_error.is_none() {
+                        first_error = Some(format!("{}: {}", path_str, e));
+                    }
+                }
+            }
+        }
+
+        if failed > 0 && succeeded == 0 {
+            return Err(first_error.unwrap_or_else(|| "All file writes failed".into()));
+        }
+
+        Ok(BatchCullingResult {
+            total,
+            succeeded,
+            failed,
+            first_error,
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

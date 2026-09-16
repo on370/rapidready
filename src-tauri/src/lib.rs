@@ -40,8 +40,16 @@ pub fn run() {
             app.on_menu_event(move |app, event| {
                 if event.id() == "open_help" {
                     let _ = app.emit("toggle-help-modal", ());
-                } else if event.id() == "open_about" {
+                } else if event.id() == "open_about" || event.id() == "open_about_help" {
                     let _ = app.emit("toggle-about-modal", ());
+                } else if event.id() == "check_updates" || event.id() == "check_updates_help" {
+                    let _ = app.emit("trigger-check-updates", ());
+                } else if event.id() == "view_import" {
+                    let _ = app.emit("navigate-view", "import");
+                } else if event.id() == "view_library" {
+                    let _ = app.emit("navigate-view", "library");
+                } else if event.id() == "view_settings" {
+                    let _ = app.emit("navigate-view", "settings");
                 }
             });
             Ok(())
@@ -213,6 +221,7 @@ pub fn run() {
             commands::cancel_archive_scan,
             commands::set_culling_state,
             commands::set_culling_state_batch,
+            commands::set_gps_batch,
             commands::rotate_images,
             commands::get_culling_state,
             commands::start_watching_directory,

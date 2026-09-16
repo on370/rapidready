@@ -10,12 +10,21 @@ pub fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         None::<&str>,
     )?;
 
+    let check_updates_item = MenuItem::with_id(
+        app,
+        "check_updates",
+        "Check for Updates...",
+        true,
+        None::<&str>,
+    )?;
+
     let app_menu = Submenu::with_items(
         app,
         "RapidReady",
         true,
         &[
             &about_item,
+            &check_updates_item,
             &PredefinedMenuItem::separator(app)?,
             &PredefinedMenuItem::services(app, None)?,
             &PredefinedMenuItem::separator(app)?,
@@ -51,11 +60,40 @@ pub fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         ],
     )?;
 
+    let view_import = MenuItem::with_id(
+        app,
+        "view_import",
+        "Import",
+        true,
+        Some("CmdOrCtrl+1"),
+    )?;
+
+    let view_library = MenuItem::with_id(
+        app,
+        "view_library",
+        "Library",
+        true,
+        Some("CmdOrCtrl+2"),
+    )?;
+
+    let view_settings = MenuItem::with_id(
+        app,
+        "view_settings",
+        "Settings",
+        true,
+        Some("CmdOrCtrl+,"),
+    )?;
+
     let view_menu = Submenu::with_items(
         app,
         "View",
         true,
         &[
+            &view_import,
+            &view_library,
+            &PredefinedMenuItem::separator(app)?,
+            &view_settings,
+            &PredefinedMenuItem::separator(app)?,
             &PredefinedMenuItem::fullscreen(app, None)?,
         ],
     )?;
@@ -79,11 +117,33 @@ pub fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         Some("CmdOrCtrl+Shift+?"),
     )?;
 
+    let check_updates_help_item = MenuItem::with_id(
+        app,
+        "check_updates_help",
+        "Check for Updates...",
+        true,
+        None::<&str>,
+    )?;
+
+    let about_help_item = MenuItem::with_id(
+        app,
+        "open_about_help",
+        "About RapidReady",
+        true,
+        None::<&str>,
+    )?;
+
     let help_menu = Submenu::with_items(
         app,
         "Help",
         true,
-        &[&help_item, &PredefinedMenuItem::separator(app)?, &about_item],
+        &[
+            &help_item,
+            &PredefinedMenuItem::separator(app)?,
+            &check_updates_help_item,
+            &PredefinedMenuItem::separator(app)?,
+            &about_help_item,
+        ],
     )?;
 
     Menu::with_items(

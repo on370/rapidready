@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { useTranslation } from "react-i18next";
 import { AppShell } from "./components/layout/AppShell";
+import { ViewType } from "./components/layout/Sidebar";
 import { ImportView } from "./components/views/ImportView";
 import { LibraryView } from "./components/views/LibraryView";
 import { ToolsView } from "./components/views/ToolsView";
@@ -20,6 +22,7 @@ import { CullingState, useLibraryStore, ArchiveScanProgress, ArchiveChunkPayload
 import "./App.css";
 
 function App() {
+  const { t } = useTranslation('settings');
   const startupView = useSettingsStore(state => state.startupView);
   const { activeView, setActiveView } = useNavigationStore();
 
@@ -35,6 +38,61 @@ function App() {
     }, 3500);
     return () => clearTimeout(timer);
   }, []);
+
+  // Listen for menu trigger to check for updates
+  useEffect(() => {
+    const unlistenPromise = listen("trigger-check-updates", async () => {
+      const res = await useUpdateStore.getState().checkNow(true);
+      if (!res.hasUpdate) {
+        if (res.error) {
+          useToastStore.getState().showError(
+            t('updates.checkError', { error: res.error }),
+            t('updates.title')
+          );
+        } else {
+          useToastStore.getState().showSuccess(
+            t('updates.upToDate', { version: res.currentVersion }),
+            t('updates.title')
+          );
+        }
+      }
+    });
+
+    return () => {
+      unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, [t]);
+
+  // Listen for navigation view events from native menu
+  useEffect(() => {
+    const unlistenPromise = listen<ViewType>("navigate-view", (event) => {
+      setActiveView(event.payload);
+    });
+
+    return () => {
+      unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, [setActiveView]);
+
+  // Global view switching keyboard shortcuts (Cmd+1, Cmd+2, Cmd+,)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey) {
+        if (e.key === '1') {
+          e.preventDefault();
+          setActiveView('import');
+        } else if (e.key === '2') {
+          e.preventDefault();
+          setActiveView('library');
+        } else if (e.key === ',') {
+          e.preventDefault();
+          setActiveView('settings');
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [setActiveView]);
 
   // Real-time synchronization for RapidRAW / external sidecar changes
   useEffect(() => {

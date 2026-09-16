@@ -60,6 +60,8 @@ export function HelpModal() {
                 <ShortcutRow description={t('shortcuts.actions.loupe')} keys={['E', '|', 'Enter']} />
                 <ShortcutRow description={t('shortcuts.actions.grid')} keys={['G', '|', 'Esc']} />
                 <ShortcutRow description={t('shortcuts.actions.selectAll')} keys={['Cmd', 'A']} />
+                <ShortcutRow description={t('shortcuts.actions.import')} keys={['Cmd', '1']} />
+                <ShortcutRow description={t('shortcuts.actions.library')} keys={['Cmd', '2']} />
                 <ShortcutRow description={t('shortcuts.actions.fullscreen')} keys={['Cmd', 'F']} />
               </div>
             </div>

@@ -1,7 +1,7 @@
 {
   "name": "rapid-ready",
   "private": true,
-  "version": "0.3.6-beta",
+  "version": "0.3.7-beta-RC1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,6 +9,7 @@
     "bump-build": "node scripts/bump-build.js",
     "set-version": "node scripts/set-version.js",
     "preview": "vite preview",
+    "clean": "bash scripts/clean.sh",
     "tauri": "tauri"
   },
   "dependencies": {
