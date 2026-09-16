@@ -1,7 +1,7 @@
 {
   "name": "rapid-ready",
   "private": true,
-  "version": "0.3.7-beta-RC1",
+  "version": "0.3.7-beta",
   "type": "module",
   "scripts": {
     "dev": "vite",

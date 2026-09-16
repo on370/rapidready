@@ -52,7 +52,11 @@ if [ -d "$TARGET_DIR" ]; then
   PRE_SIZE="$(du -sh "$TARGET_DIR" 2>/dev/null | cut -f1)"
   echo "📦 Found Cargo target cache: ${PRE_SIZE} in ${TARGET_DIR}"
   echo "   Deleting ${TARGET_DIR}..."
-  rm -rf "$TARGET_DIR"
+  rm -rf "$TARGET_DIR" 2>/dev/null || true
+  if [ -d "$TARGET_DIR" ]; then
+    find "$TARGET_DIR" -delete 2>/dev/null || true
+    rmdir "$TARGET_DIR" 2>/dev/null || rm -rf "$TARGET_DIR" 2>/dev/null || true
+  fi
 fi
 
 # Clean frontend build artifacts

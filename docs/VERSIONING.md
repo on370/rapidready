@@ -8,7 +8,7 @@ This document defines the authoritative versioning guidelines, release identific
 
 The user-facing marketing version follows Semantic Versioning (`MAJOR.MINOR.PATCH[-PRERELEASE]`) and is **set manually** when preparing releases or reaching project milestones.
 
-* **Current Authoritative Version:** `0.3.7-beta-RC1`
+* **Current Authoritative Version:** `0.3.7-beta`
 
 When updating the marketing version, it must be updated in the following central files:
 1. `app/src/build-info.json` (`version` field)
