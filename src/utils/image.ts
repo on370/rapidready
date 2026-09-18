@@ -59,3 +59,14 @@ export function isRawFilename(filename: string | undefined | null): boolean {
   return ext ? RAW_EXTENSIONS.has(ext) : false;
 }
 
+export const VIDEO_EXTENSIONS = new Set([
+  'mp4', 'mov', 'm4v', 'avi', 'mkv', 'webm', 'mts', 'm2ts'
+]);
+
+export function isVideoFilename(filename: string | undefined | null): boolean {
+  if (!filename) return false;
+  const ext = filename.split('.').pop()?.toLowerCase();
+  return ext ? VIDEO_EXTENSIONS.has(ext) : false;
+}
+
+

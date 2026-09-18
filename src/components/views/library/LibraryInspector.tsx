@@ -2,13 +2,13 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import { 
   X, MousePointerClick, Star, Check, RotateCw, RotateCcw, Tag, CircleSlash,
   Info, Camera, MapPin, ExternalLink, ChevronDown, ChevronRight,
-  Pencil, Trash2, CheckCircle2, AlertTriangle
+  Pencil, Trash2, CheckCircle2, AlertTriangle, Play
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useLibraryStore, LibraryImage } from "../../../stores/libraryStore";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { getRrImageUrl, normalizePath } from "../../../utils/image";
+import { getRrImageUrl, normalizePath, isVideoFilename } from "../../../utils/image";
 import { COLOR_PALETTE } from "../../../constants/culling";
 import { useToastStore } from "../../../stores/toastStore";
 import { useSettingsStore } from "../../../stores/settingsStore";
@@ -527,8 +527,9 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
     }
   };
 
+  const isVideo = activeImage ? (activeImage.is_video ?? isVideoFilename(activeImage.name)) : false;
   const extension = activeImage?.name.split('.').pop()?.toUpperCase() || '';
-  const isRaw = activeImage?.is_raw ?? ['CR2', 'CR3', 'ARW', 'NEF', 'DNG', 'ORF', 'RAF', 'RW2', 'PEF', '3FR'].includes(extension);
+  const isRaw = !isVideo && (activeImage?.is_raw ?? ['CR2', 'CR3', 'ARW', 'NEF', 'DNG', 'ORF', 'RAF', 'RW2', 'PEF', '3FR'].includes(extension));
 
   return (
     <div className="w-full h-full flex-shrink-0 bg-app-panel flex flex-col min-h-0 overflow-hidden">
@@ -599,12 +600,32 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
                         </span>
                       )}
                     </div>
-                    <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/60 backdrop-blur-sm px-2 py-0.5 rounded text-[11px] font-mono text-white z-20">
-                      <span className={isRaw ? "text-accent font-semibold" : "text-txt-secondary"}>{extension}</span>
+                    <div className="absolute bottom-2 left-2 flex items-center gap-1.5 bg-black/70 backdrop-blur-sm px-2 py-0.5 rounded text-[11px] font-mono text-white z-20">
+                      {isVideo ? (
+                        <span className="text-accent font-semibold flex items-center gap-1">
+                          <Play className="w-2.5 h-2.5 fill-accent" />
+                          {extension}
+                        </span>
+                      ) : (
+                        <span className={isRaw ? "text-accent font-semibold" : "text-txt-secondary"}>{extension}</span>
+                      )}
                       <span className="text-white/40">·</span>
                       <span>{(activeImage.size / (1024 * 1024)).toFixed(1)} MB</span>
                     </div>
                   </div>
+
+                  {/* Video Media Container Badge */}
+                  {isVideo && (
+                    <div 
+                      className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-accent/10 border border-accent/30 text-xs shadow-sm"
+                    >
+                      <Play className="w-4 h-4 text-accent fill-accent flex-shrink-0" />
+                      <div>
+                        <span className="font-semibold text-accent text-[11px] block">{t('inspector.videoMedia', 'Videodatei (Container)')}</span>
+                        <span className="text-[10px] text-txt-secondary block leading-snug">{t('inspector.videoMediaDesc', 'Native Vorschau-Keyframe')}</span>
+                      </div>
+                    </div>
+                  )}
 
                   {/* RAW & Monochrome Sensor/Preview Status Notification */}
                   {isRaw && (

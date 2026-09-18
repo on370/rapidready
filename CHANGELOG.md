@@ -29,6 +29,17 @@ Major feature release introducing GEO Part 1 (universal geotagging & intelligent
   - Rust Backend Persistence (`culling.rs`, `metadata_resolver.rs`, `commands.rs`):
     - Non-destructive atomic sidecar writing under `"gps": { "latitude": ..., "longitude": ..., "altitude": ... }` preserving all ratings, color labels, tags, and orientation.
     - Asynchronous batch IPC command `set_gps_batch` with per-file success metrics.
+- **Destructive Operations Safety Hardening & Zero-Trust Backend (`commands.rs`, `LibraryLeftSidebar.tsx`, `LibraryCenter.tsx`):**
+  - **Zero-Trust Backend Containment:** Implemented `is_strictly_inside_root` and `is_system_critical_path` in Rust backend. Deletions of folders or files must reside strictly inside the active archive root. Directory traversal (`..`), partial prefix matching, and deleting the archive root itself are rejected. System-critical paths (`/`, `/Users`, `/System`, `C:\`, `C:\Windows`, etc.) are protected by a hard blocklist.
+  - **Backend Safety Override for Local Files:** Independent filesystem mount verification before any permanent deletion. If a deletion request specifies `to_trash: false` but targets local storage, a backend safety override forces `trash::delete()`. Permanent erasure is strictly restricted to verified network shares / NAS.
+  - **Unified Safe-Focus Destructive Modal:** Replaced native OS dialogs (`ask()`) with custom `DestructiveConfirmModal` for all folder and file deletion operations (local and NAS). The **Cancel** button is auto-focused by default, preventing accidental Enter key confirmations.
+  - **Robust Network Share / NAS Detection (`are_any_network_paths`):** Direct mount attribute inspection (AFP, SMB, NFS, CIFS on macOS/Linux; UNC and `DRIVE_REMOTE` on Windows) verifying both archive root and target paths to reliably trigger the permanent erasure warning alert.
+  - **Scan-in-Progress Protection:** Folder deletions are blocked while an archive scan is running (`scanning`, `connecting`, `paused`) to prevent race conditions with background directory walkers.
+  - **Partial Batch Failure Handling:** `delete_files` now returns a structured `DeleteFilesResult { deleted, failed }`, cleanly updating the library view for all deleted files while displaying toast warnings for any failed items without leaving ghost thumbnails.
+- **Native Video Thumbnail Extraction & Format Badges (Media Pipeline Phase 1):**
+  - Included video files (`.mp4`, `.mov`, `.m4v`, `.avi`) in archive scanning and library indexing.
+  - Hardware-accelerated native keyframe extraction via OS video frameworks (QuickLook / `AVAssetImageGenerator` on macOS, Windows Shell / Media Foundation on Windows).
+  - Clean format badges (`[MOV]`, `[MP4]`) in Grid, Filmstrip, and Inspector with video container metadata metrics.
 - **Folder Management & Tree Context Menu (`LibraryLeftSidebar.tsx` & `FolderContextMenu.tsx`):**
   - Native-feeling right-click context menu on folder tree nodes in the library sidebar:
     - **"Im Finder anzeigen"** (macOS) / **"Im Explorer anzeigen"** (Windows).

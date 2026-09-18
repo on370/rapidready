@@ -23,6 +23,7 @@ export interface LibraryImage {
   shutter: string | null;
   culling: CullingState;
   is_raw?: boolean;
+  is_video?: boolean;
   is_monochrome_sensor?: boolean;
   is_monochrome_preview?: boolean;
   latitude?: number | null;

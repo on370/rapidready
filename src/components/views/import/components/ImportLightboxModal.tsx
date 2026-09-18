@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect, useCallback, MouseEvent as ReactMouseEvent, WheelEvent } from "react";
-import { X, ChevronLeft, ChevronRight, ZoomIn, Minimize2, Info, Camera } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, ZoomIn, Minimize2, Info, Camera, Play } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { PairedImportItem } from "../ImportPreviewStep";
-import { getRrImageUrl, isRawFilename } from "../../../../utils/image";
+import { getRrImageUrl, isRawFilename, isVideoFilename } from "../../../../utils/image";
 
 interface ImportLightboxModalProps {
   isOpen: boolean;
@@ -321,6 +321,16 @@ export function ImportLightboxModal({
             {pair.jpgFile && (
               <span className="text-xs px-2 py-0.5 rounded bg-accent/20 text-accent font-mono font-medium">
                 JPG
+              </span>
+            )}
+            {pair.otherFile && (
+              <span className={`text-xs px-2 py-0.5 rounded font-mono font-medium flex items-center gap-1 ${
+                isVideoFilename(pair.otherFile.name)
+                  ? 'bg-accent/20 text-accent border border-accent/40'
+                  : 'bg-white/10 text-white'
+              }`}>
+                {isVideoFilename(pair.otherFile.name) && <Play className="w-2.5 h-2.5 fill-accent" />}
+                {pair.otherFile.name.split(".").pop()?.toUpperCase() || 'FILE'}
               </span>
             )}
 

@@ -18,6 +18,8 @@ pub struct ArchiveFile {
     pub shutter: Option<String>,
     pub culling: CullingState,
     pub is_raw: bool,
+    #[serde(default)]
+    pub is_video: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -155,6 +157,7 @@ where
     let supported_exts = [
         "jpg", "jpeg", "png", "tif", "tiff", "heic", "heif", "hif", "webp", "avif", // Raster
         "cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2", "pef", "3fr", "x3f", "nrw", "rwl", "fff", "iiq", "crw", "erf", // RAW
+        "mp4", "mov", "m4v", "avi", // Video
     ];
 
     let mut current_chunk = Vec::with_capacity(100);
@@ -242,6 +245,7 @@ where
                     let name = entry.file_name().to_string_lossy().into_owned();
                     let date = get_fast_creation_date(path, metadata.as_ref());
                     let is_raw = crate::metadata_resolver::is_raw_path(path);
+                    let is_video = crate::metadata_resolver::is_video_path(path);
                     let culling = read_sidecar(path);
 
                     let item = ArchiveFile {
@@ -256,6 +260,7 @@ where
                         shutter: None,
                         culling,
                         is_raw,
+                        is_video,
                     };
 
                     current_chunk.push(item.clone());
@@ -419,6 +424,33 @@ mod tests {
         assert!(dirs.iter().any(|d| d.ends_with("sub1")), "Must find sub1");
         assert!(dirs.iter().any(|d| d.ends_with("sub1/empty_child")), "Must find empty_child");
         assert!(dirs.iter().any(|d| d.ends_with("sub2")), "Must find sub2");
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_scan_archive_discovers_video_files() {
+        let temp_dir = std::env::temp_dir().join(format!("rapidready_test_videos_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        std::fs::write(temp_dir.join("clip1.mp4"), b"fake mp4").unwrap();
+        std::fs::write(temp_dir.join("clip2.mov"), b"fake mov").unwrap();
+        std::fs::write(temp_dir.join("photo.jpg"), b"fake jpg").unwrap();
+
+        let res = scan_archive_directory(&temp_dir).expect("Scan must succeed");
+        assert_eq!(res.files.len(), 3);
+        
+        let mp4 = res.files.iter().find(|f| f.name == "clip1.mp4").expect("Must find clip1.mp4");
+        assert!(mp4.is_video);
+        assert!(!mp4.is_raw);
+
+        let mov = res.files.iter().find(|f| f.name == "clip2.mov").expect("Must find clip2.mov");
+        assert!(mov.is_video);
+        assert!(!mov.is_raw);
+
+        let jpg = res.files.iter().find(|f| f.name == "photo.jpg").expect("Must find photo.jpg");
+        assert!(!jpg.is_video);
+        assert!(!jpg.is_raw);
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }

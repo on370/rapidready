@@ -455,35 +455,205 @@ pub async fn set_culling_state(
     rapidready_core::culling::write_sidecar(&p, &state).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
-pub async fn delete_files(paths: Vec<String>, to_trash: bool) -> Result<(), String> {
-    for p in paths {
-        let path = PathBuf::from(&p);
-        if path.exists() {
-            if to_trash {
-                // MOVE TO OS TRASH!
-                trash::delete(&path).map_err(|e| format!("Failed to move to trash: {}", e))?;
-            } else {
-                std::fs::remove_file(&path).map_err(|e| e.to_string())?;
-            }
-            
-            // Also delete sidecar (move to trash as well to be safe)
-            let sidecar = rapidready_core::culling::get_sidecar_path(&path);
-            if sidecar.exists() {
-                if to_trash {
-                    let _ = trash::delete(&sidecar);
-                } else {
-                    let _ = std::fs::remove_file(&sidecar);
-                }
-            }
+pub fn normalize_path_str(p: &Path) -> String {
+    let s = p.to_string_lossy().replace('\\', "/");
+    let trimmed = s.trim_end_matches('/');
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    {
+        trimmed.to_lowercase()
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        trimmed.to_string()
+    }
+}
+
+pub fn is_system_critical_path(path: &Path) -> bool {
+    let norm = normalize_path_str(path);
+    let trimmed = norm.trim_end_matches('/');
+
+    if trimmed.is_empty() {
+        return true;
+    }
+
+    let forbidden = [
+        "",
+        "/",
+        "/bin",
+        "/sbin",
+        "/usr",
+        "/usr/bin",
+        "/usr/sbin",
+        "/usr/local",
+        "/etc",
+        "/var",
+        "/var/root",
+        "/tmp",
+        "/home",
+        "/root",
+        "/users",
+        "/system",
+        "/applications",
+        "/library",
+        "/volumes",
+        "/private",
+        "/dev",
+        "/proc",
+        "/sys",
+        "c:",
+        "c:/windows",
+        "c:/windows/system32",
+        "c:/users",
+        "c:/program files",
+        "c:/program files (x86)",
+        "c:/programdata",
+        "d:",
+        "e:",
+        "f:",
+        "z:",
+    ];
+
+    if forbidden.contains(&trimmed) {
+        return true;
+    }
+
+    // Windows root drive check (e.g. "c:" or "c:/")
+    if (trimmed.len() == 2 && trimmed.ends_with(':')) || (trimmed.len() == 3 && trimmed.chars().nth(1) == Some(':') && trimmed.ends_with('/')) {
+        return true;
+    }
+
+    // Prohibit paths that resolve to the root directory without parent
+    if path.parent().map_or(true, |p| p.as_os_str().is_empty()) && !path.is_relative() {
+        return true;
+    }
+
+    false
+}
+
+pub fn is_strictly_inside_root(path: &Path, root: &Path) -> bool {
+    // Prohibit relative path traversal tricks
+    if path.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+        return false;
+    }
+
+    let norm_path = normalize_path_str(path);
+    let norm_root = normalize_path_str(root);
+
+    if norm_root.is_empty() || norm_path.is_empty() {
+        return false;
+    }
+
+    // 1. Target cannot be the root itself!
+    if norm_path == norm_root {
+        return false;
+    }
+
+    // 2. Lexical prefix check: norm_path must start with norm_root + "/"
+    let prefix = format!("{}/", norm_root);
+    if !norm_path.starts_with(&prefix) {
+        return false;
+    }
+
+    // 3. Symlink / canonicalization check if both paths exist
+    if let (Ok(c_path), Ok(c_root)) = (std::fs::canonicalize(path), std::fs::canonicalize(root)) {
+        let norm_c_path = normalize_path_str(&c_path);
+        let norm_c_root = normalize_path_str(&c_root);
+        if norm_c_path == norm_c_root {
+            return false;
+        }
+        let c_prefix = format!("{}/", norm_c_root);
+        if !norm_c_path.starts_with(&c_prefix) {
+            return false;
         }
     }
-    Ok(())
+
+    true
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeleteFilesResult {
+    pub deleted: Vec<String>,
+    pub failed: Vec<(String, String)>,
 }
 
 #[tauri::command]
-pub async fn delete_folder(path: String, to_trash: bool) -> Result<(), String> {
+pub async fn delete_files(
+    paths: Vec<String>,
+    to_trash: bool,
+    archive_root: Option<String>,
+) -> Result<DeleteFilesResult, String> {
+    let mut deleted = Vec::new();
+    let mut failed = Vec::new();
+    let root_path_opt = archive_root.as_ref().map(PathBuf::from);
+
+    for p in paths {
+        let path = PathBuf::from(&p);
+        if !path.exists() {
+            continue;
+        }
+
+        // 1. delete_files must NEVER delete directories!
+        if path.is_dir() {
+            failed.push((p.clone(), "Target is a directory, not a file".to_string()));
+            continue;
+        }
+
+        // 2. Block system-critical paths
+        if is_system_critical_path(&path) {
+            failed.push((p.clone(), "Refusing to delete: Target is a system-critical path".to_string()));
+            continue;
+        }
+
+        // 3. If archive_root is provided, target must be strictly inside it
+        if let Some(ref root) = root_path_opt {
+            if !is_strictly_inside_root(&path, root) {
+                failed.push((p.clone(), "Refusing to delete: Target is not inside archive root".to_string()));
+                continue;
+            }
+        }
+
+        // 4. Independent NAS verification & safety override
+        let is_nas = is_network_or_remote_path(&path);
+        let should_use_trash = to_trash || !is_nas;
+
+        let delete_res = if should_use_trash {
+            trash::delete(&path).map_err(|e| format!("Failed to move to trash: {}", e))
+        } else {
+            std::fs::remove_file(&path).map_err(|e| format!("Failed to permanently delete file: {}", e))
+        };
+
+        match delete_res {
+            Ok(_) => {
+                deleted.push(p);
+
+                // Also delete sidecar file if present
+                let sidecar = rapidready_core::culling::get_sidecar_path(&path);
+                if sidecar.exists() {
+                    if should_use_trash {
+                        let _ = trash::delete(&sidecar);
+                    } else {
+                        let _ = std::fs::remove_file(&sidecar);
+                    }
+                }
+            }
+            Err(e) => {
+                failed.push((p, e));
+            }
+        }
+    }
+
+    Ok(DeleteFilesResult { deleted, failed })
+}
+
+#[tauri::command]
+pub async fn delete_folder(
+    path: String,
+    to_trash: bool,
+    archive_root: String,
+) -> Result<(), String> {
     let folder_path = PathBuf::from(&path);
+    let root_path = PathBuf::from(&archive_root);
+
     if !folder_path.exists() {
         return Err("Folder does not exist".to_string());
     }
@@ -491,27 +661,71 @@ pub async fn delete_folder(path: String, to_trash: bool) -> Result<(), String> {
         return Err("Path is not a directory".to_string());
     }
 
+    // 1. Must be strictly inside archive root (never archive root itself or outside)
+    if !is_strictly_inside_root(&folder_path, &root_path) {
+        return Err("Refusing to delete: Path is not inside the active archive root".to_string());
+    }
+
+    // 2. Blocklist of system critical paths
+    if is_system_critical_path(&folder_path) {
+        return Err("Refusing to delete: Target is a system-critical path".to_string());
+    }
+
+    // 3. Independent NAS verification & safety override
+    let is_nas = is_network_or_remote_path(&folder_path);
+
     if to_trash {
         trash::delete(&folder_path).map_err(|e| format!("Failed to move folder to trash: {}", e))?;
     } else {
-        std::fs::remove_dir_all(&folder_path).map_err(|e| format!("Failed to permanently delete folder: {}", e))?;
+        // SAFETY OVERRIDE: If to_trash is false but path is NOT a network share,
+        // force move to trash instead of permanent removal!
+        if !is_nas {
+            trash::delete(&folder_path).map_err(|e| format!("Safety override: Failed to move local folder to trash: {}", e))?;
+        } else {
+            std::fs::remove_dir_all(&folder_path).map_err(|e| format!("Failed to permanently delete folder: {}", e))?;
+        }
     }
     Ok(())
 }
 
 #[tauri::command]
-pub async fn delete_folders(paths: Vec<String>, to_trash: bool) -> Result<(), String> {
+pub async fn delete_folders(
+    paths: Vec<String>,
+    to_trash: bool,
+    archive_root: String,
+) -> Result<Vec<String>, String> {
+    let root_path = PathBuf::from(&archive_root);
+    let mut deleted = Vec::new();
+
     for path_str in paths {
         let folder_path = PathBuf::from(&path_str);
-        if folder_path.exists() && folder_path.is_dir() {
-            if to_trash {
-                trash::delete(&folder_path).map_err(|e| format!("Failed to move folder to trash: {}", e))?;
+        if !folder_path.exists() || !folder_path.is_dir() {
+            continue;
+        }
+
+        // 1. Must be strictly inside archive root
+        if !is_strictly_inside_root(&folder_path, &root_path) {
+            return Err(format!("Refusing to delete: '{}' is not inside the active archive root", path_str));
+        }
+
+        // 2. Blocklist of system critical paths
+        if is_system_critical_path(&folder_path) {
+            return Err(format!("Refusing to delete: '{}' is a system-critical path", path_str));
+        }
+
+        let is_nas = is_network_or_remote_path(&folder_path);
+        if to_trash {
+            trash::delete(&folder_path).map_err(|e| format!("Failed to move folder to trash: {}", e))?;
+        } else {
+            if !is_nas {
+                trash::delete(&folder_path).map_err(|e| format!("Safety override: Failed to move local folder to trash: {}", e))?;
             } else {
                 std::fs::remove_dir_all(&folder_path).map_err(|e| format!("Failed to permanently delete folder: {}", e))?;
             }
         }
+        deleted.push(path_str);
     }
-    Ok(())
+    Ok(deleted)
 }
 
 #[tauri::command]
@@ -918,6 +1132,121 @@ mod tests {
     fn test_is_network_or_remote_path_local() {
         let current = std::env::current_dir().unwrap();
         assert!(!is_network_or_remote_path(&current));
+    }
+
+    #[test]
+    fn test_is_network_or_remote_path_real() {
+        if Path::new("/Volumes/Media").exists() {
+            assert!(is_network_or_remote_path(Path::new("/Volumes/Media")));
+            assert!(is_network_path("/Volumes/Media".to_string()));
+            assert!(is_network_path("/Volumes/Media/".to_string()));
+            assert!(are_any_network_paths(vec!["/Volumes/Media".to_string()]));
+            assert!(are_any_network_paths(vec!["/Volumes/Media/".to_string()]));
+            assert!(are_any_network_paths(vec!["/some/local/path".to_string(), "/Volumes/Media".to_string()]));
+        }
+    }
+
+    #[test]
+    fn test_is_system_critical_path() {
+        assert!(is_system_critical_path(Path::new("/")));
+        assert!(is_system_critical_path(Path::new("/Users")));
+        assert!(is_system_critical_path(Path::new("/System")));
+        assert!(is_system_critical_path(Path::new("/Applications")));
+        assert!(is_system_critical_path(Path::new("/bin")));
+        assert!(is_system_critical_path(Path::new("/usr/bin")));
+        assert!(is_system_critical_path(Path::new("C:\\")));
+        assert!(is_system_critical_path(Path::new("C:\\Windows")));
+        assert!(is_system_critical_path(Path::new("c:/windows/system32")));
+        assert!(is_system_critical_path(Path::new("D:")));
+        assert!(is_system_critical_path(Path::new("")));
+
+        // Valid user photo directories should NOT be system critical
+        assert!(!is_system_critical_path(Path::new("/Volumes/Storage/Photos/2024/09_Iceland")));
+        assert!(!is_system_critical_path(Path::new("/Users/john/Pictures/Archive/2025")));
+        assert!(!is_system_critical_path(Path::new("D:\\Photos\\ClientShoots\\2025-01-10")));
+    }
+
+    #[test]
+    fn test_is_strictly_inside_root() {
+        let root = Path::new("/Volumes/Archive/Photos");
+        
+        // Valid children
+        assert!(is_strictly_inside_root(Path::new("/Volumes/Archive/Photos/2024"), root));
+        assert!(is_strictly_inside_root(Path::new("/Volumes/Archive/Photos/2024/01_Trip"), root));
+        assert!(is_strictly_inside_root(Path::new("/Volumes/Archive/Photos/image.cr3"), root));
+
+        // Root itself must NOT be inside root (cannot delete root!)
+        assert!(!is_strictly_inside_root(root, root));
+
+        // Outside paths
+        assert!(!is_strictly_inside_root(Path::new("/Volumes/Archive/OtherFolder"), root));
+        assert!(!is_strictly_inside_root(Path::new("/Volumes/Archive"), root));
+        assert!(!is_strictly_inside_root(Path::new("/Users/john/Pictures"), root));
+
+        // Partial prefix false-positive prevention (Photos_Backup is not Photos!)
+        assert!(!is_strictly_inside_root(Path::new("/Volumes/Archive/Photos_Backup/2024"), root));
+
+        // Relative path traversal tricks
+        assert!(!is_strictly_inside_root(Path::new("/Volumes/Archive/Photos/../etc/passwd"), root));
+    }
+
+    #[test]
+    fn test_delete_folder_guardrails() {
+        tauri::async_runtime::block_on(async {
+            let temp_dir = std::env::temp_dir().join(format!("rapidready_safety_test_{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&temp_dir);
+            std::fs::create_dir_all(temp_dir.join("subfolder")).unwrap();
+
+            let root_str = temp_dir.to_string_lossy().to_string();
+            let sub_str = temp_dir.join("subfolder").to_string_lossy().to_string();
+
+            // 1. Refuse deleting root itself
+            let err_root = delete_folder(root_str.clone(), true, root_str.clone()).await;
+            assert!(err_root.is_err());
+            assert!(err_root.unwrap_err().contains("not inside the active archive root"));
+
+            // 2. Refuse deleting outside root
+            let outside = std::env::temp_dir().to_string_lossy().to_string();
+            let err_outside = delete_folder(outside, true, root_str.clone()).await;
+            assert!(err_outside.is_err());
+
+            // 3. Deleting valid subfolder with to_trash: false on local storage triggers safety override without error
+            let ok_sub = delete_folder(sub_str.clone(), false, root_str.clone()).await;
+            assert!(ok_sub.is_ok());
+            assert!(!Path::new(&sub_str).exists());
+
+            let _ = std::fs::remove_dir_all(&temp_dir);
+        });
+    }
+
+    #[test]
+    fn test_delete_files_guardrails() {
+        tauri::async_runtime::block_on(async {
+            let temp_dir = std::env::temp_dir().join(format!("rapidready_files_safety_test_{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&temp_dir);
+            std::fs::create_dir_all(temp_dir.join("subdir")).unwrap();
+            std::fs::write(temp_dir.join("photo1.jpg"), b"test").unwrap();
+            std::fs::write(temp_dir.join("photo1.jpg.rrdata"), b"test sidecar").unwrap();
+
+            let root_str = temp_dir.to_string_lossy().to_string();
+            let photo_str = temp_dir.join("photo1.jpg").to_string_lossy().to_string();
+            let subdir_str = temp_dir.join("subdir").to_string_lossy().to_string();
+
+            // 1. delete_files must reject directories
+            let res_dir = delete_files(vec![subdir_str], false, Some(root_str.clone())).await.unwrap();
+            assert_eq!(res_dir.deleted.len(), 0);
+            assert_eq!(res_dir.failed.len(), 1);
+            assert!(res_dir.failed[0].1.contains("directory"));
+
+            // 2. delete_files on local path with to_trash: false safely deletes file and sidecar via safety override
+            let res_photo = delete_files(vec![photo_str.clone()], false, Some(root_str.clone())).await.unwrap();
+            assert_eq!(res_photo.deleted.len(), 1);
+            assert_eq!(res_photo.failed.len(), 0);
+            assert!(!Path::new(&photo_str).exists());
+            assert!(!temp_dir.join("photo1.jpg.rrdata").exists());
+
+            let _ = std::fs::remove_dir_all(&temp_dir);
+        });
     }
 }
 

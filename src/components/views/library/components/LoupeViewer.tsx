@@ -6,7 +6,7 @@ import { LibraryImage, useLibraryStore } from '../../../../stores/libraryStore';
 import { useLibraryUIStore } from '../../../../stores/libraryUIStore';
 import { ZoomableImage } from '../ZoomableImage';
 import { FilmstripBar } from './FilmstripBar';
-import { getRrImageUrl, isRawFilename } from '../../../../utils/image';
+import { getRrImageUrl, isRawFilename, isVideoFilename } from '../../../../utils/image';
 
 export interface LoupeViewerProps {
   activeImage: LibraryImage | undefined;
@@ -89,7 +89,8 @@ export const LoupeViewer = React.memo(function LoupeViewer({
     }
   }, [activeImage?.path]);
 
-  const isRaw = activeImage ? (activeImage.is_raw ?? isRawFilename(activeImage.name)) : false;
+  const isVideo = activeImage ? (activeImage.is_video ?? isVideoFilename(activeImage.name)) : false;
+  const isRaw = activeImage && !isVideo ? (activeImage.is_raw ?? isRawFilename(activeImage.name)) : false;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -111,6 +112,14 @@ export const LoupeViewer = React.memo(function LoupeViewer({
                 onContextMenu(e, activeImage.path, activeImageIndex);
               }}
             />
+
+            {/* Video Poster Frame Indicator */}
+            {isVideo && (
+              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 pointer-events-none flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/80 backdrop-blur-md border border-white/20 text-white shadow-2xl">
+                <Film className="w-3.5 h-3.5 text-accent" />
+                <span className="text-xs font-semibold tracking-wide text-white/95">Video · Poster Frame</span>
+              </div>
+            )}
             
             {/* Preload Previous and Next preview & full-res images into RAM when navigation pauses */}
             {debouncedActiveIndex === activeImageIndex && (

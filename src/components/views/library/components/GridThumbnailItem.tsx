@@ -1,8 +1,8 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Check, Star } from 'lucide-react';
+import { Check, Star, Play } from 'lucide-react';
 import { LibraryImage } from '../../../../stores/libraryStore';
 import { useLibraryUIStore } from '../../../../stores/libraryUIStore';
-import { getRrImageUrl, isRawFilename } from '../../../../utils/image';
+import { getRrImageUrl, isRawFilename, isVideoFilename } from '../../../../utils/image';
 import { getColorConfig } from '../../../../constants/culling';
 import { loadedThumbnailCache } from '../utils/thumbnailCache';
 
@@ -25,7 +25,8 @@ export const GridThumbnailItem = React.memo(function GridThumbnailItem({
   onDoubleClick,
   onContextMenu,
 }: GridThumbnailItemProps) {
-  const isRaw = img.is_raw ?? isRawFilename(img.name);
+  const isVideo = img.is_video ?? isVideoFilename(img.name);
+  const isRaw = !isVideo && (img.is_raw ?? isRawFilename(img.name));
   const gridThumbnailSize = useLibraryUIStore((s) => s.gridThumbnailSize);
   const scale = gridThumbnailSize <= 130 ? 0 : gridThumbnailSize > 220 ? 2 : 1;
   const cacheKey = `${img.path}:${img.culling?.orientation || 1}:${scale}`;
@@ -88,9 +89,14 @@ export const GridThumbnailItem = React.memo(function GridThumbnailItem({
       >
         <div className="w-6 h-6 rounded-md bg-white/[0.03]" />
       </div>
-      {/* Format Badge: RAW vs JPG */}
+      {/* Format Badge: Video vs RAW vs JPG */}
       <div className="absolute top-1.5 left-1.5 z-20 pointer-events-none">
-        {isRaw ? (
+        {isVideo ? (
+          <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold tracking-wide bg-black/75 text-accent border border-accent/40 shadow-sm backdrop-blur-xs flex items-center gap-1">
+            <Play className="w-2.5 h-2.5 fill-accent text-accent" />
+            {img.name.split('.').pop()?.toUpperCase() || 'VID'}
+          </span>
+        ) : isRaw ? (
           <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold tracking-wide bg-black/60 text-white/90 border border-white/15 shadow-sm backdrop-blur-xs">
             RAW
           </span>

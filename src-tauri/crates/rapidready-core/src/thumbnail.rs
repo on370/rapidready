@@ -712,5 +712,38 @@ mod tests {
                 meta.camera, meta.lens, meta.iso, meta.shutter, meta.aperture, meta.latitude, meta.longitude);
         }
     }
+
+    #[test]
+    fn test_video_thumbnail() {
+        let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let workspace_root = manifest_dir.parent().unwrap().parent().unwrap().parent().unwrap().parent().unwrap();
+        let video_path = workspace_root.join("testdata/dest/2025/2025-06-24/DJI_20250624215644_0019_D.MP4");
+        if video_path.exists() {
+            // Test standard grid thumbnail (scale 1)
+            let thumb1 = get_preview_jpeg(&video_path, 1).expect("Video thumbnail at scale 1 must succeed");
+            let img1 = image::load_from_memory(&thumb1).expect("Decoded scale 1 JPEG");
+            assert!(img1.width() > 32 && img1.height() > 32, "Thumbnail must be valid dimensions, got {}x{}", img1.width(), img1.height());
+            
+            // Verify not a black blank frame
+            let rgb = img1.to_rgb8();
+            let mut sum: u64 = 0;
+            for p in rgb.pixels() {
+                sum += (p[0] as u64 + p[1] as u64 + p[2] as u64) / 3;
+            }
+            let avg_lum = sum / (rgb.width() as u64 * rgb.height() as u64);
+            assert!(avg_lum > 0, "Video thumbnail should not be completely black");
+
+            // Test small scale 0 thumbnail
+            let thumb0 = get_preview_jpeg(&video_path, 0).expect("Video thumbnail at scale 0 must succeed");
+            let img0 = image::load_from_memory(&thumb0).expect("Decoded scale 0 JPEG");
+            assert!(img0.width() > 32 && img0.height() > 32);
+
+            // Test full-res poster frame preview (scale 10 / max)
+            let max_thumb = get_max_preview_jpeg(&video_path).expect("Video max preview must succeed");
+            let img_max = image::load_from_memory(&max_thumb).expect("Decoded max preview JPEG");
+            assert!(img_max.width() >= 1200, "Max preview should be high resolution poster frame, got {}x{}", img_max.width(), img_max.height());
+        }
+    }
 }
+
 

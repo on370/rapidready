@@ -222,12 +222,32 @@
 ---
 
 ### Milestone: Media Compatibility & Video Pipeline
-- [ ] **Complete Native Video Pipeline (Ingestion, Thumbnails, Playback):**
-  - Ingestion and library recognition of modern camera video formats: `.mp4`, `.mov`, `.mts`, `.m2ts` (AVCHD), `.mkv`, `.webm`, `.crm` (Canon Cinema RAW), `.nev` (Nikon N-RAW).
-  - Native MP4/QuickTime `moov.mvhd` atom parsing in `date_resolver.rs` for accurate recording timestamp and duration.
-  - Grid & filmstrip poster thumbnails with video badge and formatted runtime (`[ ▶ 02:45 ]`).
-  - Streaming custom protocol handler supporting HTTP 206 Partial Content (range requests) enabling instant scrubbing through 10–50 GB 4K/8K video files without full-file buffering.
-  - Embedded video player in `LoupeViewer.tsx` with standard shortcuts (`Space` toggle, `J`/`K`/`L` scrubbing).
+- [x] **Phase 1: Native High-Performance Video Thumbnail Extraction & UI Media Badge (Low-Hanging Fruit):**
+  - **Context & Goal:**
+    RapidReady already indexes and imports video files (`.mp4`, `.mov`, `.m4v`, `.avi`) from camera memory cards. However, in the Library view, video files were omitted from the archive scanner, and when opened, lacked visual distinction and lightweight video thumbnail caching. Phase 1 provides instant visual recognition and snappy, native OS thumbnail generation without bundling multi-hundred-megabyte FFmpeg binaries.
+  - **Technical Architecture & Capabilities:**
+    - **Scanner & Whitelist Alignment:** Synchronize `archive.rs` supported extensions with `scanner.rs` to include `mp4`, `mov`, `m4v`, `avi`.
+    - **Native OS Hardware Decoding:**
+      - macOS: Leverage native QuickLook / `AVAssetImageGenerator` via OS video frameworks to grab representative poster frames without loading entire video streams.
+      - Windows: Delegate to Windows Shell Thumbnail Cache / Media Foundation (`IShellItemImageFactory`).
+      - Avoid black opening frames: QuickLook and OS thumbnail engines automatically seek to optimal keyframes (~0.5s–1.0s into the stream).
+    - **Safe Protocol Streaming (`rr-image://`):**
+      - Direct full-res requests for video files to `get_max_preview_jpeg` (serving a crisp 1080p/4K poster JPEG) rather than attempting raw multi-gigabyte file reads into RAM.
+    - **UI Badging & Visual Hierarchy:**
+      - Distinctive video badge (e.g. `▶ MP4` / `▶ MOV`) with video-specific styling on Grid and Filmstrip thumbnail tiles.
+      - Play icon indicator on thumbnail tiles in Grid and Filmstrip.
+      - Inspector and Loupe view compatibility displaying poster frame and file metrics cleanly.
+
+- [ ] **Phase 2: Video Container Metadata & Duration Extraction:**
+  - Fast native header parsing (MP4/QuickTime `moov.mvhd` atom, AVI header) in `date_resolver.rs` and `metadata_resolver.rs`.
+  - Extract precise creation timestamps, video duration (formatted as `MM:SS` or `HH:MM:SS`), resolution, codec, and framerate without external dependencies.
+  - Display runtime badge overlay on Grid and Filmstrip tiles (`[ ▶ 02:45 ]`).
+
+- [ ] **Phase 3: Video Streaming Protocol (HTTP 206 Partial Content) & In-App Playback:**
+  - Upgrade custom Tauri streaming protocol handler (`rr-video://` or `rr-image://`) with HTTP 206 Partial Content and byte-range request support (`Range: bytes=start-end`).
+  - Enables zero-lag instant scrubbing across 10–50 GB 4K/8K camera video files (Sony XAVC S, Canon Cinema RAW Lite, Apple ProRes) without memory exhaustion.
+  - Embedded HTML5 `<video>` player in `LoupeViewer.tsx` with standard shortcuts (`Space` toggle playback, `J`/`K`/`L` reverse/pause/forward scrubbing, `Left`/`Right` frame stepping).
+
 
 - [ ] **Extended Vintage & Exotic RAW Formats:**
   - Leica (`.rwl`), Hasselblad Studio (`.fff`), Phase One / Leaf / Mamiya (`.iiq`, `.mos`), Canon Legacy (`.crw`), Sony/Minolta (`.sr2`, `.srf`, `.mrw`), Olympus (`.ori`), Epson (`.erf`).
@@ -247,6 +267,20 @@
 ---
 
 ### Milestone: Library & Inspector UI Ergonomics
+- [ ] **Switchable Masonry Grid Layout (Alternative to Fixed-Ratio Grid):**
+  - **Context & Goal:**
+    Currently, the Library Grid (`LibraryGrid.tsx`) displays photos in a uniform square tile matrix. While this provides a structured, predictable layout for rapid culling, photographers shooting mixed landscape (3:2, 16:9), portrait (2:3, 4:5), and panorama compositions experience heavy letterboxing/pillarboxing or cropped thumbnail previews. A switchable **Masonry Grid** (dynamically flowing columns or justified aspect-ratio rows, similar to Apple Photos, Lightroom Web, or Unsplash) displays every photo in its natural proportions with zero wasted space.
+  - **Requirements & Technical Architecture:**
+    - **Interactive Toggle Control:**
+      - View mode toggle in the library toolbar / footer controls (e.g. icon switcher next to the thumbnail size slider: `Uniform Square Grid` vs. `Masonry Flow Grid`).
+      - Keyboard shortcut (e.g. `Shift+G`) to quickly toggle between uniform and masonry layouts without taking hands off the keyboard.
+      - State persisted in `libraryUIStore` / `localStorage` (`gridMode: 'uniform' | 'masonry'`) to restore user preference across application restarts.
+    - **High-Performance Virtualized Layout:**
+      - Maintain smooth 60 FPS scrolling across large archives (10,000–50,000+ photos) using column-based virtualization or justified row bin-packing.
+      - Calculate item dimensions dynamically from cached EXIF/metadata dimensions (`width` / `height` and orientation) without loading full image bitmaps into memory.
+    - **Culling & Selection Parity:**
+      - 100% feature parity in Masonry mode: range selection (`Shift+Click`), individual toggling (`Cmd/Ctrl+Click`), rating/color/flag badges, drag selection, and context menus.
+
 - [x] **Collapsible Inspector Cards & Sections:**
   - **Context & Goal:**
     As the Inspector panel (`LibraryInspector.tsx`) grows with rich metadata and tooling (Culling, Rating & Colors, Tag suggestions, Technical EXIF, and GPS / Location), vertical space on laptop screens can become tight.

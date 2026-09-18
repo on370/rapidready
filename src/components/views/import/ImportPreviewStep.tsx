@@ -1,9 +1,9 @@
-import { GitBranch, Folder, ChevronDown, MousePointerClick, Camera, CheckCircle2, Filter, X, Info, Maximize2, ArrowLeft, AlertTriangle, HardDrive } from "lucide-react";
+import { GitBranch, Folder, ChevronDown, MousePointerClick, Camera, CheckCircle2, Filter, X, Info, Maximize2, ArrowLeft, AlertTriangle, HardDrive, Play } from "lucide-react";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { useImportStore, ScannedFile } from '../../../stores/importStore';
-import { getRrImageUrl } from '../../../utils/image';
+import { getRrImageUrl, isVideoFilename } from '../../../utils/image';
 import { DestinationInfoBar } from './components/DestinationInfoBar';
 import { ImportLightboxModal } from './components/ImportLightboxModal';
 
@@ -427,9 +427,16 @@ export function ImportPreviewStep({ onBack }: ImportPreviewStepProps = {}) {
                           </button>
                         )}
                         {pair.otherFile && (
-                          <span className="text-[9px] px-1.5 py-0.5 rounded font-mono font-bold tracking-tight bg-app-deepest text-txt-tertiary border border-app-border">
-                            {pair.otherFile.name.split('.').pop()?.toUpperCase() || '?'}
-                          </span>
+                          isVideoFilename(pair.otherFile.name) ? (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded font-mono font-bold tracking-tight bg-accent/20 text-accent border border-accent/40 flex items-center gap-1">
+                              <Play className="w-2 h-2 fill-accent" />
+                              {pair.otherFile.name.split('.').pop()?.toUpperCase() || 'VID'}
+                            </span>
+                          ) : (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded font-mono font-bold tracking-tight bg-app-deepest text-txt-tertiary border border-app-border">
+                              {pair.otherFile.name.split('.').pop()?.toUpperCase() || '?'}
+                            </span>
+                          )
                         )}
                       </div>
 

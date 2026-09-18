@@ -14,6 +14,8 @@ pub struct ImageMetadata {
     pub shutter: Option<String>,
     pub focal_length: Option<String>,
     pub is_raw: bool,
+    #[serde(default)]
+    pub is_video: bool,
     pub is_monochrome_sensor: bool,
     pub is_monochrome_preview: bool,
     #[serde(default)]
@@ -22,6 +24,14 @@ pub struct ImageMetadata {
     pub longitude: Option<f64>,
     #[serde(default)]
     pub altitude: Option<f64>,
+}
+
+pub fn is_video_path(path: &Path) -> bool {
+    let video_exts = ["mp4", "mov", "m4v", "avi"];
+    path.extension()
+        .and_then(|s| s.to_str())
+        .map(|ext| video_exts.contains(&ext.to_lowercase().as_str()))
+        .unwrap_or(false)
 }
 
 pub fn is_raw_path(path: &Path) -> bool {
@@ -212,6 +222,7 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
     }
 
     meta.is_raw = is_raw_path(path);
+    meta.is_video = is_video_path(path);
 
     // If it's a RAW file and not already a physical monochrome sensor, check if the in-camera preview is monochrome
     if meta.is_raw && !meta.is_monochrome_sensor {

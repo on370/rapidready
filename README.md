@@ -33,7 +33,7 @@ RapidReady is engineered for professional camera workflows, high-speed SD card i
 ### Currently Supported Formats
 - **RAW Camera Formats:** Canon (`.cr2`, `.cr3`), Sony (`.arw`), Nikon (`.nef`, `.nrw`), Adobe/Leica/Ricoh (`.dng`), Fujifilm (`.raf`), Olympus/OM System (`.orf`), Panasonic Lumix (`.rw2`), Pentax (`.pef`), Hasselblad (`.3fr`), Sigma (`.x3f`).
 - **Raster & Next-Gen Formats:** JPEG (`.jpg`, `.jpeg`), HEIF/HEIC (`.heic`, `.heif`, `.hif` with RAW+HIF pairing support), WebP (`.webp`), AVIF (`.avif`), PNG (`.png`), TIFF (`.tif`, `.tiff`).
-- **Video Import (Basic Ingestion):** `.mp4`, `.mov`, `.m4v`, `.avi`.
+- **Video Formats (Ingestion & Archive Browsing):** `.mp4`, `.mov`, `.m4v`, `.avi` (native hardware thumbnail extraction, responsive video badges, and poster frame previewing).
 
 > [!TIP]
 > **Roadmap & Upcoming Media Support:**  

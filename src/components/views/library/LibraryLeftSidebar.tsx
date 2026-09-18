@@ -733,10 +733,11 @@ export function LibraryLeftSidebar() {
   };
 
   const handleDeleteRejectedInFolders = async (folderPaths: string[], isMulti: boolean) => {
-    const folderSet = new Set(folderPaths.map(p => normalizePath(p)));
     const allImages = useLibraryStore.getState().images;
+    const folderSet = new Set(folderPaths.map(p => normalizeSlash(p)));
+
     const rejectedInFolders = allImages.filter(img => {
-      const p = normalizePath(img.path);
+      const p = normalizeSlash(img.path);
       const lastSlash = p.lastIndexOf('/');
       const dir = lastSlash > 0 ? p.substring(0, lastSlash) : p;
       return folderSet.has(dir) && img.culling.flag === -1;
@@ -748,73 +749,92 @@ export function LibraryLeftSidebar() {
     }
 
     const count = rejectedInFolders.length;
-    const samplePaths = rejectedInFolders.slice(0, 10).map(i => i.path);
-    const isNetwork = await invoke<boolean>('are_any_network_paths', { paths: samplePaths }).catch(() => false);
+    const checkPaths = [rootPath, ...folderPaths].filter(Boolean) as string[];
+    const isNetwork = await invoke<boolean>('are_any_network_paths', { paths: checkPaths }).catch((err) => {
+      console.error('Failed to check network path in purge rejected:', err);
+      return false;
+    });
 
-    if (isNetwork) {
-      const confirmed = await useDialogStore.getState().confirmDestructive({
-        title: isMulti 
-          ? t('folderDelete.multiNasTitle', { defaultValue: '⚠️ ACHTUNG: Dauerhaftes Löschen auf NAS / Netzwerk' })
-          : t('delete.nasConfirmTitle', { defaultValue: '⚠️ ACHTUNG: Dauerhaftes Löschen auf NAS / Netzwerk' }),
-        message: isMulti
-          ? t('folderDelete.multiNasMessage', {
-              count,
-              photoCount: count,
-              defaultValue: `Die ${count} verworfenen Bilder in den ausgewählten Ordnern liegen auf einer Netzwerkfreigabe (NAS).\n\nDateien auf Netzwerklaufwerken können NICHT in den Papierkorb verschoben werden!\n\nSie werden DAUERHAFT und UNWIDERRUFLICH von der Festplatte gelöscht.\n\nMöchtest du diese ${count} Bilder jetzt wirklich unwiderruflich löschen?`
+    const confirmed = await useDialogStore.getState().confirmDestructive({
+      title: isNetwork
+        ? (isMulti
+            ? t('folderDelete.multiNasTitle', { defaultValue: '⚠️ ACHTUNG: Dauerhaftes Löschen auf NAS / Netzwerk' })
+            : t('delete.nasConfirmTitle', { defaultValue: '⚠️ ACHTUNG: Dauerhaftes Löschen auf NAS / Netzwerk' }))
+        : t('delete.confirmTitle', { defaultValue: 'In den Papierkorb verschieben' }),
+      message: isNetwork
+        ? (isMulti
+            ? t('folderDelete.multiNasMessage', {
+                count,
+                photoCount: count,
+                defaultValue: `Die ${count} verworfenen Bilder in den ausgewählten Ordnern liegen auf einer Netzwerkfreigabe (NAS).\n\nDateien auf Netzwerklaufwerken können NICHT in den Papierkorb verschoben werden!\n\nSie werden DAUERHAFT und UNWIDERRUFLICH von der Festplatte gelöscht.\n\nMöchtest du diese ${count} Bilder jetzt wirklich unwiderruflich löschen?`
+              })
+            : t('delete.nasConfirmMessage', {
+                count,
+                defaultValue: `Die ${count} verworfenen Bilder liegen auf einer Netzwerkfreigabe (NAS).\n\nDateien auf Netzwerklaufwerken können NICHT in den Papierkorb verschoben werden!\n\nSie werden DAUERHAFT und UNWIDERRUFLICH von der Festplatte gelöscht.\n\nMöchtest du diese ${count} Bilder jetzt wirklich unwiderruflich löschen?`
+              }))
+        : t('delete.confirmMessage', {
+            count,
+            defaultValue: `Möchtest du ${count} verworfene(s) Bild(er) in den Papierkorb verschieben?`
+          }),
+      confirmLabel: isNetwork
+        ? t('delete.nasOkLabel', { defaultValue: 'Unwiderruflich löschen' })
+        : t('delete.okLabel', { defaultValue: 'In den Papierkorb' }),
+      cancelLabel: t('delete.cancelLabel', { defaultValue: 'Abbrechen' })
+    });
+
+    if (confirmed) {
+      try {
+        const result = await invoke<{ deleted: string[]; failed: [string, string][] }>('delete_files', {
+          paths: rejectedInFolders.map(i => i.path),
+          toTrash: !isNetwork,
+          archiveRoot: rootPath || null,
+        });
+
+        if (result.deleted.length > 0) {
+          const delSet = new Set(result.deleted);
+          const remaining = allImages.filter(i => !delSet.has(i.path));
+          useLibraryStore.getState().setImages(remaining);
+        }
+
+        if (result.failed.length > 0) {
+          const firstErr = result.failed[0][1];
+          useToastStore.getState().showWarning(
+            t('delete.partialFailed', {
+              failed: result.failed.length,
+              total: count,
+              defaultValue: `${result.failed.length} von ${count} Datei(en) konnten nicht gelöscht werden: ${firstErr}`
             })
-          : t('delete.nasConfirmMessage', {
-              count,
-              defaultValue: `Die ${count} verworfenen Bilder liegen auf einer Netzwerkfreigabe (NAS).\n\nDateien auf Netzwerklaufwerken können NICHT in den Papierkorb verschoben werden!\n\nSie werden DAUERHAFT und UNWIDERRUFLICH von der Festplatte gelöscht.\n\nMöchtest du diese ${count} Bilder jetzt wirklich unwiderruflich löschen?`
-            }),
-        confirmLabel: t('delete.nasOkLabel', { defaultValue: 'Unwiderruflich löschen' }),
-        cancelLabel: t('delete.cancelLabel', { defaultValue: 'Abbrechen' })
-      });
-
-      if (confirmed) {
-        try {
-          await invoke('delete_files', { paths: rejectedInFolders.map(i => i.path), toTrash: false });
-          const delSet = new Set(rejectedInFolders.map(i => i.path));
-          const remaining = allImages.filter(i => !delSet.has(i.path));
-          useLibraryStore.getState().setImages(remaining);
-          useToastStore.getState().showSuccess(
-            t('delete.nasSuccessToast', { count, defaultValue: `${count} Bild(er) dauerhaft vom Netzwerklaufwerk gelöscht.` })
           );
-        } catch (err: any) {
-          useToastStore.getState().showError(t('delete.failedError', 'Löschen fehlgeschlagen: ') + err);
-        }
-      }
-    } else {
-      const confirmed = await ask(
-        t('delete.confirmMessage', {
-          count,
-          defaultValue: `Möchtest du ${count} verworfene(s) Bild(er) in den Papierkorb verschieben?`
-        }),
-        {
-          title: t('delete.confirmTitle', { defaultValue: 'Löschen bestätigen' }),
-          kind: 'warning',
-          okLabel: t('delete.okLabel', { defaultValue: 'In den Papierkorb' }),
-          cancelLabel: t('delete.cancelLabel', { defaultValue: 'Abbrechen' })
-        }
-      );
-
-      if (confirmed) {
-        try {
-          await invoke('delete_files', { paths: rejectedInFolders.map(i => i.path), toTrash: true });
-          const delSet = new Set(rejectedInFolders.map(i => i.path));
-          const remaining = allImages.filter(i => !delSet.has(i.path));
-          useLibraryStore.getState().setImages(remaining);
+        } else {
           useToastStore.getState().showSuccess(
-            t('delete.localSuccessToast', { count, defaultValue: `${count} Bild(er) in den Papierkorb verschoben.` })
+            isNetwork
+              ? t('delete.nasSuccessToast', { count: result.deleted.length, defaultValue: `${result.deleted.length} Bild(er) dauerhaft vom Netzwerklaufwerk gelöscht.` })
+              : t('delete.localSuccessToast', { count: result.deleted.length, defaultValue: `${result.deleted.length} Bild(er) in den Papierkorb verschoben.` })
           );
-        } catch (err: any) {
-          useToastStore.getState().showError(t('delete.failedError', 'Verschieben in den Papierkorb fehlgeschlagen: ') + err);
         }
+      } catch (err: any) {
+        useToastStore.getState().showError(t('delete.failedError', 'Löschen fehlgeschlagen: ') + (err?.message || err));
       }
     }
   };
 
   const handleDeleteFolders = async (paths: string[]) => {
-    const validPaths = paths.filter(p => !rootPath || normalizePath(p) !== normalizePath(rootPath));
+    const curScanState = useLibraryStore.getState().scanState;
+    if (curScanState === 'scanning' || curScanState === 'connecting' || curScanState === 'paused') {
+      useToastStore.getState().showWarning(
+        t('folderDelete.scanActiveWarning', { defaultValue: 'Während eines laufenden Archiv-Scans können keine Ordner gelöscht werden.' })
+      );
+      return;
+    }
+
+    if (!rootPath) {
+      useToastStore.getState().showWarning(
+        t('folderMenu.noRootPath', { defaultValue: 'Kein aktives Archiv ausgewählt.' })
+      );
+      return;
+    }
+
+    const validPaths = paths.filter(p => normalizePath(p) !== normalizePath(rootPath));
     if (validPaths.length === 0) {
       useToastStore.getState().showWarning(
         t('folderMenu.deleteRootProtected', 'Der Hauptordner kann nicht gelöscht werden')
@@ -822,7 +842,11 @@ export function LibraryLeftSidebar() {
       return;
     }
 
-    const isNas = await invoke<boolean>('are_any_network_paths', { paths: validPaths }).catch(() => false);
+    const checkPaths = [rootPath, ...validPaths].filter(Boolean) as string[];
+    const isNas = await invoke<boolean>('are_any_network_paths', { paths: checkPaths }).catch((err) => {
+      console.error('Failed to check network path in delete folders:', err);
+      return false;
+    });
     const allImages = useLibraryStore.getState().images;
     const normTargets = validPaths.map(p => normalizeSlash(p).toLowerCase());
     const affectedImages = allImages.filter(img => {
@@ -835,107 +859,71 @@ export function LibraryLeftSidebar() {
       const folderPath = validPaths[0];
       const folderName = normalizeSlash(folderPath).split('/').pop() || folderPath;
 
-      if (isNas) {
-        const confirmed = await useDialogStore.getState().confirmDestructive({
-          title: t('folderDelete.nasTitle', { defaultValue: '⚠️ ACHTUNG: Dauerhaftes Löschen auf NAS / Netzwerk' }),
-          message: t('folderDelete.nasMessage', {
-            name: folderName,
-            count: photoCount,
-            defaultValue: `Der Ordner „${folderName}“ (${photoCount} Fotos) liegt auf einer Netzwerkfreigabe (NAS).\n\nDateien und Ordner auf Netzwerklaufwerken können NICHT in den Papierkorb verschoben werden!\n\nDer gesamte Ordner und alle darin enthaltenen Dateien und Unterordner werden DAUERHAFT und UNWIDERRUFLICH gelöscht.\n\nMöchtest du „${folderName}“ jetzt wirklich unwiderruflich löschen?`
-          }),
-          confirmLabel: t('folderDelete.nasOk', { defaultValue: 'Unwiderruflich löschen' }),
-          cancelLabel: t('folderDelete.cancel', { defaultValue: 'Abbrechen' })
-        });
+      const confirmed = await useDialogStore.getState().confirmDestructive({
+        title: isNas
+          ? t('folderDelete.nasTitle', { defaultValue: '⚠️ ACHTUNG: Dauerhaftes Löschen auf NAS / Netzwerk' })
+          : t('folderDelete.localTitle', { defaultValue: 'Ordner in den Papierkorb verschieben?' }),
+        message: isNas
+          ? t('folderDelete.nasMessage', {
+              name: folderName,
+              count: photoCount,
+              defaultValue: `Der Ordner „${folderName}“ (${photoCount} Fotos) liegt auf einer Netzwerkfreigabe (NAS).\n\nDateien und Ordner auf Netzwerklaufwerken können NICHT in den Papierkorb verschoben werden!\n\nDer gesamte Ordner und alle darin enthaltenen Dateien und Unterordner werden DAUERHAFT und UNWIDERRUFLICH gelöscht.\n\nMöchtest du „${folderName}“ jetzt wirklich unwiderruflich löschen?`
+            })
+          : t('folderDelete.localMessage', {
+              name: folderName,
+              count: photoCount,
+              defaultValue: `Möchtest du den Ordner „${folderName}“ (${photoCount} Fotos) und alle darin enthaltenen Dateien und Unterordner wirklich in den Papierkorb verschieben?`
+            }),
+        confirmLabel: isNas
+          ? t('folderDelete.nasOk', { defaultValue: 'Unwiderruflich löschen' })
+          : t('folderDelete.localOk', { defaultValue: 'In den Papierkorb' }),
+        cancelLabel: t('folderDelete.cancel', { defaultValue: 'Abbrechen' })
+      });
 
-        if (confirmed) {
-          try {
-            await invoke('delete_folder', { path: folderPath, toTrash: false });
-            performPostFoldersDeleteCleanup([folderPath], true);
-          } catch (err: any) {
-            console.error('Failed to permanently delete folder:', err);
-            useToastStore.getState().showError(
-              t('folderDelete.error', 'Löschen des Ordners fehlgeschlagen: ') + (err?.message || err)
-            );
-          }
-        }
-      } else {
-        const confirmed = await ask(
-          t('folderDelete.localMessage', {
-            name: folderName,
-            count: photoCount,
-            defaultValue: `Möchtest du den Ordner „${folderName}“ (${photoCount} Fotos) und alle darin enthaltenen Dateien und Unterordner wirklich in den Papierkorb verschieben?`
-          }),
-          {
-            title: t('folderDelete.localTitle', { defaultValue: 'Ordner in den Papierkorb verschieben?' }),
-            kind: 'warning',
-            okLabel: t('folderDelete.localOk', { defaultValue: 'In den Papierkorb' }),
-            cancelLabel: t('folderDelete.cancel', { defaultValue: 'Abbrechen' })
-          }
-        );
-
-        if (confirmed) {
-          try {
-            await invoke('delete_folder', { path: folderPath, toTrash: true });
-            performPostFoldersDeleteCleanup([folderPath], false);
-          } catch (err: any) {
-            console.error('Failed to move folder to trash:', err);
-            useToastStore.getState().showError(
-              t('folderDelete.error', 'Löschen des Ordners fehlgeschlagen: ') + (err?.message || err)
-            );
-          }
+      if (confirmed) {
+        try {
+          await invoke('delete_folder', { path: folderPath, toTrash: !isNas, archiveRoot: rootPath });
+          performPostFoldersDeleteCleanup([folderPath], isNas);
+        } catch (err: any) {
+          console.error('Failed to delete folder:', err);
+          useToastStore.getState().showError(
+            t('folderDelete.error', 'Löschen des Ordners fehlgeschlagen: ') + (err?.message || err)
+          );
         }
       }
     } else {
       // Multi-Folder delete
       const count = validPaths.length;
-      if (isNas) {
-        const confirmed = await useDialogStore.getState().confirmDestructive({
-          title: t('folderDelete.multiNasTitle', { defaultValue: '⚠️ ACHTUNG: Dauerhaftes Löschen auf NAS / Netzwerk' }),
-          message: t('folderDelete.multiNasMessage', {
-            count,
-            photoCount,
-            defaultValue: `Die ${count} ausgewählten Ordner (mit insgesamt ${photoCount} Fotos) liegen ganz oder teilweise auf einer Netzwerkfreigabe (NAS).\n\nDateien und Ordner auf Netzwerklaufwerken können NICHT in den Papierkorb verschoben werden!\n\nAlle ausgewählten Ordner und alle darin enthaltenen Dateien und Unterordner werden DAUERHAFT und UNWIDERRUFLICH von der Festplatte gelöscht.\n\nMöchtest du diese ${count} Ordner jetzt wirklich unwiderruflich löschen?`
-          }),
-          confirmLabel: t('folderDelete.nasOk', { defaultValue: 'Unwiderruflich löschen' }),
-          cancelLabel: t('folderDelete.cancel', { defaultValue: 'Abbrechen' })
-        });
+      const confirmed = await useDialogStore.getState().confirmDestructive({
+        title: isNas
+          ? t('folderDelete.multiNasTitle', { defaultValue: '⚠️ ACHTUNG: Dauerhaftes Löschen auf NAS / Netzwerk' })
+          : t('folderDelete.multiLocalTitle', { count, defaultValue: `${count} Ordner in den Papierkorb verschieben?` }),
+        message: isNas
+          ? t('folderDelete.multiNasMessage', {
+              count,
+              photoCount,
+              defaultValue: `Die ${count} ausgewählten Ordner (mit insgesamt ${photoCount} Fotos) liegen ganz oder teilweise auf einer Netzwerkfreigabe (NAS).\n\nDateien und Ordner auf Netzwerklaufwerken können NICHT in den Papierkorb verschoben werden!\n\nAlle ausgewählten Ordner und alle darin enthaltenen Dateien und Unterordner werden DAUERHAFT und UNWIDERRUFLICH von der Festplatte gelöscht.\n\nMöchtest du diese ${count} Ordner jetzt wirklich unwiderruflich löschen?`
+            })
+          : t('folderDelete.multiLocalMessage', {
+              count,
+              photoCount,
+              defaultValue: `Möchtest du die ${count} ausgewählten Ordner (mit insgesamt ${photoCount} Fotos) und alle darin enthaltenen Dateien und Unterordner wirklich in den Papierkorb verschieben?`
+            }),
+        confirmLabel: isNas
+          ? t('folderDelete.nasOk', { defaultValue: 'Unwiderruflich löschen' })
+          : t('folderDelete.localOk', { defaultValue: 'In den Papierkorb' }),
+        cancelLabel: t('folderDelete.cancel', { defaultValue: 'Abbrechen' })
+      });
 
-        if (confirmed) {
-          try {
-            await invoke('delete_folders', { paths: validPaths, toTrash: false });
-            performPostFoldersDeleteCleanup(validPaths, true);
-          } catch (err: any) {
-            console.error('Failed to permanently delete folders:', err);
-            useToastStore.getState().showError(
-              t('folderDelete.error', 'Löschen der Ordner fehlgeschlagen: ') + (err?.message || err)
-            );
-          }
-        }
-      } else {
-        const confirmed = await ask(
-          t('folderDelete.multiLocalMessage', {
-            count,
-            photoCount,
-            defaultValue: `Möchtest du die ${count} ausgewählten Ordner (mit insgesamt ${photoCount} Fotos) und alle darin enthaltenen Dateien und Unterordner wirklich in den Papierkorb verschieben?`
-          }),
-          {
-            title: t('folderDelete.multiLocalTitle', { count, defaultValue: `${count} Ordner in den Papierkorb verschieben?` }),
-            kind: 'warning',
-            okLabel: t('folderDelete.localOk', { defaultValue: 'In den Papierkorb' }),
-            cancelLabel: t('folderDelete.cancel', { defaultValue: 'Abbrechen' })
-          }
-        );
-
-        if (confirmed) {
-          try {
-            await invoke('delete_folders', { paths: validPaths, toTrash: true });
-            performPostFoldersDeleteCleanup(validPaths, false);
-          } catch (err: any) {
-            console.error('Failed to move folders to trash:', err);
-            useToastStore.getState().showError(
-              t('folderDelete.error', 'Löschen der Ordner fehlgeschlagen: ') + (err?.message || err)
-            );
-          }
+      if (confirmed) {
+        try {
+          await invoke('delete_folders', { paths: validPaths, toTrash: !isNas, archiveRoot: rootPath });
+          performPostFoldersDeleteCleanup(validPaths, isNas);
+        } catch (err: any) {
+          console.error('Failed to delete folders:', err);
+          useToastStore.getState().showError(
+            t('folderDelete.error', 'Löschen der Ordner fehlgeschlagen: ') + (err?.message || err)
+          );
         }
       }
     }

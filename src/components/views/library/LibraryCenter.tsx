@@ -5,7 +5,6 @@ import { ContextMenu } from "./ContextMenu";
 import { ArchiveConnectingOverlay } from "./components/ArchiveConnectingOverlay";
 import { ArchiveScanBanner } from "./components/ArchiveScanBanner";
 import { invoke } from "@tauri-apps/api/core";
-import { ask } from "@tauri-apps/plugin-dialog";
 import { normalizePath } from "../../../utils/image";
 
 import { CullingToolbar } from "./components/CullingToolbar";
@@ -341,65 +340,70 @@ export function LibraryCenter({
   const handleDeleteRejected = useCallback(async () => {
     if (rejectedCount === 0) return;
 
-    // Check if any of the rejected images reside on a network share / NAS
-    const samplePaths = rejectedImages.slice(0, 5).map(i => i.path);
-    const isNetwork = await invoke<boolean>('are_any_network_paths', { paths: samplePaths }).catch(() => false);
+    // Check if archive root or rejected images reside on a network share / NAS
+    const checkPaths = [rootPath, ...rejectedImages.slice(0, 10).map(i => i.path)].filter(Boolean) as string[];
+    const isNetwork = await invoke<boolean>('are_any_network_paths', { paths: checkPaths }).catch((err) => {
+      console.error('Failed to check network path in delete rejected:', err);
+      return false;
+    });
 
-    if (isNetwork) {
-      // Prominent permanent deletion warning for network shares / NAS with Cancel as default button
-      const confirmed = await useDialogStore.getState().confirmDestructive({
-        title: t('delete.nasConfirmTitle', { defaultValue: '⚠️ ACHTUNG: Dauerhaftes Löschen auf NAS / Netzwerk' }),
-        message: t('delete.nasConfirmMessage', {
-          count: rejectedCount,
-          defaultValue: `Die ${rejectedCount} verworfenen Bilder liegen auf einer Netzwerkfreigabe (NAS).\n\nDateien auf Netzwerklaufwerken können NICHT in den Papierkorb verschoben werden!\n\nSie werden DAUERHAFT und UNWIDERRUFLICH von der Festplatte gelöscht.\n\nMöchtest du diese ${rejectedCount} Bilder jetzt wirklich unwiderruflich löschen?`
-        }),
-        confirmLabel: t('delete.nasOkLabel', { defaultValue: 'Unwiderruflich löschen' }),
-        cancelLabel: t('delete.cancelLabel', { defaultValue: 'Abbrechen' })
-      });
+    const confirmed = await useDialogStore.getState().confirmDestructive({
+      title: isNetwork
+        ? t('delete.nasConfirmTitle', { defaultValue: '⚠️ ACHTUNG: Dauerhaftes Löschen auf NAS / Netzwerk' })
+        : t('delete.confirmTitle', { defaultValue: 'In den Papierkorb verschieben' }),
+      message: isNetwork
+        ? t('delete.nasConfirmMessage', {
+            count: rejectedCount,
+            defaultValue: `Die ${rejectedCount} verworfenen Bilder liegen auf einer Netzwerkfreigabe (NAS).\n\nDateien auf Netzwerklaufwerken können NICHT in den Papierkorb verschoben werden!\n\nSie werden DAUERHAFT und UNWIDERRUFLICH von der Festplatte gelöscht.\n\nMöchtest du diese ${rejectedCount} Bilder jetzt wirklich unwiderruflich löschen?`
+          })
+        : t('delete.confirmMessage', {
+            count: rejectedCount,
+            defaultValue: `Möchtest du ${rejectedCount} verworfene(s) Bild(er) in den Papierkorb verschieben?`
+          }),
+      confirmLabel: isNetwork
+        ? t('delete.nasOkLabel', { defaultValue: 'Unwiderruflich löschen' })
+        : t('delete.okLabel', { defaultValue: 'In den Papierkorb' }),
+      cancelLabel: t('delete.cancelLabel', { defaultValue: 'Abbrechen' })
+    });
 
-      if (confirmed) {
-        invoke('delete_files', { paths: rejectedImages.map(i => i.path), toTrash: false }).then(() => {
-          const rejectedPathSet = new Set(rejectedImages.map(i => i.path));
+    if (confirmed) {
+      try {
+        const result = await invoke<{ deleted: string[]; failed: [string, string][] }>('delete_files', {
+          paths: rejectedImages.map(i => i.path),
+          toTrash: !isNetwork,
+          archiveRoot: rootPath || null,
+        });
+
+        if (result.deleted.length > 0) {
+          const rejectedPathSet = new Set(result.deleted);
           const remaining = images.filter(i => !rejectedPathSet.has(i.path));
           useLibraryStore.getState().setImages(remaining);
-          useToastStore.getState().showSuccess(
-            t('delete.nasSuccessToast', { count: rejectedCount, defaultValue: `${rejectedCount} Bild(er) dauerhaft vom Netzwerklaufwerk gelöscht.` })
-          );
-        }).catch(err => {
-          console.error('Failed to permanently delete from network share:', err);
-          useToastStore.getState().showError(t('delete.failedError', { defaultValue: 'Löschen fehlgeschlagen: ' }) + err);
-        });
-      }
-    } else {
-      // Standard confirmation for local drives with OS Trash support
-      const confirmed = await ask(
-        t('delete.confirmMessage', {
-          count: rejectedCount,
-          defaultValue: `Möchtest du ${rejectedCount} verworfene(s) Bild(er) in den Papierkorb verschieben?`
-        }),
-        {
-          title: t('delete.confirmTitle', { defaultValue: 'Löschen bestätigen' }),
-          kind: 'warning',
-          okLabel: t('delete.okLabel', { defaultValue: 'In den Papierkorb' }),
-          cancelLabel: t('delete.cancelLabel', { defaultValue: 'Abbrechen' })
         }
-      );
 
-      if (confirmed) {
-        invoke('delete_files', { paths: rejectedImages.map(i => i.path), toTrash: true }).then(() => {
-          const rejectedPathSet = new Set(rejectedImages.map(i => i.path));
-          const remaining = images.filter(i => !rejectedPathSet.has(i.path));
-          useLibraryStore.getState().setImages(remaining);
-          useToastStore.getState().showSuccess(
-            t('delete.localSuccessToast', { count: rejectedCount, defaultValue: `${rejectedCount} Bild(er) in den Papierkorb verschoben.` })
+        if (result.failed.length > 0) {
+          const firstErr = result.failed[0][1];
+          useToastStore.getState().showWarning(
+            t('delete.partialFailed', {
+              failed: result.failed.length,
+              total: rejectedCount,
+              defaultValue: `${result.failed.length} von ${rejectedCount} Datei(en) konnten nicht gelöscht werden: ${firstErr}`
+            })
           );
-        }).catch(err => {
-          console.error('Failed to move to trash:', err);
-          useToastStore.getState().showError(t('delete.failedError', { defaultValue: 'Verschieben in den Papierkorb fehlgeschlagen: ' }) + err);
-        });
+        } else {
+          useToastStore.getState().showSuccess(
+            isNetwork
+              ? t('delete.nasSuccessToast', { count: result.deleted.length, defaultValue: `${result.deleted.length} Bild(er) dauerhaft vom Netzwerklaufwerk gelöscht.` })
+              : t('delete.localSuccessToast', { count: result.deleted.length, defaultValue: `${result.deleted.length} Bild(er) in den Papierkorb verschoben.` })
+          );
+        }
+      } catch (err: any) {
+        console.error('Failed to delete rejected files:', err);
+        useToastStore.getState().showError(
+          t('delete.failedError', { defaultValue: 'Löschen fehlgeschlagen: ' }) + (err?.message || err)
+        );
       }
     }
-  }, [rejectedCount, rejectedImages, images, t]);
+  }, [rejectedCount, rejectedImages, images, rootPath, t]);
 
   const handleItemClick = useCallback((e: React.MouseEvent, clickedIndex: number, img: LibraryImage) => {
     const isMetaOrCtrl = e.metaKey || e.ctrlKey;

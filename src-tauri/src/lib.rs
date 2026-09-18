@@ -127,7 +127,7 @@ pub fn run() {
             if is_fullres {
                 let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
                 
-                if ["cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2", "pef", "3fr", "x3f", "nrw", "heic", "heif", "hif"].contains(&ext.as_str()) {
+                if ["cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2", "pef", "3fr", "x3f", "nrw", "heic", "heif", "hif", "mp4", "mov", "m4v", "avi"].contains(&ext.as_str()) {
                     match rapidready_core::thumbnail::get_max_preview_jpeg(path) {
                         Ok(bytes) => {
                             let res = Response::builder()

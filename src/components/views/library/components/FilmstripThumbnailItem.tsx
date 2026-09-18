@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Check, Star } from 'lucide-react';
+import { Check, Star, Play } from 'lucide-react';
 import { LibraryImage } from '../../../../stores/libraryStore';
-import { getRrImageUrl, isRawFilename } from '../../../../utils/image';
+import { getRrImageUrl, isRawFilename, isVideoFilename } from '../../../../utils/image';
 import { getColorConfig } from '../../../../constants/culling';
 import { loadedThumbnailCache } from '../utils/thumbnailCache';
 
@@ -24,7 +24,8 @@ export const FilmstripThumbnailItem = React.memo(function FilmstripThumbnailItem
   onClick,
   onContextMenu,
 }: FilmstripThumbnailItemProps) {
-  const isRaw = img.is_raw ?? isRawFilename(img.name);
+  const isVideo = img.is_video ?? isVideoFilename(img.name);
+  const isRaw = !isVideo && (img.is_raw ?? isRawFilename(img.name));
   const cacheKey = `${img.path}:${img.culling?.orientation || 1}:1`;
   const [loaded, setLoaded] = useState(loadedThumbnailCache.has(cacheKey));
 
@@ -61,9 +62,14 @@ export const FilmstripThumbnailItem = React.memo(function FilmstripThumbnailItem
           <div className="w-5 h-5 rounded bg-white/[0.04] animate-pulse" />
         </div>
       )}
-      {/* Format Badge: RAW vs JPG */}
+      {/* Format Badge: Video vs RAW vs JPG */}
       <div className="absolute top-1 left-1 pointer-events-none z-20">
-        {isRaw ? (
+        {isVideo ? (
+          <span className="px-1 py-0.2 rounded text-[8px] font-mono font-semibold tracking-wider bg-black/80 text-accent border border-accent/40 shadow-sm leading-tight inline-flex items-center gap-0.5">
+            <Play className="w-2 h-2 fill-accent text-accent" />
+            {img.name.split('.').pop()?.toUpperCase() || 'VID'}
+          </span>
+        ) : isRaw ? (
           <span className="px-1 py-0.2 rounded text-[8px] font-mono font-semibold tracking-wider bg-black/70 text-white/90 border border-white/15 shadow-sm leading-tight inline-block">
             RAW
           </span>
