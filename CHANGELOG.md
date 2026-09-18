@@ -5,6 +5,74 @@ All notable changes to RapidReady will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.7-beta] - 2026-09-18
+
+Major feature release introducing GEO Part 1 (universal geotagging & intelligent coordinate editor), folder management with native context menus and permanent deletion protection for network shares / NAS, native View menu navigation, live transfer rate throughput diagnostics, in-app update checks, and instant workspace cleanup scripts.
+
+### Added
+- **GEO Part 1 – Universal Geotagging & Intelligent GPS Editor (`LibraryInspector.tsx` & `geo.ts`):**
+  - Robust multi-format client-side parser supporting direct paste of:
+    - **Google Maps URLs** (standard search, place links, `@lat,lon,zoom`, `?q=`, `?ll=`).
+    - **Apple Maps URLs** (`?ll=`, `?sll=`, `?q=`, `?coordinate=`).
+    - **OpenStreetMap URLs** (`?mlat=...&mlon=...`, `#map=...`).
+    - **Geo-URIs** (RFC 5870, with or without altitude).
+    - **DMS (Degrees, Minutes, Seconds)** with photographic prime mark resilience (`′`, `″`, `’`, `”`, `´`, `\``, `''`), German `O` (Ost) and English `E`, decimal seconds with comma or dot, and prefix/suffix cardinal directions.
+    - **DMM (Degrees, Decimal Minutes)** for marine and GPS handheld formats.
+    - **Decimal Degrees (DD)** supporting dot notation, space separation, and European semicolon/comma notation (`48,137154; 11,575421`).
+    - Real-time validity and range checks ($-90 \le \text{lat} \le +90$, $-180 \le \text{lon} \le +180$) with clear visual feedback.
+  - Interactive Inspector Location Card:
+    - Live parsing preview in green (`✓ 48° 08' 14" N, 11° 34' 32" E (48.137154°, 11.575421°)`).
+    - Dedicated edit mode with pencil icon and `+ Add coordinates...`.
+    - 1-click **"Remove GPS"** action: writes `"gps": null` to the `.rrdata` sidecar to non-destructively override and conceal camera EXIF coordinates (e.g. for privacy).
+    - Batch application across all selected photos with visual indicator (*"Applies to X selected images"*).
+    - Full keyboard workflow: `Enter` to save, `Escape` to cancel.
+  - Rust Backend Persistence (`culling.rs`, `metadata_resolver.rs`, `commands.rs`):
+    - Non-destructive atomic sidecar writing under `"gps": { "latitude": ..., "longitude": ..., "altitude": ... }` preserving all ratings, color labels, tags, and orientation.
+    - Asynchronous batch IPC command `set_gps_batch` with per-file success metrics.
+- **Folder Management & Tree Context Menu (`LibraryLeftSidebar.tsx` & `FolderContextMenu.tsx`):**
+  - Native-feeling right-click context menu on folder tree nodes in the library sidebar:
+    - **"Im Finder anzeigen"** (macOS) / **"Im Explorer anzeigen"** (Windows).
+    - **"Alle Unterordner aufklappen"** / **"Alle Unterordner einklappen"**.
+    - **"Alle Bilder in diesem Ordner auswählen"**.
+    - **"Nur verworfene Bilder (X) in diesem Ordner löschen..."** (quick culling purge).
+    - **"Neuer Unterordner..."** (`mkdir`).
+    - **"Ordner umbenennen..."** (renames folder and atomically updates index path mappings).
+    - **"Ordner löschen..."** with protected archive root and destructive confirmation.
+  - **Network Share / NAS Permanent Deletion Warning:**
+    - Detects whether files reside on local storage (with OS Trash support) or on a network share / NAS (SMB, NFS, UNC).
+    - Prominently displays an unmistakable red warning alert informing that NAS deletions cannot be moved to the Trash and will be permanently erased.
+  - **Dynamic Folder Selection Indicator Bubbling:**
+    - When collapsing any parent directory, the active photo indicator and camera badge smoothly bubble up to the nearest visible ancestor folder.
+- **Multi-Selection Ergonomics (OS Parity for Cmd/Ctrl+Click):**
+  - Achieved parity with macOS Finder and Windows File Explorer: `Cmd+Click` / `Ctrl+Click` on an already selected photo toggles it off cleanly without resetting the rest of the selection set.
+  - Stable anchor tracking for subsequent `Shift+Click` range selections.
+- **Live Transfer Rate Throughput Tooltip (`throughput.ts`):**
+  - Real-time rolling-window calculation ($\Delta \text{bytes} / \Delta t$) during archive scanning and import transfer.
+  - Hover tooltip over MB/GB badges displaying live transfer speed (`MB/s` / `GB/s`), network rate (`Mb/s` / `Gb/s`), peak session throughput, and ETA.
+- **In-App Update Check & Native Menu Integration (`updateService.ts` & `UpdateNotificationModal.tsx`):**
+  - Background startup check against GitHub Releases API with Content Security Policy network allowance.
+  - Native menu item **"Check for Updates..."** in the macOS Application Menu (Apfelmenü) and Help Menu.
+  - Two-tier settings switch: automatic checks and pre-release/beta notifications.
+  - Strict SemVer comparison treating `x.y.z-beta-RCn` builds correctly as pre-releases of `x.y.z-beta` and `x.y.z`.
+  - Clean notification modal with release notes link and 1-click download.
+- **Native View Menu Navigation & Global Shortcuts:**
+  - Added native "View" menu items:
+    - `Import` (`Cmd+1` / `Ctrl+1`)
+    - `Library` (`Cmd+2` / `Ctrl+2`)
+    - `Settings` (`Cmd+,` / `Ctrl+,`)
+    - `Toggle Fullscreen`
+  - Global keyboard shortcuts and documentation in Help Modal (`HelpModal.tsx`).
+- **Workspace Cleanup Scripts (`clean.sh` & `clean.bat`):**
+  - Standalone scripts to instantly reclaim 15–25+ GB of Cargo debug build caches (`src-tauri/target/debug/deps`) in seconds with zero toolchain dependencies.
+  - `npm run clean` shortcut in `package.json`.
+  - Optional `--deep` / `--all` to clean `node_modules`.
+
+### Changed & Improved
+- **Toolchain Auto-Detection:**
+  - `build-dmg.sh`, `dev.sh`, and `set-version.sh` automatically detect and load active `mise` environments for Node and Rust.
+- **CSP Configuration (`tauri.conf.json`):**
+  - Added `connect-src 'self' https://api.github.com;` to enable reliable in-app update checks without WebKit CSP blocking.
+
 ## [0.3.6-beta] - 2026-09-13
 
 Feature and platform release introducing configurable GPS Map Provider selection, full modern raster format support (HEIC / HEIF / HIF), disconnected source media detection with automatic recovery in import preview, Windows UNC network share fixes for NAS archives, and complete open-source developer tooling.

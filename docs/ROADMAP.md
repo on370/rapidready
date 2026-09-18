@@ -16,6 +16,28 @@
 
 ## 🚀 Released Milestones
 
+### Released in `v0.3.7-beta` (Build `00A1`)
+- [x] **GEO Part 1: Universal Geotagging & Intelligent GPS Coordinate Editor (`v0.3.7-beta` / Build `009C`):**
+  - Universal client-side parser supporting Google Maps, Apple Maps, OpenStreetMap URLs, Geo-URIs (RFC 5870), DMS (Unicode prime resilience, German O / English E, decimal seconds), DMM, and Decimal Degrees (DD).
+  - Interactive Inspector location card with live green preview, pencil edit mode, "Remove GPS" action (`"gps": null`), and batch assignment across multiple selected photos.
+  - Non-destructive persistence in `.rrdata` sidecars under `"gps": { "latitude": ..., "longitude": ..., "altitude": ... }`.
+- [x] **Folder Tree Context Menu & Recursive Folder Operations (`v0.3.7-beta`):**
+  - Native-feeling right-click context menu on folder tree nodes: "Reveal in Finder" / "Show in Explorer", "Expand All" / "Collapse All", "Select All in Folder", "Purge Rejects (X)", "New Subfolder...", "Rename...", and "Delete...".
+- [x] **NAS & Network Share Permanent Deletion Warning (`v0.3.7-beta`):**
+  - Automatic filesystem mount detection: displays an unmistakable red warning prompt alerting that files on network shares / NAS cannot be moved to OS Trash and are permanently deleted.
+- [x] **Dynamic Folder Tree Active Selection Bubbling (`v0.3.7-beta`):**
+  - Collapsing any parent directory dynamically bubbles the active photo indicator and camera badge up to the nearest visible ancestor node.
+- [x] **Multi-Selection Ergonomics (`v0.3.7-beta`):**
+  - Finder / Windows Explorer parity for `Cmd+Click` / `Ctrl+Click` (toggle deselect individual items without resetting selection set) and stable anchor tracking for `Shift+Click`.
+- [x] **Live Throughput & Transfer Rate Tooltip (`v0.3.7-beta`):**
+  - Rolling-window throughput calculation ($\Delta \text{bytes} / \Delta t$) during archive scanning and import transfer with hover tooltip showing live speed (`MB/s` / `GB/s`), network rate (`Mb/s` / `Gb/s`), peak throughput, and ETA.
+- [x] **In-App Update Checking & Native Menu Integration (`v0.3.7-beta`):**
+  - Background startup check against GitHub Releases API with CSP network enablement, native menu action "Check for Updates..." in macOS App Menu and Help Menu, and SemVer RC compatibility.
+- [x] **View Menu Navigation & Global Shortcuts (`v0.3.7-beta`):**
+  - Native "View" menu entries for `Import` (`Cmd+1`), `Library` (`Cmd+2`), `Settings` (`Cmd+,`), and `Toggle Fullscreen` with global keyboard shortcuts and Help Modal documentation.
+- [x] **Workspace Cleanup Tooling (`v0.3.7-beta`):**
+  - Instant cleanup scripts (`clean.sh`, `clean.bat`, `npm run clean`) reclaiming 15–25+ GB of Cargo debug build caches in seconds.
+
 ### Released in `v0.3.6-beta` (Build `0096`)
 - [x] **GPS Metadata Display & 1-Click Map Navigation (`v0.3.6-beta` / Build `0089`):**
   - Native EXIF extraction of `GPSLatitude`, `GPSLongitude`, and `GPSAltitude` with direction and reference resolution in `metadata_resolver.rs`.
@@ -157,7 +179,7 @@
 
 ---
 
-- [x] **GEO Part 1: Universal Geotagging & Intelligent GPS Coordinate Editor (`v0.3.6-beta` / Build `009C`):**
+- [x] **GEO Part 1: Universal Geotagging & Intelligent GPS Coordinate Editor (`v0.3.7-beta` / Build `009C`):**
   - **Context & Goal:**
     Photographers frequently shoot with mirrorless or medium format cameras without built-in GPS (e.g. Fuji X-T5, Leica M, Hasselblad, older DSLRs), or require manual location corrections. Pasting coordinates from disparate sources (Google Maps URLs, Apple Maps, OpenStreetMap, German comma notation, degrees-minutes-seconds) is traditionally painful and error-prone.
   - **Universal Input Parser (Pure Client-Side Engine):**
