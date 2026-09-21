@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Settings, Folder, Plus, Globe, Settings2, Trash2, Edit2, Check, MapPin, Sparkles, RefreshCw, ArrowUpRight, CheckCircle2, AlertCircle } from "lucide-react";
+import { Settings, Folder, Plus, Globe, Settings2, Trash2, Edit2, Check, MapPin, Sparkles, RefreshCw, ArrowUpRight, CheckCircle2, AlertCircle, ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -115,16 +115,18 @@ export function SettingsView() {
             </div>
           </div>
           
-          <div className="flex items-center gap-2 bg-app-card border border-app-border rounded-lg px-3 py-1.5">
-            <Globe className="w-4 h-4 text-txt-tertiary" />
+          <div className="relative flex items-center gap-2 bg-app-card border border-app-border rounded-lg px-3 py-1.5 hover:border-app-border-hover transition-colors">
+            <Globe className="w-4 h-4 text-txt-tertiary flex-shrink-0" />
             <select 
-              className="bg-transparent text-sm text-txt-primary focus:outline-none cursor-pointer"
+              className="bg-app-card text-sm text-txt-primary focus:outline-none cursor-pointer appearance-none pr-6 font-medium"
+              style={{ colorScheme: 'dark' }}
               value={i18n.language.startsWith('de') ? 'de' : 'en'}
               onChange={(e) => i18n.changeLanguage(e.target.value)}
             >
-              <option value="en">English</option>
-              <option value="de">Deutsch</option>
+              <option value="en" className="bg-[#1c1c21] text-[#e8e8ec]" style={{ backgroundColor: '#1c1c21', color: '#e8e8ec' }}>English</option>
+              <option value="de" className="bg-[#1c1c21] text-[#e8e8ec]" style={{ backgroundColor: '#1c1c21', color: '#e8e8ec' }}>Deutsch</option>
             </select>
+            <ChevronDown className="w-3.5 h-3.5 text-txt-tertiary absolute right-2.5 pointer-events-none" />
           </div>
         </div>
 

@@ -28,8 +28,24 @@
 }
 
 /* ── Base & Scrollbar ──────────────────────────────────── */
+:root {
+  color-scheme: dark;
+}
+
 * { box-sizing: border-box; }
 body { font-family: 'Inter', system-ui, sans-serif; background: var(--color-app-deepest); color: var(--color-txt-primary); overflow: hidden; }
+
+/* ── Native Select & Option dark styling (Windows WebView2 fix) ── */
+select, option, optgroup {
+  color-scheme: dark;
+  background-color: var(--color-app-card);
+  color: var(--color-txt-primary);
+}
+
+select option {
+  background-color: #1c1c21;
+  color: #e8e8ec;
+}
 
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
