@@ -54,6 +54,8 @@ interface ImportState {
   isScanning: boolean;
   scanProgress: ScanProgress | null;
   hideImported: boolean;
+  targetCollectionId: string | null;
+  newCollectionName: string;
   
   setSourceDirectory: (path: string | null) => void;
   setIsSourceDisconnected: (disconnected: boolean) => void;
@@ -62,6 +64,8 @@ interface ImportState {
   setDateFormat: (format: string) => void;
   setCustomPattern: (pattern: string) => void;
   setProjectName: (name: string) => void;
+  setTargetCollectionId: (id: string | null) => void;
+  setNewCollectionName: (name: string) => void;
   setDirectoryTemplate: (template: string) => void;
   setActivePreset: (presetId: string | null, isModified?: boolean) => void;
   setPresetModified: (modified: boolean) => void;
@@ -93,9 +97,13 @@ export const useImportStore = create<ImportState>()(
       isScanning: false,
       scanProgress: null,
       hideImported: true,
+      targetCollectionId: null,
+      newCollectionName: '',
 
       setSourceDirectory: (path) => set({ sourceDirectory: path, isSourceDisconnected: false }),
       setIsSourceDisconnected: (disconnected) => set({ isSourceDisconnected: disconnected }),
+      setTargetCollectionId: (id) => set({ targetCollectionId: id }),
+      setNewCollectionName: (name) => set({ newCollectionName: name }),
       setDestinationDirectory: (path, locationId = null, markModified = true) => {
         const current = get();
         if (current.destinationDirectory === path && current.selectedLocationId === locationId) return;

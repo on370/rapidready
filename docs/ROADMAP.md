@@ -148,6 +148,93 @@
 
 ---
 
+### Milestone: Virtual Collections & Native RapidRAW Album Synchronization
+- [ ] **Non-Destructive Virtual Collections & Automated RapidRAW Album Bridge:**
+  - **Context & Goal:**  
+    Photographers frequently organize projects, curated selections, or cross-shoot compilations (*"Best of 2026"*, *"Portfolio"*, *"Client Delivery"*) into virtual collections without copying, moving, or duplicating files on disk. As RapidReady serves as the dedicated high-speed companion for RapidRAW, collections in RapidReady must be 100% interoperable with RapidRAW albums without requiring manual import/export steps or fragile duplicate databases.
+  - **Data Model Parity with RapidRAW (`AlbumItem` Schema):**
+    - Adopt RapidRAW's recursive tree model in `rapidready-core`:
+      ```rust
+      #[derive(Serialize, Deserialize, Debug, Clone)]
+      #[serde(tag = "type", rename_all = "camelCase")]
+      pub enum AlbumItem {
+          Album {
+              id: String,
+              name: String,
+              icon: Option<String>,
+              images: Vec<String>, // Canonical absolute file paths (or virtual copy paths)
+          },
+          Group {
+              id: String,
+              name: String,
+              icon: Option<String>,
+              children: Vec<AlbumItem>, // Arbitrary recursive nesting of album groups
+          },
+      }
+      ```
+    - Support custom collection icons (e.g. `plane`, `mountain`, `sun`, `camera`, `map`, `heart`, `star`, `users`, `car`, `briefcase`).
+    - Dynamic image counters on album badges (with recursive rollup counters for groups).
+  - **Storage Architecture: Independent Primary Storage with Zero-Config RapidRAW Synchronization:**
+    - *Cross-Platform Standard AppData Paths:*
+      - RapidReady relies on native OS standards via Tauri's `app_data_dir()` resolving to:
+        - **macOS:** `~/Library/Application Support/io.github.on370.rapidready/albums/albums.json`
+        - **Windows:** `%APPDATA%\io.github.on370.rapidready\albums\albums.json`
+        - **Linux (XDG):** `~/.local/share/io.github.on370.rapidready/albums/albums.json` (or `$XDG_DATA_HOME`)
+      - RapidRAW's corresponding standard paths:
+        - **macOS:** `~/Library/Application Support/io.github.CyberTimon.RapidRAW/albums/albums.json`
+        - **Windows:** `%APPDATA%\io.github.CyberTimon.RapidRAW\albums\albums.json`
+        - **Linux (XDG):** `~/.local/share/io.github.CyberTimon.RapidRAW/albums/albums.json`
+    - *Master File in RapidReady AppData (Data Safety Guard):*
+      - Storing collections directly inside RapidRAW's application support directory is an unacceptable data-loss risk (an uninstallation, reset, or cleanup of RapidRAW would wipe RapidReady's collections).
+      - RapidReady maintains its own primary master database file in its native AppData directory.
+    - *Zero-Configuration Automatic Synchronization (No Manual Settings Switches):*
+      - RapidReady automatically checks whether RapidRAW's album directory exists at the platform standard location.
+      - **Startup & Window Focus Check (Last-Write-Wins based on `mtime`):**
+        - If only RapidRAW's file exists (e.g. initial launch on a workstation with existing RapidRAW albums): Automatically import into RapidReady's master file.
+        - If both files exist: Compare file modification timestamps (`mtime`). If RapidRAW's file is newer, RapidReady updates its internal tree from RapidRAW and mirrors it into RapidReady's master file. If RapidReady is newer or identical, RapidReady preserves its own state.
+        - If RapidRAW is missing or uninstalled: RapidReady works completely independently from its own master file. Zero data loss.
+      - **Save & Mutation Synchronization:**
+        - Every modification in RapidReady (creating/deleting albums, reordering, adding/removing images) writes atomically to RapidReady's master file (`write to .tmp -> rename`).
+        - If the RapidRAW album directory is detected, the identical JSON tree is mirrored simultaneously to RapidRAW's `albums.json`.
+      - **Rolling Safety Backups (`.bak`):**
+        - Automatic backup generation (`albums.json.bak`) prior to any sync overwrite, safeguarding against corruption.
+  - **UI & Ergonomics Integration:**
+    - Dedicated collapsible "Collections" section in `LibraryLeftSidebar.tsx` alongside the folder tree.
+    - **Custom Ordering (Drag & Drop Reordering):**
+      - In Collection view, default sorting is set to *Custom Order* (`images: Vec<String>` array order).
+      - Thumbnails can be freely dragged and dropped within the grid to establish the ideal narrative sequence.
+      - Helper shortcuts: *"Sort initially by EXIF capture time"* with subsequent manual fine-tuning.
+    - Drag & drop support: Dragging selected thumbnails onto collection nodes in the sidebar adds images without duplicates.
+    - Context menu actions on thumbnails: *"Add to Collection..."* with nested group menus.
+    - Non-destructive image removal: *"Remove from Collection"* removes the path pointer from the album without touching files on disk.
+
+- [ ] **Sequential Photobook & Web Export with Custom Sizing & Linear EXIF Timestamp Synthesis:**
+  - **Context & Goal:**
+    Casual users and event photographers frequently experience broken sorting when uploading photos from multiple unsynchronized smartphones/cameras to photobook printers (CEWE, Saal Digital, Blurb), WordPress galleries, or USB drives for TV slideshows. Because cloud exports (Google/Apple Photos) dump files with arbitrary filenames or unsynced timestamps, external systems that sort alphabetically or chronologically destroy the curated narrative order. RapidReady solves this by exporting collections as clean, sequentially numbered files with optional image resizing and linear EXIF timestamp synthesis.
+  - **Export Workflow & Configuration Dialog:**
+    - Triggered via Collection context menu (*"Export Collection..."*) or toolbar button in Collection view.
+    - **Target Directory Picker:** Select destination folder (e.g. Desktop, USB drive, dedicated photobook folder).
+    - **Real File Copies (Strict Policy):**
+      - Always generates genuine, independent file copies into the destination folder (no symlinks or hardlinks) to ensure universal compatibility when uploading or sharing to external devices.
+    - **Configurable Naming Scheme & Sequential Numbering:**
+      - Prefix customizable (e.g. `Hochzeit_2026_`, `Portfolio_`).
+      - Zero-padded counter: `0001` (4 digits) or `001` (3 digits).
+      - Format templates:
+        - `Hochzeit_0001.jpg`, `Hochzeit_0002.jpg` (clean sequential numbering for photobooks).
+        - `001_IMG_4821.jpg` (prefix numbering preserving original camera filename).
+    - **Image Sizing & Export Presets (Picasa-Style Flexibility):**
+      - **Full Resolution / Original Quality:** Bit-for-bit lossless copy of the original JPEG/media without re-encoding.
+      - **4K Ultra HD (3840px Long Edge):** Optimal for high-res TV slideshows and large-format digital displays.
+      - **Web Standard / Full HD (2048px Long Edge):** Ideal for WordPress blogs, websites, and cloud sharing.
+      - **Email / Compact (1024px Long Edge):** Lightweight files for fast messaging and email attachments.
+      - **Custom Dimension & Quality:** User-defined max width/height and JPEG compression quality (70%–100%).
+    - **Synthetic Linear EXIF Timestamp Option ("The Secret Sauce"):**
+      - Optional checkbox: *☑ „Synthesize linear EXIF timestamps (+10s per photo)“*.
+      - For platforms (such as certain web CMS plugins, Apple Shared Albums, or cloud viewers) that strictly sort by EXIF `DateTimeOriginal` rather than filename, RapidReady writes an incrementing timestamp ($t_{\text{base}} + i \times 10\,\text{seconds}$) into the copied files.
+      - Guarantees the narrative order remains 100% unbreakable across **both** filename-sorted and EXIF-date-sorted 3rd-party systems.
+
+---
+
 ### Milestone: High-Scale Cache Architecture (Large Archives & NAS Workflows)
 - [ ] **Persistent Local Disk Cache for Previews & Thumbnails (Lightroom & Picasa Model):**
   - **The Reference: Why was Google Picasa "Arrow-Fast" on Network Drives?**
@@ -352,6 +439,22 @@
             - On local storage: Moves entire folder to Trash (`trash::delete`).
             - On Network/NAS: Prompts with explicit **red warning triangle** alerting that files on network shares are permanently and irrevocably wiped without Trash support (`fs::remove_dir_all`).
           - State Cleanup: Removes all images under the deleted path from `libraryStore`, cleans `selectedPaths`, and gracefully steps `activeFolderPath` up to the parent directory.
+
+- [ ] **Harmonized Two-Stage Folder Tree Deletion & Guarded Settings Switches:**
+  - **Context & Goal:**
+    Currently, right-clicking on a folder tree node allows triggering recursive folder deletion directly from the context menu (subject to confirmation). In contrast, image deletion in RapidReady enforces a disciplined, two-stage methodology: images are first flagged for rejection (`X`), and only deleted in a second explicit step via the toolbar trash bin. Deleting entire folder hierarchies directly from a context menu poses high operational risk (especially on network/NAS shares without a Recycle Bin). This item harmonizes folder tree deletion with image deletion by introducing the same two-stage mark-and-delete paradigm, guarded by configurable settings switches.
+  - **The Two-Stage Folder Deletion Paradigm:**
+    - *Stage 1 (Mark / Stage for Deletion):* Right-clicking a folder presents an action to mark/stage the folder (and its contained photos) as rejected / scheduled for deletion (e.g., visual strikethrough or red danger badge on the tree node).
+    - *Stage 2 (Commit Deletion):* The existing trash bin button in the toolbar commits the deletion of both rejected photos and folders staged for deletion in one unified, transactional workflow.
+  - **Settings Configuration (`SettingsView.tsx`):**
+    - Add two new toggles in Settings under *Data Safety* / *File Operations*:
+      1. **Switch 1 (Master Guard):** *"Enable Folder Deletion in Context Menu"* (Controls whether any delete/mark-for-deletion action appears in the folder tree right-click context menu).
+         - *Default:* **OFF** (`false`).
+      2. **Switch 2 (Direct Mode Sub-Toggle):** *"Allow Direct Folder Deletion (Bypass Two-Stage Mark & Delete)"* (Only active when Switch 1 is enabled. When enabled, allows immediate direct deletion prompts from the context menu; when disabled, enforces the safe two-stage mark-then-delete workflow).
+         - *Default:* **OFF** (`false`).
+  - **Benefits & Safety Guarantees:**
+    - Establishes a consistent, uniform deletion methodology across both image assets and filesystem directories.
+    - Prevents accidental, catastrophic removal of multi-gigabyte folder trees by requiring conscious user opt-in in application settings.
 
 ---
 

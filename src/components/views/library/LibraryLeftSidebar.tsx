@@ -9,8 +9,11 @@ import { useDialogStore } from "../../../stores/dialogStore";
 import { useToastStore } from "../../../stores/toastStore";
 import { normalizePath, normalizeSlash } from "../../../utils/image";
 import { FolderContextMenu } from "./components/FolderContextMenu";
+import { LastImportContextMenu } from "./components/LastImportContextMenu";
 import { NewFolderModal } from "./components/NewFolderModal";
 import { RenameFolderModal } from "./components/RenameFolderModal";
+import { CollectionsTree } from "./components/CollectionsTree";
+import { useCollectionsStore, findAlbumById } from "../../../stores/collectionsStore";
 
 // Folder Tree node definition (folders only, no leaf file clutter)
 export type TreeNode = {
@@ -177,7 +180,8 @@ function TreeView({
   onFolderClick
 }: TreeViewProps) {
   const { t } = useTranslation('library');
-  const { activeImageFolder } = useLibraryStore();
+  const { activeImageFolder, isViewingLastImport } = useLibraryStore();
+  const activeCollectionId = useCollectionsStore((s) => s.activeCollectionId);
   const nodeRef = useRef<HTMLDivElement>(null);
   
   const isExplicitlySet = expandedMap[node.path] !== undefined;
@@ -186,8 +190,9 @@ function TreeView({
   const normNodePath = normalizePath(node.path);
   const normImageFolder = normalizePath(activeImageFolder);
 
-  const isDirectlySelected = selectedFolderPaths.has(normNodePath);
-  const isCollapsedAncestorOfSelected = !isOpen && ancestorFolderPaths.has(normNodePath);
+  const isCollectionOrImportActive = !!activeCollectionId || isViewingLastImport;
+  const isDirectlySelected = !isCollectionOrImportActive && selectedFolderPaths.has(normNodePath);
+  const isCollapsedAncestorOfSelected = !isCollectionOrImportActive && !isOpen && ancestorFolderPaths.has(normNodePath);
   const hasSelectedHighlight = isDirectlySelected || isCollapsedAncestorOfSelected;
 
   const isExactImageLocation = !!normImageFolder && normImageFolder === normNodePath;
@@ -197,7 +202,7 @@ function TreeView({
   // 1. The exact folder containing the photo (if reached), OR
   // 2. An ancestor folder IF that ancestor is currently collapsed (!isOpen),
   //    meaning the photo's actual subfolder is hidden inside it and bubbles up here!
-  const showsImageBadge = isExactImageLocation || (isAncestorOfImage && !isOpen);
+  const showsImageBadge = !isCollectionOrImportActive && (isExactImageLocation || (isAncestorOfImage && !isOpen));
 
   // Auto-expand tree branch leading to the active photo when navigating to a new photo / folder
   useEffect(() => {
@@ -327,6 +332,17 @@ export function LibraryLeftSidebar() {
   const isLoading = useLibraryStore((s) => s.isLoading);
   const loadArchive = useLibraryStore((s) => s.loadArchive);
 
+  const activeCollectionId = useCollectionsStore((s) => s.activeCollectionId);
+  const selectCollection = useCollectionsStore((s) => s.selectCollection);
+  const loadCollections = useCollectionsStore((s) => s.loadCollections);
+  const collectionsTree = useCollectionsStore((s) => s.collectionsTree);
+  const addToCollection = useCollectionsStore((s) => s.addToCollection);
+  const createCollection = useCollectionsStore((s) => s.createCollection);
+
+  useEffect(() => {
+    loadCollections();
+  }, [loadCollections]);
+
   const ancestorFolderPaths = useMemo<Set<string>>(() => {
     const ancestors = new Set<string>();
     if (!selectedFolderPaths || selectedFolderPaths.size === 0) return ancestors;
@@ -344,6 +360,7 @@ export function LibraryLeftSidebar() {
   }, [selectedFolderPaths]);
 
   const loadFolder = async (path: string) => {
+    selectCollection(null);
     setLastLibraryPath(path);
     await loadArchive(path, false);
   };
@@ -421,6 +438,43 @@ export function LibraryLeftSidebar() {
     path: string;
     name: string;
   } | null>(null);
+  const [lastImportMenu, setLastImportMenu] = useState<{ x: number; y: number } | null>(null);
+
+  const handleAddToCollectionFromLastImport = async (albumId: string) => {
+    try {
+      await addToCollection(albumId, lastImportPaths);
+      const album = findAlbumById(collectionsTree, albumId);
+      useToastStore.getState().showSuccess(
+        t('collections.addedCount', {
+          count: lastImportPaths.length,
+          name: album?.name || '',
+          defaultValue: `${lastImportPaths.length} Foto(s) zu „${album?.name || ''}“ hinzugefügt.`,
+        })
+      );
+    } catch (err) {
+      console.error('Failed to add last import to collection:', err);
+      useToastStore.getState().showError(String(err));
+    }
+  };
+
+  const handleCreateCollectionAndAddFromLastImport = async (name: string) => {
+    try {
+      const created = await createCollection(name, null, false);
+      if (created) {
+        await addToCollection(created.id, lastImportPaths);
+      }
+      useToastStore.getState().showSuccess(
+        t('collections.addedCount', {
+          count: lastImportPaths.length,
+          name,
+          defaultValue: `${lastImportPaths.length} Foto(s) zu „${name}“ hinzugefügt.`,
+        })
+      );
+    } catch (err) {
+      console.error('Failed to create collection and add last import:', err);
+      useToastStore.getState().showError(String(err));
+    }
+  };
 
   const handleToggleExpand = (path: string, nextState: boolean) => {
     setExpandedMap(prev => ({ ...prev, [path]: nextState }));
@@ -464,6 +518,8 @@ export function LibraryLeftSidebar() {
 
     if (!currentSelected || !currentSelected.has(normNode)) {
       // Right-clicked outside current selection -> select ONLY this folder and subtree
+      selectCollection(null);
+      setIsViewingLastImport(false);
       const subtree = collectAllFolderPaths(node);
       effectiveSelected = new Set(subtree);
       store.setSelectedFolderPaths(effectiveSelected);
@@ -574,6 +630,8 @@ export function LibraryLeftSidebar() {
   const lastClickedFolderRef = useRef<string | null>(null);
 
   const handleFolderClick = (e: React.MouseEvent, node: TreeNode) => {
+    selectCollection(null);
+    setIsViewingLastImport(false);
     const normNode = normalizePath(node.path);
     const subtreePaths = collectAllFolderPaths(node);
 
@@ -794,6 +852,7 @@ export function LibraryLeftSidebar() {
           const delSet = new Set(result.deleted);
           const remaining = allImages.filter(i => !delSet.has(i.path));
           useLibraryStore.getState().setImages(remaining);
+          useCollectionsStore.getState().pruneDeletedPaths(result.deleted);
         }
 
         if (result.failed.length > 0) {
@@ -1028,11 +1087,25 @@ export function LibraryLeftSidebar() {
             <Bookmark className="w-3.5 h-3.5" />{t("sidebar.collections")}</h2>
           <ChevronDown className={`w-3.5 h-3.5 text-txt-tertiary transition-transform ${!collectionsOpen ? "-rotate-90" : ""}`} />
         </div>
-        <div className={`p-2 space-y-1 border-b border-app-border ${!collectionsOpen ? "hidden" : ""}`}>
-          {lastImportPaths.length > 0 ? (
+        <div className={`p-2 space-y-1.5 border-b border-app-border max-h-72 overflow-y-auto ${!collectionsOpen ? "hidden" : ""}`}>
+          {lastImportPaths.length > 0 && (
             <button 
-              onClick={() => setIsViewingLastImport(true)}
-              className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer ${isViewingLastImport ? 'bg-accent/20 text-accent font-semibold' : 'text-txt-primary hover:bg-app-hover'}`}
+              onClick={() => {
+                if (isViewingLastImport && !activeCollectionId) {
+                  // Deselect last import, switch back to full tree
+                  setIsViewingLastImport(false);
+                  useLibraryStore.getState().setActiveFolderPath(rootPath || null);
+                } else {
+                  selectCollection(null);
+                  setIsViewingLastImport(true);
+                }
+              }}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setLastImportMenu({ x: e.clientX, y: e.clientY });
+              }}
+              className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer ${isViewingLastImport && !activeCollectionId ? 'bg-accent/20 text-accent font-semibold' : 'text-txt-primary hover:bg-app-hover'}`}
             >
               <div className="flex items-center gap-2 truncate">
                 <Sparkles className="w-3.5 h-3.5 text-accent flex-shrink-0" />
@@ -1040,11 +1113,21 @@ export function LibraryLeftSidebar() {
               </div>
               <span className="text-[10px] text-txt-tertiary flex-shrink-0">({lastImportPaths.length})</span>
             </button>
-          ) : (
-            <div className="px-2 py-1 text-xs text-txt-tertiary italic">
-              {t("sidebar.noCollections")}
-            </div>
           )}
+          <CollectionsTree
+            activeCollectionId={activeCollectionId}
+            onSelectCollection={(id, name) => {
+              setIsViewingLastImport(false);
+              selectCollection(id, name);
+              if (!id) {
+                useLibraryStore.getState().setActiveFolderPath(rootPath || null);
+                useLibraryStore.getState().setSelectedFolderPaths(new Set());
+              } else {
+                useLibraryStore.getState().setSelectedFolderPaths(new Set());
+                useLibraryStore.getState().setActiveFolderPath(null);
+              }
+            }}
+          />
         </div>
       </div>
 
@@ -1231,6 +1314,18 @@ export function LibraryLeftSidebar() {
           currentName={renameFolderModal.name}
           onClose={() => setRenameFolderModal(null)}
           onRename={(newName) => handleRenameFolder(renameFolderModal.path, newName)}
+        />
+      )}
+
+      {/* Last Import Context Menu */}
+      {lastImportMenu && (
+        <LastImportContextMenu
+          x={lastImportMenu.x}
+          y={lastImportMenu.y}
+          itemCount={lastImportPaths.length}
+          onClose={() => setLastImportMenu(null)}
+          onAddToCollection={handleAddToCollectionFromLastImport}
+          onCreateCollectionAndAdd={handleCreateCollectionAndAddFromLastImport}
         />
       )}
     </div>

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useLibraryStore, LibraryImage } from '../../../../stores/libraryStore';
 import { useLibraryUIStore } from '../../../../stores/libraryUIStore';
+import { useCollectionsStore } from '../../../../stores/collectionsStore';
 import { GridThumbnailItem } from './GridThumbnailItem';
 
 export interface LibraryGridProps {
@@ -14,6 +15,8 @@ export interface LibraryGridProps {
   onContextMenu: (e: React.MouseEvent, path: string, index: number) => void;
   onClearSelection?: () => void;
   viewMode?: 'grid' | 'loupe';
+  isCollectionMode?: boolean;
+  onReorderImages?: (sourcePath: string, targetPath: string, isAfter: boolean) => void;
 }
 
 export function computeMinimalScrollTop({
@@ -74,6 +77,8 @@ export const LibraryGrid = React.memo(function LibraryGrid({
   onContextMenu,
   onClearSelection,
   viewMode = 'grid',
+  isCollectionMode = false,
+  onReorderImages,
 }: LibraryGridProps) {
   const { t } = useTranslation('library');
   const gridThumbnailSize = useLibraryUIStore((s) => s.gridThumbnailSize);
@@ -81,6 +86,75 @@ export const LibraryGrid = React.memo(function LibraryGrid({
   const setGridScrollTop = useLibraryUIStore((s) => s.setGridScrollTop);
   const setGridColumns = useLibraryUIStore((s) => s.setGridColumns);
   const gridContainerRef = useRef<HTMLDivElement>(null);
+
+  // Drag and Drop reordering state (active only when in collection view)
+  const [dragOverPath, setDragOverPath] = useState<string | null>(null);
+  const [dropPosition, setDropPosition] = useState<'before' | 'after' | null>(null);
+  const dragSourcePathRef = useRef<string | null>(null);
+
+  const handleDragStart = (e: React.DragEvent, path: string) => {
+    const pathsToDrag = selectedPaths.has(path) && selectedPaths.size > 1
+      ? Array.from(selectedPaths)
+      : [path];
+
+    useCollectionsStore.getState().setDraggedPhotoPaths(pathsToDrag);
+    const json = JSON.stringify(pathsToDrag);
+    e.dataTransfer.setData('text/plain', json);
+    e.dataTransfer.setData('application/json', json);
+    e.dataTransfer.effectAllowed = 'copyMove';
+    dragSourcePathRef.current = path;
+  };
+
+  const handleDragOver = (e: React.DragEvent, path: string) => {
+    if (!isCollectionMode) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const isAfter = (e.clientX - rect.left) > (rect.width / 2);
+    const pos = isAfter ? 'after' : 'before';
+
+    if (dragOverPath !== path || dropPosition !== pos) {
+      setDragOverPath(path);
+      setDropPosition(pos);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent, path: string) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      if (dragOverPath === path) {
+        setDragOverPath(null);
+        setDropPosition(null);
+      }
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent, targetPath: string) => {
+    if (!isCollectionMode) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const isAfter = dropPosition ? dropPosition === 'after' : (e.clientX - rect.left) > (rect.width / 2);
+
+    const sourcePath = dragSourcePathRef.current || useCollectionsStore.getState().draggedPhotoPaths?.[0];
+
+    setDragOverPath(null);
+    setDropPosition(null);
+    dragSourcePathRef.current = null;
+    useCollectionsStore.getState().setDraggedPhotoPaths(null);
+
+    if (sourcePath && onReorderImages) {
+      onReorderImages(sourcePath, targetPath, isAfter);
+    }
+  };
+
+  const handleDragEnd = () => {
+    setDragOverPath(null);
+    setDropPosition(null);
+    dragSourcePathRef.current = null;
+    useCollectionsStore.getState().setDraggedPhotoPaths(null);
+  };
 
   // Dynamic Grid Math: responsive column count & precise row height
   const [containerWidth, setContainerWidth] = useState(() => {
@@ -132,9 +206,10 @@ export const LibraryGrid = React.memo(function LibraryGrid({
   const prevFolderKeyRef = useRef<string | null>(null);
   const activeFolderPath = useLibraryStore((s) => s.activeFolderPath);
   const isViewingLastImport = useLibraryStore((s) => s.isViewingLastImport);
+  const activeCollectionId = useCollectionsStore((s) => s.activeCollectionId);
 
   useEffect(() => {
-    const key = `${activeFolderPath}::${isViewingLastImport}`;
+    const key = `${activeFolderPath}::${isViewingLastImport}::${activeCollectionId}`;
     if (prevFolderKeyRef.current !== null && prevFolderKeyRef.current !== key) {
       if (gridContainerRef.current) {
         gridContainerRef.current.scrollTop = 0;
@@ -142,7 +217,7 @@ export const LibraryGrid = React.memo(function LibraryGrid({
       setGridScrollTop(0);
     }
     prevFolderKeyRef.current = key;
-  }, [activeFolderPath, isViewingLastImport, setGridScrollTop]);
+  }, [activeFolderPath, isViewingLastImport, activeCollectionId, setGridScrollTop]);
 
   // Adaptive overscan: High-density grids (>8 cols) use 1 row buffer (saves 30-60 offscreen images per stop)
   const adaptiveOverscan = numColumns > 8 ? 1 : 2;
@@ -302,8 +377,15 @@ export const LibraryGrid = React.memo(function LibraryGrid({
       }}
     >
       {displayedImages.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-full text-txt-tertiary text-sm">
-          {t('empty')}
+        <div className="flex flex-col items-center justify-center h-full text-txt-tertiary text-sm gap-2">
+          <div className="font-medium text-txt-secondary">
+            {isCollectionMode ? t('collections.emptyCollection', { defaultValue: 'Diese Sammlung ist leer.' }) : t('empty')}
+          </div>
+          {isCollectionMode && (
+            <div className="text-xs text-txt-tertiary text-center max-w-sm">
+              {t('collections.emptyCollectionHint', { defaultValue: 'Ziehe Fotos hierher oder in die Seitenleiste, um sie hinzuzufügen.' })}
+            </div>
+          )}
         </div>
       ) : (
         <div
@@ -339,6 +421,8 @@ export const LibraryGrid = React.memo(function LibraryGrid({
                   const globalIdx = startIndex + colIdx;
                   const isSelected = selectedPaths.has(img.path);
                   const isActive = isSelected && activeImageIndex === globalIdx;
+                  const isTarget = isCollectionMode && dragOverPath === img.path;
+
                   return (
                     <GridThumbnailItem
                       key={img.path}
@@ -357,6 +441,14 @@ export const LibraryGrid = React.memo(function LibraryGrid({
                         mouseSelectionTimeRef.current = Date.now();
                         onContextMenu(e, img.path, globalIdx);
                       }}
+                      draggable={true}
+                      onDragStart={(e) => handleDragStart(e, img.path)}
+                      onDragOver={(e) => handleDragOver(e, img.path)}
+                      onDragLeave={(e) => handleDragLeave(e, img.path)}
+                      onDrop={(e) => handleDrop(e, img.path)}
+                      onDragEnd={handleDragEnd}
+                      isDropTarget={isTarget}
+                      dropPosition={isTarget ? dropPosition : null}
                     />
                   );
                 })}

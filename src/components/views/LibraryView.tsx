@@ -3,6 +3,7 @@ import { LibraryLeftSidebar } from "./library/LibraryLeftSidebar";
 import { LibraryCenter } from "./library/LibraryCenter";
 import { LibraryInspector } from "./library/LibraryInspector";
 import { useLibraryUIStore } from "../../stores/libraryUIStore";
+import { ExportCollectionModal } from "./library/components/ExportCollectionModal";
 
 export function LibraryView() {
   const isInspectorOpen = useLibraryUIStore((s) => s.isInspectorOpen);
@@ -112,6 +113,7 @@ export function LibraryView() {
           </>
         )}
       </div>
+      <ExportCollectionModal />
     </div>
   );
 }

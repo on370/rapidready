@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { LibraryImage } from '../../../../stores/libraryStore';
+import { useLibraryStore, LibraryImage } from '../../../../stores/libraryStore';
+import { useCollectionsStore } from '../../../../stores/collectionsStore';
 
 interface UseLibraryShortcutsProps {
   activeImage: LibraryImage | undefined;
@@ -35,6 +36,10 @@ export function useLibraryShortcuts({
     const handleKeyDown = (e: KeyboardEvent) => {
       // Don't trigger shortcuts if an input/textarea is focused
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
+
+      // Don't trigger shortcuts if a modal dialog is currently open
+      if (useCollectionsStore.getState().isExportModalOpen) return;
+      if (document.querySelector('.fixed.inset-0, [data-context-menu]')) return;
       
       // Shortcut: Cmd/Ctrl + A -> Select All
       if ((e.metaKey || e.ctrlKey) && (e.key === 'a' || e.key === 'A')) {
@@ -157,9 +162,23 @@ export function useLibraryShortcuts({
             break;
           case 'g':
           case 'G':
-          case 'Escape':
             setViewMode('grid');
             e.preventDefault();
+            break;
+          case 'Escape':
+            e.preventDefault();
+            if (viewMode === 'loupe') {
+              setViewMode('grid');
+            } else {
+              // In grid view: deselect any selected collection, last import, or folder
+              // to return the grid view to showing all photos of the configured location
+              const libState = useLibraryStore.getState();
+              const colState = useCollectionsStore.getState();
+              colState.selectCollection(null, null);
+              libState.setIsViewingLastImport(false);
+              libState.setActiveFolderPath(libState.rootPath || null);
+              libState.setSelectedFolderPaths(new Set());
+            }
             break;
           case ' ':
             e.preventDefault();

@@ -1,18 +1,20 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { 
   Folder, AlertTriangle, AlertCircle, ChevronDown, 
-  Check, FolderSearch, Bookmark
+  Check, FolderSearch, Bookmark, X
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useImportStore } from '../../../../stores/importStore';
+import { useCollectionsStore, findAlbumById } from '../../../../stores/collectionsStore';
 import { useSettingsStore, ArchiveLocation } from '../../../../stores/settingsStore';
 import { normalizePath } from '../../../../utils/image';
 
 export const DestinationInfoBar = React.memo(function DestinationInfoBar() {
   const { t } = useTranslation('import');
-  const { destinationDirectory, setDestinationDirectory, selectedLocationId } = useImportStore();
-  const { locations, addRecentPath } = useSettingsStore();
+  const { destinationDirectory, setDestinationDirectory, selectedLocationId, targetCollectionId, newCollectionName } = useImportStore();
+  const { locations, addRecentPath, dismissDefaultPicturesWarning, setDismissDefaultPicturesWarning } = useSettingsStore();
+  const collectionsTree = useCollectionsStore((s) => s.collectionsTree);
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -41,11 +43,21 @@ export const DestinationInfoBar = React.memo(function DestinationInfoBar() {
     (l) => l.id === selectedLocationId || (destinationDirectory && normalizePath(l.path) === normalizePath(destinationDirectory))
   );
 
+  const targetCollectionName = useMemo(() => {
+    if (!targetCollectionId) return null;
+    if (targetCollectionId === '__new__') {
+      return newCollectionName.trim() || t('destination.collectionNew', 'Neues Album');
+    }
+    return findAlbumById(collectionsTree, targetCollectionId)?.name || null;
+  }, [targetCollectionId, newCollectionName, collectionsTree, t]);
+
   const isDefaultPictures = 
     activeLocation?.id === 'default-pictures' || 
     selectedLocationId === 'default-pictures' ||
     (destinationDirectory && destinationDirectory.toLowerCase().endsWith('/pictures')) ||
     (destinationDirectory && destinationDirectory.toLowerCase().endsWith('\\pictures'));
+
+  const isWarningActive = isDefaultPictures && !dismissDefaultPicturesWarning;
 
   const handleSelectLocation = (loc: ArchiveLocation) => {
     setDestinationDirectory(loc.path, loc.id, true);
@@ -79,7 +91,7 @@ export const DestinationInfoBar = React.memo(function DestinationInfoBar() {
       <div className={`flex items-center justify-between px-4 py-2.5 rounded-xl border transition-all duration-200 ${
         !destinationDirectory 
           ? 'bg-danger/10 border-danger/40 shadow-xs' 
-          : isDefaultPictures
+          : isWarningActive
             ? 'bg-warning/10 border-warning/40 shadow-xs'
             : 'bg-app-card border-app-border'
       }`}>
@@ -88,13 +100,13 @@ export const DestinationInfoBar = React.memo(function DestinationInfoBar() {
           <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
             !destinationDirectory
               ? 'bg-danger/20 text-danger'
-              : isDefaultPictures
+              : isWarningActive
                 ? 'bg-warning/20 text-warning'
                 : 'bg-accent/15 text-accent'
           }`}>
             {!destinationDirectory ? (
               <AlertCircle className="w-4 h-4" />
-            ) : isDefaultPictures ? (
+            ) : isWarningActive ? (
               <AlertTriangle className="w-4 h-4" />
             ) : (
               <Folder className="w-4 h-4" />
@@ -102,7 +114,7 @@ export const DestinationInfoBar = React.memo(function DestinationInfoBar() {
           </div>
 
           <div className="flex flex-col min-w-0 flex-1">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-semibold text-txt-secondary uppercase tracking-wider">
                 {t('preview.destinationLabel', 'Importziel:')}
               </span>
@@ -114,6 +126,14 @@ export const DestinationInfoBar = React.memo(function DestinationInfoBar() {
                 </span>
               )}
 
+              {/* Target Collection Badge */}
+              {targetCollectionName && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-accent/15 text-accent border border-accent/30">
+                  <Bookmark className="w-2.5 h-2.5" />
+                  <span>{t('preview.targetCollection', { defaultValue: 'Sammlung:' })} {targetCollectionName}</span>
+                </span>
+              )}
+
               {/* Warning/Notice Badges */}
               {!destinationDirectory && (
                 <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md bg-danger/20 text-danger border border-danger/30">
@@ -122,10 +142,21 @@ export const DestinationInfoBar = React.memo(function DestinationInfoBar() {
                 </span>
               )}
 
-              {destinationDirectory && isDefaultPictures && (
-                <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-warning/20 text-warning border border-warning/30">
-                  <AlertTriangle className="w-3 h-3" />
-                  {t('preview.defaultPicturesWarning', 'Standard-Bilderordner aktiv (Ziel prüfen)')}
+              {destinationDirectory && isWarningActive && (
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-md bg-warning/20 text-warning border border-warning/30">
+                  <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+                  <span>{t('preview.defaultPicturesWarning', 'Standard-Bilderordner aktiv (Ziel prüfen)')}</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDismissDefaultPicturesWarning(true);
+                    }}
+                    title={t('preview.dismissWarning', { defaultValue: 'Warnung dauerhaft ausblenden' })}
+                    className="p-0.5 ml-0.5 rounded hover:bg-warning/30 text-warning/80 hover:text-warning transition-colors cursor-pointer"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
                 </span>
               )}
             </div>
@@ -146,7 +177,7 @@ export const DestinationInfoBar = React.memo(function DestinationInfoBar() {
             className={`px-3 py-1.5 rounded-lg text-xs font-medium border flex items-center gap-1.5 transition-all duration-150 cursor-pointer shadow-xs ${
               !destinationDirectory 
                 ? 'bg-danger text-white border-danger hover:bg-danger/90'
-                : isDefaultPictures
+                : isWarningActive
                   ? 'bg-warning/20 text-warning border-warning/40 hover:bg-warning/30'
                   : 'bg-app-card border-app-border text-txt-secondary hover:text-txt-primary hover:bg-app-hover hover:border-app-border-hover'
             }`}

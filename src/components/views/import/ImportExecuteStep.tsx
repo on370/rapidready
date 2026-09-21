@@ -1,6 +1,6 @@
 import { 
   Download, File, Terminal, CheckCircle2, Folder, 
-  LayoutGrid, Rocket, RotateCcw, Zap
+  LayoutGrid, Rocket, RotateCcw, Zap, Bookmark
 } from "lucide-react";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
@@ -10,6 +10,7 @@ import { useImportStore } from '../../../stores/importStore';
 import { useLibraryStore, LibraryImage } from '../../../stores/libraryStore';
 import { useNavigationStore } from '../../../stores/navigationStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
+import { useCollectionsStore, findAlbumById } from '../../../stores/collectionsStore';
 import { useThroughput } from '../../../utils/throughput';
 
 interface ImportProgress {
@@ -31,6 +32,7 @@ export function ImportExecuteStep({ onReset }: ImportExecuteStepProps) {
   const [progress, setProgress] = useState<ImportProgress | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [importedPaths, setImportedPaths] = useState<string[]>([]);
+  const [assignedAlbum, setAssignedAlbum] = useState<{ id: string; name: string } | null>(null);
   const [isOpeningRapidRaw, setIsOpeningRapidRaw] = useState(false);
   
   const hasStarted = useRef(false);
@@ -82,7 +84,37 @@ export function ImportExecuteStep({ onReset }: ImportExecuteStepProps) {
           template: directoryTemplate
         });
         
-        setImportedPaths(resultPaths || []);
+        const imported = resultPaths || [];
+        setImportedPaths(imported);
+        if (imported.length > 0) {
+          setLastImportPaths(imported);
+        }
+
+        // Optional Collection Assignment
+        const { targetCollectionId, newCollectionName } = useImportStore.getState();
+        if (imported.length > 0) {
+          try {
+            if (targetCollectionId === '__new__' && newCollectionName.trim()) {
+              const name = newCollectionName.trim();
+              await useCollectionsStore.getState().createCollection(name, null, false);
+              const tree = useCollectionsStore.getState().collectionsTree;
+              const created = tree.find(i => i.type === 'album' && i.name === name);
+              if (created) {
+                await useCollectionsStore.getState().addToCollection(created.id, resultPaths);
+                setAssignedAlbum({ id: created.id, name: created.name });
+              }
+            } else if (targetCollectionId && targetCollectionId !== '__new__') {
+              await useCollectionsStore.getState().addToCollection(targetCollectionId, resultPaths);
+              const tree = useCollectionsStore.getState().collectionsTree;
+              const existing = findAlbumById(tree, targetCollectionId);
+              if (existing) {
+                setAssignedAlbum({ id: existing.id, name: existing.name });
+              }
+            }
+          } catch (collErr) {
+            console.error("Failed to assign imported files to collection:", collErr);
+          }
+        }
 
         setLogs(prev => {
             if (prev.length > 0 && prev[prev.length - 1].endsWith('...')) {
@@ -141,6 +173,27 @@ export function ImportExecuteStep({ onReset }: ImportExecuteStepProps) {
       }
       setActiveView('library');
     }
+  };
+
+  const handleGoToCollection = async () => {
+    if (destinationDirectory) {
+      setRootPath(destinationDirectory);
+      setLastImportPaths(importedPaths);
+      try {
+        const scanResult = await invoke<{ files: LibraryImage[]; directories: string[] }>('scan_archive_directory', { path: destinationDirectory });
+        const loadedImages: LibraryImage[] = scanResult.files || [];
+        if (scanResult.directories) {
+          useLibraryStore.getState().addDiscoveredFolders(scanResult.directories);
+        }
+        setImages(loadedImages);
+      } catch (e) {
+        console.error("Failed to scan library after import:", e);
+      }
+    }
+    if (assignedAlbum) {
+      useCollectionsStore.getState().selectCollection(assignedAlbum.id, assignedAlbum.name);
+    }
+    setActiveView('library');
   };
 
   const handleOpenInRapidRaw = async () => {
@@ -250,6 +303,20 @@ export function ImportExecuteStep({ onReset }: ImportExecuteStepProps) {
               <p className="text-xs text-txt-tertiary mt-1">{(t_bytes / (1024 * 1024 * 1024)).toFixed(2)} GB {t('execute.copied')}.</p>
             </div>
 
+            {/* Optional Collection Assignment Badge */}
+            {assignedAlbum && (
+              <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-accent/15 border border-accent/30 text-xs text-accent font-medium">
+                <Bookmark className="w-4 h-4" />
+                <span>
+                  {t('execute.collectionAssigned', {
+                    count: importedPaths.length,
+                    name: assignedAlbum.name,
+                    defaultValue: `${importedPaths.length} Fotos zu Sammlung „${assignedAlbum.name}“ hinzugefügt.`,
+                  })}
+                </span>
+              </div>
+            )}
+
             {/* Created Target Folders Card */}
             <div className="w-full bg-app-card border border-app-border rounded-xl p-5 space-y-3">
               <div className="flex items-center justify-between pb-2 border-b border-app-border">
@@ -285,14 +352,33 @@ export function ImportExecuteStep({ onReset }: ImportExecuteStepProps) {
             </div>
 
             {/* Primary Action Buttons */}
-            <div className="flex items-center gap-3 mt-2">
-              <button 
-                onClick={handleGoToLibrary}
-                className="px-6 py-2.5 bg-accent hover:bg-accent-hover text-app-deepest font-semibold text-sm rounded-lg transition-all duration-150 flex items-center gap-2 shadow-lg shadow-accent/20 cursor-pointer"
-              >
-                <LayoutGrid className="w-4 h-4" />
-                <span>{t('execute.goToLibrary')}</span>
-              </button>
+            <div className="flex items-center gap-3 mt-2 flex-wrap justify-center">
+              {assignedAlbum ? (
+                <>
+                  <button 
+                    onClick={handleGoToCollection}
+                    className="px-6 py-2.5 bg-accent hover:bg-accent-hover text-app-deepest font-semibold text-sm rounded-lg transition-all duration-150 flex items-center gap-2 shadow-lg shadow-accent/20 cursor-pointer"
+                  >
+                    <Bookmark className="w-4 h-4" />
+                    <span>{t('execute.goToCollection', { defaultValue: 'Sammlung öffnen' })}</span>
+                  </button>
+                  <button 
+                    onClick={handleGoToLibrary}
+                    className="px-5 py-2.5 bg-app-card border border-app-border hover:border-app-border-hover text-txt-primary hover:bg-app-hover text-sm font-medium rounded-lg transition-all duration-150 flex items-center gap-2 cursor-pointer"
+                  >
+                    <LayoutGrid className="w-4 h-4 text-accent" />
+                    <span>{t('execute.goToLibrary', { defaultValue: 'In Bibliothek anzeigen' })}</span>
+                  </button>
+                </>
+              ) : (
+                <button 
+                  onClick={handleGoToLibrary}
+                  className="px-6 py-2.5 bg-accent hover:bg-accent-hover text-app-deepest font-semibold text-sm rounded-lg transition-all duration-150 flex items-center gap-2 shadow-lg shadow-accent/20 cursor-pointer"
+                >
+                  <LayoutGrid className="w-4 h-4" />
+                  <span>{t('execute.goToLibrary')}</span>
+                </button>
+              )}
 
               <button 
                 onClick={handleOpenInRapidRaw}

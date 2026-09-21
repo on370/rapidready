@@ -34,8 +34,10 @@ interface SettingsState {
   checkForUpdates: boolean;
   includeBetaUpdates: boolean;
   dismissedUpdateVersion: string | null;
+  dismissDefaultPicturesWarning: boolean;
   
   setAutoDetect: (val: boolean) => void;
+  setDismissDefaultPicturesWarning: (val: boolean) => void;
   setVerifyCopy: (val: boolean) => void;
   setDeleteSource: (val: boolean) => void;
   setLaunchSystem: (val: boolean) => void;
@@ -98,6 +100,8 @@ export const useSettingsStore = create<SettingsState>()(
       })),
       setIncludeBetaUpdates: (includeBetaUpdates) => set({ includeBetaUpdates }),
       setDismissedUpdateVersion: (dismissedUpdateVersion) => set({ dismissedUpdateVersion }),
+      dismissDefaultPicturesWarning: false,
+      setDismissDefaultPicturesWarning: (dismissDefaultPicturesWarning) => set({ dismissDefaultPicturesWarning }),
       addLocation: (location) => set((state) => {
         if (state.locations.some(l => l.id === location.id || normalizePath(l.path) === normalizePath(location.path))) {
           return state;

@@ -65,7 +65,16 @@
     "tokensHint": "Click token to insert:",
     "preview": "Live Preview",
     "previewFiles": "files",
-    "collection": "Add to Collection"
+    "collection": "Add to Collection",
+    "collectionTitle": "Add to Collection / Album on Import",
+    "collectionNone": "None",
+    "collectionExisting": "Existing Album",
+    "collectionNew": "New Album",
+    "selectAlbumLabel": "Select album:",
+    "newAlbumLabel": "New album name:",
+    "newAlbumPlaceholder": "e.g. Vacation 2026",
+    "moreOptions": "More Settings",
+    "scrollDownHint": "Scroll down for more settings"
   },
   "preview": {
     "fileInspector": "File Inspector",
@@ -97,6 +106,8 @@
   },
   "execute": {
     "importing": "Importing Files",
+    "importingTitle": "Import in progress...",
+    "importingSubtitle": "Copying and structuring photos onto the destination storage",
     "copyingTo": "Copying to",
     "importLog": "Import Log",
     "importComplete": "Import Complete",
@@ -104,6 +115,9 @@
     "targetFolders": "Created Target Folders ({{count}}):",
     "copied": "copied",
     "goToLibrary": "Cull in Library",
+    "goToCollection": "Open Collection",
+    "collectionAssigned": "Added {{count}} photos to collection \"{{name}}\".",
+    "collectionAssigned_one": "Added 1 photo to collection \"{{name}}\".",
     "openInRapidRaw": "Open in RapidRaw",
     "newImport": "New Import",
     "noDestinationError": "ERROR: No destination directory selected.",

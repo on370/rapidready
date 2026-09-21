@@ -19,6 +19,7 @@ import { useSettingsStore } from "./stores/settingsStore";
 import { useUpdateStore } from "./stores/updateStore";
 import { useNavigationStore } from "./stores/navigationStore";
 import { CullingState, useLibraryStore, ArchiveScanProgress, ArchiveChunkPayload, LibraryImage } from "./stores/libraryStore";
+import { useCollectionsStore } from "./stores/collectionsStore";
 import "./App.css";
 
 function App() {
@@ -28,6 +29,7 @@ function App() {
 
   useEffect(() => {
     setActiveView(startupView);
+    useCollectionsStore.getState().selectCollection(null);
     invoke("show_main_window").catch(() => {});
   }, []);
 

@@ -14,6 +14,15 @@ export interface GridThumbnailItemProps {
   onClick: (e: React.MouseEvent) => void;
   onDoubleClick: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
+  draggable?: boolean;
+  onDragStart?: (e: React.DragEvent) => void;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDragEnter?: (e: React.DragEvent) => void;
+  onDragLeave?: (e: React.DragEvent) => void;
+  onDrop?: (e: React.DragEvent) => void;
+  onDragEnd?: (e: React.DragEvent) => void;
+  isDropTarget?: boolean;
+  dropPosition?: 'before' | 'after' | null;
 }
 
 export const GridThumbnailItem = React.memo(function GridThumbnailItem({
@@ -24,6 +33,15 @@ export const GridThumbnailItem = React.memo(function GridThumbnailItem({
   onClick,
   onDoubleClick,
   onContextMenu,
+  draggable = true,
+  onDragStart,
+  onDragOver,
+  onDragEnter,
+  onDragLeave,
+  onDrop,
+  onDragEnd,
+  isDropTarget = false,
+  dropPosition = null,
 }: GridThumbnailItemProps) {
   const isVideo = img.is_video ?? isVideoFilename(img.name);
   const isRaw = !isVideo && (img.is_raw ?? isRawFilename(img.name));
@@ -53,23 +71,38 @@ export const GridThumbnailItem = React.memo(function GridThumbnailItem({
 
   return (
     <div 
-      className={`aspect-[3/2] rounded-lg border cursor-pointer relative overflow-hidden bg-app-card group transition-colors ${
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragEnter={onDragEnter}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
+      className={`aspect-[3/2] rounded-lg border cursor-pointer relative overflow-hidden bg-app-card group transition-all select-none ${
         isSelected
           ? isActive 
             ? 'border-accent ring-2 ring-accent shadow-md shadow-accent/10' 
             : 'border-accent/80 ring-2 ring-accent/50 bg-accent/5' 
           : 'border-app-border hover:border-app-border-hover'
-      }`}
+      } ${isDropTarget ? 'ring-2 ring-accent/70 scale-[1.01]' : ''}`}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
       onContextMenu={onContextMenu}
     >
+      {/* Drop Indicators */}
+      {isDropTarget && dropPosition === 'before' && (
+        <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-accent z-30 rounded-r shadow-lg shadow-accent/50 pointer-events-none animate-pulse" />
+      )}
+      {isDropTarget && dropPosition === 'after' && (
+        <div className="absolute right-0 top-0 bottom-0 w-1.5 bg-accent z-30 rounded-l shadow-lg shadow-accent/50 pointer-events-none animate-pulse" />
+      )}
       {shouldLoad && (
         <img 
           ref={imgRef}
+          draggable={false}
           decoding="async"
           src={getRrImageUrl(img.path, false, img.culling?.orientation, scale)} 
-          className={`w-full h-full object-contain relative z-10 transition-opacity duration-150 ${isCached ? 'opacity-100' : 'opacity-0'}`} 
+          className={`w-full h-full object-contain relative z-10 transition-opacity duration-150 pointer-events-none ${isCached ? 'opacity-100' : 'opacity-0'}`} 
           alt={img.name} 
           onLoad={(e) => {
             loadedThumbnailCache.add(cacheKey);

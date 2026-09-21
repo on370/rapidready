@@ -20,6 +20,7 @@ pub fn run() {
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(commands::SidecarWatcherState::default())
         .manage(commands::ArchiveScanState::default())
+        .manage(commands::CollectionExportState::default())
         .setup(|app| {
             #[cfg(target_os = "macos")]
             {
@@ -242,7 +243,19 @@ pub fn run() {
             commands::toggle_maximize_window,
             commands::get_image_metadata,
             commands::get_default_pictures_dir,
-            commands::show_main_window
+            commands::show_main_window,
+            commands::get_collections,
+            commands::save_collections,
+            commands::add_to_collection,
+            commands::remove_from_collection,
+            commands::reorder_collection_images,
+            commands::create_collection_item,
+            commands::rename_collection_item,
+            commands::delete_collection_item,
+            commands::sort_collection_by_exif,
+            commands::prune_from_all_collections,
+            commands::export_collection,
+            commands::cancel_collection_export
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

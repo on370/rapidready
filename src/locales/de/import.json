@@ -65,7 +65,16 @@
     "tokensHint": "Klicke auf Token zum Einfügen:",
     "preview": "Live-Vorschau",
     "previewFiles": "Dateien",
-    "collection": "Zu Collection hinzufügen"
+    "collection": "Zu Collection hinzufügen",
+    "collectionTitle": "Beim Import zu Sammlung / Album hinzufügen",
+    "collectionNone": "Keine",
+    "collectionExisting": "Bestehendes Album",
+    "collectionNew": "Neues Album",
+    "selectAlbumLabel": "Album auswählen:",
+    "newAlbumLabel": "Name des neuen Albums:",
+    "newAlbumPlaceholder": "z. B. Urlaub 2026",
+    "moreOptions": "Weitere Einstellungen",
+    "scrollDownHint": "Nach unten scrollen (weitere Optionen)"
   },
   "preview": {
     "fileInspector": "Datei-Inspektor",
@@ -97,6 +106,8 @@
   },
   "execute": {
     "importing": "Dateien importieren",
+    "importingTitle": "Import läuft...",
+    "importingSubtitle": "Fotos werden strukturiert auf das Ziellaufwerk kopiert",
     "copyingTo": "Kopiere nach",
     "importLog": "Import-Protokoll",
     "importComplete": "Import abgeschlossen",
@@ -104,6 +115,9 @@
     "targetFolders": "Erstellte Zielverzeichnisse ({{count}}):",
     "copied": "kopiert",
     "goToLibrary": "In Library sichten",
+    "goToCollection": "Sammlung öffnen",
+    "collectionAssigned": "{{count}} Fotos zu Sammlung „{{name}}“ hinzugefügt.",
+    "collectionAssigned_one": "1 Foto zu Sammlung „{{name}}“ hinzugefügt.",
     "openInRapidRaw": "In RapidRaw öffnen",
     "newImport": "Neuer Import",
     "noDestinationError": "FEHLER: Kein Zielverzeichnis ausgewählt.",

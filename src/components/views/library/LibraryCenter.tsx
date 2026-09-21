@@ -15,6 +15,8 @@ import { useLibraryShortcuts } from "./hooks/useLibraryShortcuts";
 import { useLibraryUIStore } from "../../../stores/libraryUIStore";
 import { useToastStore } from "../../../stores/toastStore";
 import { useDialogStore } from "../../../stores/dialogStore";
+import { useCollectionsStore, findAlbumById } from "../../../stores/collectionsStore";
+import { FolderHeart, Download, ArrowDownAZ, X } from "lucide-react";
 
 interface LibraryCenterProps {
   viewMode?: 'grid' | 'loupe';
@@ -51,6 +53,20 @@ export function LibraryCenter({
     lastImportPaths, isViewingLastImport, rootPath,
   } = useLibraryStore();
 
+  const activeCollectionId = useCollectionsStore((s) => s.activeCollectionId);
+  const collectionsTree = useCollectionsStore((s) => s.collectionsTree);
+  const selectCollection = useCollectionsStore((s) => s.selectCollection);
+  const openExportModal = useCollectionsStore((s) => s.openExportModal);
+  const sortCollectionByExif = useCollectionsStore((s) => s.sortCollectionByExif);
+  const removeFromCollection = useCollectionsStore((s) => s.removeFromCollection);
+  const reorderImages = useCollectionsStore((s) => s.reorderImages);
+  const addToCollection = useCollectionsStore((s) => s.addToCollection);
+  const createCollection = useCollectionsStore((s) => s.createCollection);
+
+  const activeCollection = useMemo(() => {
+    return activeCollectionId ? findAlbumById(collectionsTree, activeCollectionId) : null;
+  }, [activeCollectionId, collectionsTree]);
+
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 
   const normLastImport = React.useMemo(() => {
@@ -66,6 +82,28 @@ export function LibraryCenter({
   }, [rootPath]);
 
   const scopedImages = React.useMemo(() => {
+    // When viewing an active collection, display collection images in their exact manual order!
+    if (activeCollectionId) {
+      if (!activeCollection) {
+        // Collection selected but tree is still loading or album not found:
+        // NEVER fall through to showing all library images! Return empty array while loading.
+        return [];
+      }
+      const imgMap = new Map<string, LibraryImage>();
+      for (const img of images) {
+        imgMap.set(normalizePath(img.path), img);
+      }
+      const list: LibraryImage[] = [];
+      for (const path of activeCollection.images) {
+        const norm = normalizePath(path);
+        const existing = imgMap.get(norm);
+        if (existing) {
+          list.push(existing);
+        }
+      }
+      return list;
+    }
+
     let list: LibraryImage[];
     if (isViewingLastImport) {
       list = images.filter(img => normLastImport.has(normalizePath(img.path)));
@@ -91,7 +129,7 @@ export function LibraryCenter({
 
     // Always guarantee alphabetical sorting by path so order is 100% deterministic!
     return list.slice().sort((a, b) => a.path.localeCompare(b.path));
-  }, [images, isViewingLastImport, normLastImport, selectedFolderPaths, normActiveFolder, normRoot]);
+  }, [activeCollectionId, activeCollection, images, isViewingLastImport, normLastImport, selectedFolderPaths, normActiveFolder, normRoot]);
 
   const displayedImages = React.useMemo(() => {
     return scopedImages.filter(img => {
@@ -147,10 +185,23 @@ export function LibraryCenter({
     return counts;
   }, [scopedImages]);
 
-  const activeImage = selectedPaths.size > 0 ? displayedImages[activeImageIndex] : undefined;
+  const activeImage = useMemo(() => {
+    if (selectedPaths.size === 0) return undefined;
+    const candidate = displayedImages[activeImageIndex];
+    if (candidate && selectedPaths.has(candidate.path)) {
+      return candidate;
+    }
+    const found = displayedImages.find(img => selectedPaths.has(img.path));
+    if (found) return found;
+    return images.find(img => selectedPaths.has(img.path));
+  }, [selectedPaths, displayedImages, activeImageIndex, images]);
 
   // Sync active photo folder with libraryStore so sidebar tree highlights and scrolls to location
   useEffect(() => {
+    if (activeCollectionId) {
+      // Don't hijack sidebar folder selection when browsing an album
+      return;
+    }
     if (activeImage?.path) {
       const norm = normalizePath(activeImage.path);
       const lastSlash = norm.lastIndexOf('/');
@@ -159,26 +210,33 @@ export function LibraryCenter({
     } else {
       useLibraryStore.getState().setActiveImageFolder(null);
     }
-  }, [activeImage?.path]);
+  }, [activeImage?.path, activeCollectionId]);
 
-  // When active folder or collection changes, always select and display the first image in the folder
+  // When active folder or collection changes, always select and display the first image in the folder/collection
   const prevFolderRef = useRef(activeFolderPath);
   const prevFoldersKeyRef = useRef('');
   const prevLastImportRef = useRef(isViewingLastImport);
+  const prevCollectionIdRef = useRef(activeCollectionId);
+  const prevCollectionReadyRef = useRef(!!activeCollection);
 
   const selectedFoldersKey = useMemo(() => {
     return Array.from(selectedFolderPaths || []).sort().join(';');
   }, [selectedFolderPaths]);
 
   useEffect(() => {
+    const collectionJustLoaded = !prevCollectionReadyRef.current && !!activeCollection;
     if (
       prevFolderRef.current !== activeFolderPath || 
       prevFoldersKeyRef.current !== selectedFoldersKey ||
-      prevLastImportRef.current !== isViewingLastImport
+      prevLastImportRef.current !== isViewingLastImport ||
+      prevCollectionIdRef.current !== activeCollectionId ||
+      collectionJustLoaded
     ) {
       prevFolderRef.current = activeFolderPath;
       prevFoldersKeyRef.current = selectedFoldersKey;
       prevLastImportRef.current = isViewingLastImport;
+      prevCollectionIdRef.current = activeCollectionId;
+      prevCollectionReadyRef.current = !!activeCollection;
       setGridScrollTop(0);
       
       const isPendingSelectAll = useLibraryStore.getState().pendingSelectAll;
@@ -196,7 +254,7 @@ export function LibraryCenter({
         setSelectedPaths(new Set());
       }
     }
-  }, [activeFolderPath, selectedFoldersKey, isViewingLastImport, displayedImages, setActiveImageIndex, setSelectedPaths, setGridScrollTop]);
+  }, [activeFolderPath, selectedFoldersKey, isViewingLastImport, activeCollectionId, activeCollection, displayedImages, setActiveImageIndex, setSelectedPaths, setGridScrollTop]);
 
   // Safeguard: keep activeImageIndex within valid range if displayedImages shrinks (e.g. filter change or deletes)
   useEffect(() => {
@@ -378,6 +436,7 @@ export function LibraryCenter({
           const rejectedPathSet = new Set(result.deleted);
           const remaining = images.filter(i => !rejectedPathSet.has(i.path));
           useLibraryStore.getState().setImages(remaining);
+          useCollectionsStore.getState().pruneDeletedPaths(result.deleted);
         }
 
         if (result.failed.length > 0) {
@@ -457,6 +516,168 @@ export function LibraryCenter({
     }
   }, [activeImageIndex, displayedImages, selectedPaths, selectRange, setSelectedPaths, setActiveImageIndex]);
 
+  const handleSortByExif = useCallback(async () => {
+    if (!activeCollection) return;
+    try {
+      await sortCollectionByExif(activeCollection.id);
+      useToastStore.getState().showSuccess(
+        t('collections.sortedByExifSuccess', { defaultValue: 'Sammlung nach EXIF-Aufnahmedatum sortiert.' }),
+        t('collections.sorted', { defaultValue: 'Sortiert' })
+      );
+    } catch (err) {
+      console.error('Failed to sort collection by EXIF:', err);
+      useToastStore.getState().showError(
+        String(err),
+        t('errors.sortFailed', { defaultValue: 'Sortierung fehlgeschlagen' })
+      );
+    }
+  }, [activeCollection, sortCollectionByExif, t]);
+
+  const handleRemoveFromCollection = useCallback(async (albumId: string, matchCount?: number, totalSelected?: number) => {
+    const targetPaths = selectedPaths.size > 0
+      ? Array.from(selectedPaths)
+      : (activeImage ? [activeImage.path] : []);
+
+    if (targetPaths.length === 0) return;
+
+    try {
+      await removeFromCollection(albumId, targetPaths);
+      const targetAlbum = findAlbumById(collectionsTree, albumId);
+      const albumName = targetAlbum?.name || 'Sammlung';
+
+      const total = totalSelected ?? targetPaths.length;
+      const count = matchCount ?? targetPaths.length;
+
+      if (total > 1 && count < total) {
+        useToastStore.getState().showSuccess(
+          t('collections.removedPartialFromAlbum', {
+            count,
+            total,
+            notIn: total - count,
+            name: albumName,
+            defaultValue: `${count} von ${total} ausgewählten Fotos aus „${albumName}“ entfernt (${total - count} Foto(s) nicht enthalten).`,
+          })
+        );
+      } else {
+        useToastStore.getState().showSuccess(
+          t('collections.removedCountFromAlbum', {
+            count,
+            name: albumName,
+            defaultValue: `${count} Foto(s) aus „${albumName}“ entfernt.`,
+          })
+        );
+      }
+    } catch (err) {
+      console.error('Failed to remove from collection:', err);
+      useToastStore.getState().showError(String(err));
+    }
+  }, [selectedPaths, activeImage, removeFromCollection, collectionsTree, t]);
+
+  const handleRemoveFromAllCollections = useCallback(async (albumIds: string[]) => {
+    const targetPaths = selectedPaths.size > 0
+      ? Array.from(selectedPaths)
+      : (activeImage ? [activeImage.path] : []);
+
+    if (targetPaths.length === 0 || albumIds.length === 0) return;
+
+    try {
+      for (const id of albumIds) {
+        await removeFromCollection(id, targetPaths);
+      }
+      useToastStore.getState().showSuccess(
+        t('collections.removedFromAllCount', {
+          count: targetPaths.length,
+          albumCount: albumIds.length,
+          defaultValue: `${targetPaths.length} Foto(s) aus allen ${albumIds.length} Sammlungen entfernt.`,
+        })
+      );
+    } catch (err) {
+      console.error('Failed to remove from all collections:', err);
+      useToastStore.getState().showError(String(err));
+    }
+  }, [selectedPaths, activeImage, removeFromCollection, t]);
+
+  const handleReorderInCollection = useCallback(async (sourcePath: string, targetPath: string, isAfter: boolean) => {
+    if (!activeCollection) return;
+    const normSource = normalizePath(sourcePath);
+    const normTarget = normalizePath(targetPath);
+    if (normSource === normTarget) return;
+
+    const currentImages = [...activeCollection.images];
+    const normSelected = new Set(Array.from(selectedPaths).map(p => normalizePath(p)));
+
+    // Find moving items based on normalized paths, but keep original strings from activeCollection.images
+    const movingNormalized = normSelected.has(normSource) && normSelected.size > 1
+      ? normSelected
+      : new Set([normSource]);
+
+    if (movingNormalized.has(normTarget)) return;
+
+    const movingItems = currentImages.filter(p => movingNormalized.has(normalizePath(p)));
+    const remaining = currentImages.filter(p => !movingNormalized.has(normalizePath(p)));
+
+    let insertIdx = remaining.findIndex(p => normalizePath(p) === normTarget);
+    if (insertIdx === -1) {
+      insertIdx = remaining.length;
+    } else if (isAfter) {
+      insertIdx += 1;
+    }
+
+    remaining.splice(insertIdx, 0, ...movingItems);
+    await reorderImages(activeCollection.id, remaining);
+  }, [activeCollection, selectedPaths, reorderImages]);
+
+  const handleAddToCollection = useCallback(async (albumId: string) => {
+    const targetPaths = selectedPaths.size > 0
+      ? Array.from(selectedPaths)
+      : (activeImage ? [activeImage.path] : []);
+
+    if (targetPaths.length === 0) return;
+
+    try {
+      await addToCollection(albumId, targetPaths);
+      const targetAlbum = findAlbumById(collectionsTree, albumId);
+      const albumName = targetAlbum?.name || 'Sammlung';
+      useToastStore.getState().showSuccess(
+        t('collections.addedToCollection', {
+          count: targetPaths.length,
+          name: albumName,
+          defaultValue: `${targetPaths.length} Foto(s) zu "${albumName}" hinzugefügt.`,
+        })
+      );
+    } catch (err) {
+      console.error('Failed to add to collection:', err);
+      useToastStore.getState().showError(String(err));
+    }
+  }, [selectedPaths, activeImage, addToCollection, collectionsTree, t]);
+
+  const handleCreateCollectionAndAdd = useCallback(async (name: string) => {
+    const targetPaths = selectedPaths.size > 0
+      ? Array.from(selectedPaths)
+      : (activeImage ? [activeImage.path] : []);
+
+    if (!name.trim()) return;
+
+    try {
+      await createCollection(name.trim(), null, false);
+      const updatedTree = useCollectionsStore.getState().collectionsTree;
+      const created = updatedTree.find(item => item.type === 'album' && item.name === name.trim());
+      if (created && targetPaths.length > 0) {
+        await addToCollection(created.id, targetPaths);
+      }
+      useToastStore.getState().showSuccess(
+        t('collections.createdAndAdded', {
+          count: targetPaths.length,
+          name: name.trim(),
+          defaultValue: `Sammlung "${name.trim()}" erstellt und ${targetPaths.length} Foto(s) hinzugefügt.`,
+        })
+      );
+    } catch (err) {
+      console.error('Failed to create collection and add:', err);
+      useToastStore.getState().showError(String(err));
+    }
+  }, [selectedPaths, activeImage, createCollection, addToCollection, t]);
+
   const handleContextMenu = useCallback((e: React.MouseEvent, path: string, index: number) => {
     e.preventDefault();
     e.stopPropagation();
@@ -503,6 +724,61 @@ export function LibraryCenter({
         toggleInspector={toggleInspector}
       />
 
+      {/* Active Collection Header Banner */}
+      {activeCollection && (
+        <div className="bg-[#18181c] border-b border-app-border px-6 py-2 flex items-center justify-between z-20 flex-shrink-0 animate-in fade-in slide-in-from-top-1 duration-150">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-7 h-7 rounded-lg bg-accent/15 border border-accent/30 flex items-center justify-center flex-shrink-0">
+              <FolderHeart className="w-4 h-4 text-accent" />
+            </div>
+            <div className="flex items-baseline gap-2 truncate">
+              <h2 className="text-sm font-semibold text-txt-primary truncate">
+                {activeCollection.name}
+              </h2>
+              <span className="text-xs text-txt-tertiary font-medium">
+                {t('collections.photoCount', {
+                  count: activeCollection.images.length,
+                  defaultValue: `${activeCollection.images.length} Fotos`,
+                })}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleSortByExif}
+              title={t('collections.sortExifTooltip', { defaultValue: 'Reihenfolge nach EXIF-Aufnahmedatum (Älteste zuerst) sortieren' })}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium bg-app-panel hover:bg-app-hover border border-app-border text-txt-secondary hover:text-txt-primary transition-all cursor-pointer shadow-xs active:scale-98"
+            >
+              <ArrowDownAZ className="w-3.5 h-3.5 text-accent" />
+              <span>{t('collections.sortByExif', { defaultValue: 'Nach EXIF vorsortieren' })}</span>
+            </button>
+
+            <button
+              onClick={() => openExportModal(activeCollection)}
+              title={t('collections.exportTooltip', { defaultValue: 'Fotos aus dieser Sammlung exportieren (z. B. für Fotobuch oder als 1:1 Kopie)' })}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-accent hover:bg-accent/90 text-white transition-all cursor-pointer shadow-sm active:scale-98"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>{t('collections.export', { defaultValue: 'Export...' })}</span>
+            </button>
+
+            <div className="w-px h-4 bg-app-border mx-1" />
+
+            <button
+              onClick={() => {
+                selectCollection(null);
+                useLibraryStore.getState().setActiveFolderPath(rootPath || null);
+              }}
+              title={t('collections.closeView', { defaultValue: 'Sammlung schließen' })}
+              className="p-1.5 rounded-md text-txt-tertiary hover:text-txt-primary hover:bg-app-hover transition-colors cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Content Area */}
       <div className="flex-1 relative min-h-0 min-w-0 overflow-hidden z-0">
         {/* LibraryGrid: kept mounted at all times to preserve DOM layout and scroll state */}
@@ -521,6 +797,8 @@ export function LibraryCenter({
             onContextMenu={handleContextMenu}
             onClearSelection={() => setSelectedPaths(new Set())}
             viewMode={viewMode}
+            isCollectionMode={!!activeCollection}
+            onReorderImages={activeCollection ? handleReorderInCollection : undefined}
           />
         </div>
 
@@ -547,6 +825,7 @@ export function LibraryCenter({
           x={contextMenu.x}
           y={contextMenu.y}
           selectedCount={selectedPaths.has(activeImage?.path || '') && selectedPaths.size > 1 ? selectedPaths.size : 1}
+          targetPaths={selectedPaths.size > 0 ? Array.from(selectedPaths) : (activeImage ? [activeImage.path] : [])}
           currentRating={activeImage?.culling?.rating || 0}
           currentColor={activeImage?.culling?.color || null}
           onClose={() => setContextMenu(null)}
@@ -559,6 +838,10 @@ export function LibraryCenter({
           onShowInFinder={() => {
             if (activeImage) invoke('show_in_finder', { path: activeImage.path });
           }}
+          onRemoveFromCollection={handleRemoveFromCollection}
+          onRemoveFromAllCollections={handleRemoveFromAllCollections}
+          onAddToCollection={handleAddToCollection}
+          onCreateCollectionAndAdd={handleCreateCollectionAndAdd}
           zoomOptions={viewMode === 'loupe' ? {
             currentScale: loupeScale,
             onSetScale: (scale: number) => setLoupeScale(scale),

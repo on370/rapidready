@@ -1,10 +1,25 @@
 use rapidready_core::scanner::{scan_directory, ScannedFile};
 use rapidready_core::importer::{execute_import as core_execute_import, ImportProgress};
 use rapidready_core::import_index::ImportIndex;
+use rapidready_core::collections::{
+    AlbumItem, load_collections as core_load_collections,
+    save_collections as core_save_collections, add_to_collection as core_add_to_collection,
+    remove_from_collection as core_remove_from_collection,
+    reorder_collection_images as core_reorder_collection_images,
+    create_collection_item as core_create_collection_item,
+    rename_collection_item as core_rename_collection_item,
+    delete_collection_item as core_delete_collection_item,
+    sort_collection_by_exif as core_sort_collection_by_exif,
+    prune_paths_from_all_collections as core_prune_paths_from_all_collections,
+    prune_folder_from_all_collections as core_prune_folder_from_all_collections,
+};
+use rapidready_core::collection_export::{
+    CollectionExportOptions, run_collection_export,
+};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use tauri::{AppHandle, Emitter, Manager};
 use notify::{Watcher, RecommendedWatcher};
 
@@ -578,6 +593,16 @@ pub struct DeleteFilesResult {
 
 #[tauri::command]
 pub async fn delete_files(
+    app: AppHandle,
+    paths: Vec<String>,
+    to_trash: bool,
+    archive_root: Option<String>,
+) -> Result<DeleteFilesResult, String> {
+    delete_files_impl(Some(&app), paths, to_trash, archive_root).await
+}
+
+pub async fn delete_files_impl(
+    app: Option<&AppHandle>,
     paths: Vec<String>,
     to_trash: bool,
     archive_root: Option<String>,
@@ -624,7 +649,7 @@ pub async fn delete_files(
 
         match delete_res {
             Ok(_) => {
-                deleted.push(p);
+                deleted.push(p.clone());
 
                 // Also delete sidecar file if present
                 let sidecar = rapidready_core::culling::get_sidecar_path(&path);
@@ -642,11 +667,34 @@ pub async fn delete_files(
         }
     }
 
+    // Automatically prune successfully deleted files from all collections
+    if !deleted.is_empty() {
+        if let Some(app) = app {
+            if let Ok(app_dir) = app.path().app_data_dir() {
+                if let Ok(mut tree) = core_load_collections(&app_dir) {
+                    if core_prune_paths_from_all_collections(&mut tree, &deleted) {
+                        let _ = core_save_collections(tree, &app_dir);
+                    }
+                }
+            }
+        }
+    }
+
     Ok(DeleteFilesResult { deleted, failed })
 }
 
 #[tauri::command]
 pub async fn delete_folder(
+    app: AppHandle,
+    path: String,
+    to_trash: bool,
+    archive_root: String,
+) -> Result<(), String> {
+    delete_folder_impl(Some(&app), path, to_trash, archive_root).await
+}
+
+pub async fn delete_folder_impl(
+    app: Option<&AppHandle>,
     path: String,
     to_trash: bool,
     archive_root: String,
@@ -685,11 +733,24 @@ pub async fn delete_folder(
             std::fs::remove_dir_all(&folder_path).map_err(|e| format!("Failed to permanently delete folder: {}", e))?;
         }
     }
+
+    // Prune deleted folder from all collections
+    if let Some(app) = app {
+        if let Ok(app_dir) = app.path().app_data_dir() {
+            if let Ok(mut tree) = core_load_collections(&app_dir) {
+                if core_prune_folder_from_all_collections(&mut tree, &path) {
+                    let _ = core_save_collections(tree, &app_dir);
+                }
+            }
+        }
+    }
+
     Ok(())
 }
 
 #[tauri::command]
 pub async fn delete_folders(
+    app: AppHandle,
     paths: Vec<String>,
     to_trash: bool,
     archive_root: String,
@@ -725,7 +786,38 @@ pub async fn delete_folders(
         }
         deleted.push(path_str);
     }
+
+    // Prune deleted folders from all collections
+    if !deleted.is_empty() {
+        if let Ok(app_dir) = app.path().app_data_dir() {
+            if let Ok(mut tree) = core_load_collections(&app_dir) {
+                let mut modified = false;
+                for p in &deleted {
+                    if core_prune_folder_from_all_collections(&mut tree, p) {
+                        modified = true;
+                    }
+                }
+                if modified {
+                    let _ = core_save_collections(tree, &app_dir);
+                }
+            }
+        }
+    }
+
     Ok(deleted)
+}
+
+#[tauri::command]
+pub async fn prune_from_all_collections(
+    app: AppHandle,
+    paths: Vec<String>,
+) -> Result<Vec<AlbumItem>, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let mut tree = core_load_collections(&app_dir)?;
+    if core_prune_paths_from_all_collections(&mut tree, &paths) {
+        core_save_collections(tree.clone(), &app_dir)?;
+    }
+    Ok(tree)
 }
 
 #[tauri::command]
@@ -1124,6 +1216,153 @@ pub async fn set_gps_batch(
     .map_err(|e| e.to_string())?
 }
 
+#[derive(Default)]
+pub struct CollectionExportState(pub Arc<AtomicBool>);
+
+#[tauri::command]
+pub async fn get_collections(app: AppHandle) -> Result<Vec<AlbumItem>, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    core_load_collections(&app_dir)
+}
+
+#[tauri::command]
+pub async fn save_collections(app: AppHandle, tree: Vec<AlbumItem>) -> Result<(), String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    core_save_collections(tree, &app_dir)
+}
+
+#[tauri::command]
+pub async fn add_to_collection(app: AppHandle, album_id: String, paths: Vec<String>) -> Result<Vec<AlbumItem>, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let mut tree = core_load_collections(&app_dir)?;
+    if core_add_to_collection(&mut tree, &album_id, &paths) {
+        core_save_collections(tree.clone(), &app_dir)?;
+    }
+    Ok(tree)
+}
+
+#[tauri::command]
+pub async fn remove_from_collection(app: AppHandle, album_id: String, paths: Vec<String>) -> Result<Vec<AlbumItem>, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let mut tree = core_load_collections(&app_dir)?;
+    if core_remove_from_collection(&mut tree, &album_id, &paths) {
+        core_save_collections(tree.clone(), &app_dir)?;
+    }
+    Ok(tree)
+}
+
+#[tauri::command]
+pub async fn reorder_collection_images(app: AppHandle, album_id: String, new_order: Vec<String>) -> Result<Vec<AlbumItem>, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let mut tree = core_load_collections(&app_dir)?;
+    if core_reorder_collection_images(&mut tree, &album_id, &new_order) {
+        core_save_collections(tree.clone(), &app_dir)?;
+    }
+    Ok(tree)
+}
+
+#[tauri::command]
+pub async fn create_collection_item(
+    app: AppHandle,
+    parent_id: Option<String>,
+    name: String,
+    is_group: bool,
+    icon: Option<String>,
+) -> Result<Vec<AlbumItem>, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let mut tree = core_load_collections(&app_dir)?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let id = format!("album-{}", now);
+    let new_item = if is_group {
+        AlbumItem::Group { id, name, icon, children: Vec::new() }
+    } else {
+        AlbumItem::Album { id, name, icon, images: Vec::new() }
+    };
+    core_create_collection_item(&mut tree, parent_id.as_deref(), new_item);
+    core_save_collections(tree.clone(), &app_dir)?;
+    Ok(tree)
+}
+
+#[tauri::command]
+pub async fn rename_collection_item(app: AppHandle, target_id: String, new_name: String) -> Result<Vec<AlbumItem>, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let mut tree = core_load_collections(&app_dir)?;
+    if core_rename_collection_item(&mut tree, &target_id, &new_name) {
+        core_save_collections(tree.clone(), &app_dir)?;
+    }
+    Ok(tree)
+}
+
+#[tauri::command]
+pub async fn delete_collection_item(app: AppHandle, target_id: String) -> Result<Vec<AlbumItem>, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let mut tree = core_load_collections(&app_dir)?;
+    if core_delete_collection_item(&mut tree, &target_id) {
+        core_save_collections(tree.clone(), &app_dir)?;
+    }
+    Ok(tree)
+}
+
+#[tauri::command]
+pub async fn sort_collection_by_exif(app: AppHandle, target_id: String) -> Result<Vec<AlbumItem>, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let mut tree = core_load_collections(&app_dir)?;
+    if core_sort_collection_by_exif(&mut tree, &target_id) {
+        core_save_collections(tree.clone(), &app_dir)?;
+    }
+    Ok(tree)
+}
+
+#[tauri::command]
+pub async fn export_collection(
+    app: AppHandle,
+    state: tauri::State<'_, CollectionExportState>,
+    options: CollectionExportOptions,
+) -> Result<usize, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let tree = core_load_collections(&app_dir)?;
+
+    fn find_album_images(items: &[AlbumItem], target_id: &str) -> Option<Vec<String>> {
+        for item in items {
+            match item {
+                AlbumItem::Album { id, images, .. } if id == target_id => return Some(images.clone()),
+                AlbumItem::Group { children, .. } => {
+                    if let Some(imgs) = find_album_images(children, target_id) {
+                        return Some(imgs);
+                    }
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+
+    let images = find_album_images(&tree, &options.album_id)
+        .ok_or_else(|| format!("Collection with id '{}' not found", options.album_id))?;
+
+    state.0.store(false, Ordering::Relaxed);
+    let is_cancelled = Arc::clone(&state.0);
+    let app_clone = app.clone();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        run_collection_export(&images, &options, is_cancelled, move |progress| {
+            let _ = app_clone.emit("collection-export-progress", progress);
+        })
+        .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| format!("Export task join error: {}", e))?
+}
+
+#[tauri::command]
+pub fn cancel_collection_export(state: tauri::State<'_, CollectionExportState>) -> Result<(), String> {
+    state.0.store(true, Ordering::Relaxed);
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1201,17 +1440,17 @@ mod tests {
             let sub_str = temp_dir.join("subfolder").to_string_lossy().to_string();
 
             // 1. Refuse deleting root itself
-            let err_root = delete_folder(root_str.clone(), true, root_str.clone()).await;
+            let err_root = delete_folder_impl(None, root_str.clone(), true, root_str.clone()).await;
             assert!(err_root.is_err());
             assert!(err_root.unwrap_err().contains("not inside the active archive root"));
 
             // 2. Refuse deleting outside root
             let outside = std::env::temp_dir().to_string_lossy().to_string();
-            let err_outside = delete_folder(outside, true, root_str.clone()).await;
+            let err_outside = delete_folder_impl(None, outside, true, root_str.clone()).await;
             assert!(err_outside.is_err());
 
             // 3. Deleting valid subfolder with to_trash: false on local storage triggers safety override without error
-            let ok_sub = delete_folder(sub_str.clone(), false, root_str.clone()).await;
+            let ok_sub = delete_folder_impl(None, sub_str.clone(), false, root_str.clone()).await;
             assert!(ok_sub.is_ok());
             assert!(!Path::new(&sub_str).exists());
 
@@ -1233,13 +1472,13 @@ mod tests {
             let subdir_str = temp_dir.join("subdir").to_string_lossy().to_string();
 
             // 1. delete_files must reject directories
-            let res_dir = delete_files(vec![subdir_str], false, Some(root_str.clone())).await.unwrap();
+            let res_dir = delete_files_impl(None, vec![subdir_str], false, Some(root_str.clone())).await.unwrap();
             assert_eq!(res_dir.deleted.len(), 0);
             assert_eq!(res_dir.failed.len(), 1);
             assert!(res_dir.failed[0].1.contains("directory"));
 
             // 2. delete_files on local path with to_trash: false safely deletes file and sidecar via safety override
-            let res_photo = delete_files(vec![photo_str.clone()], false, Some(root_str.clone())).await.unwrap();
+            let res_photo = delete_files_impl(None, vec![photo_str.clone()], false, Some(root_str.clone())).await.unwrap();
             assert_eq!(res_photo.deleted.len(), 1);
             assert_eq!(res_photo.failed.len(), 0);
             assert!(!Path::new(&photo_str).exists());

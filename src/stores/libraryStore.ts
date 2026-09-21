@@ -140,6 +140,17 @@ const getSavedThumbSize = (): number => {
   return 190;
 };
 
+const getSavedLastImport = (): string[] => {
+  try {
+    const saved = localStorage.getItem('rapidready_last_import');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (_) {}
+  return [];
+};
+
 let nextScanCounter = 1;
 
 export const useLibraryStore = create<LibraryStore>((set, get) => ({
@@ -366,30 +377,30 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
   setPendingSelectAll: (val) => set({ pendingSelectAll: val }),
   setActiveFolderPath: (path) => {
     const norm = path ? normalizePath(path) : null;
-    set({
+    set((state) => ({
       activeFolderPath: path,
       selectedFolderPaths: norm ? new Set([norm]) : new Set(),
-      isViewingLastImport: false,
+      isViewingLastImport: path ? false : state.isViewingLastImport,
       activeImageIndex: 0,
       selectedPaths: new Set(),
       selectedRatingFilter: null,
       selectedColorFilter: null,
       selectedTagFilter: null,
-    });
+    }));
   },
   setSelectedFolderPaths: (paths) => {
     const normPaths = new Set(Array.from(paths).map(p => normalizePath(p)));
     const first = normPaths.size > 0 ? Array.from(normPaths)[0] : null;
-    set({
+    set((state) => ({
       selectedFolderPaths: normPaths,
       activeFolderPath: first,
-      isViewingLastImport: false,
+      isViewingLastImport: normPaths.size > 0 ? false : state.isViewingLastImport,
       activeImageIndex: 0,
       selectedPaths: new Set(),
       selectedRatingFilter: null,
       selectedColorFilter: null,
       selectedTagFilter: null,
-    });
+    }));
   },
   setActiveImageIndex: (index) => set({ activeImageIndex: index }),
   selectAllInFolder: (folderPath, allFolderPaths) => {
@@ -634,10 +645,24 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
     set({ viewMode: mode });
   },
   
-  lastImportPaths: [],
+  lastImportPaths: getSavedLastImport(),
   isViewingLastImport: false,
-  setIsViewingLastImport: (viewing) => set({ isViewingLastImport: viewing, activeFolderPath: null, activeImageIndex: 0, selectedPaths: new Set(), selectedRatingFilter: null, selectedColorFilter: null, selectedTagFilter: null }),
-  setLastImportPaths: (paths) => set({ lastImportPaths: paths }),
+  setIsViewingLastImport: (viewing) => set({
+    isViewingLastImport: viewing,
+    activeFolderPath: null,
+    selectedFolderPaths: new Set(),
+    activeImageIndex: 0,
+    selectedPaths: new Set(),
+    selectedRatingFilter: null,
+    selectedColorFilter: null,
+    selectedTagFilter: null
+  }),
+  setLastImportPaths: (paths) => {
+    try {
+      localStorage.setItem('rapidready_last_import', JSON.stringify(paths));
+    } catch (_) {}
+    set({ lastImportPaths: paths });
+  },
   
   filterMode: 'all',
   setFilterMode: (mode) => set({ filterMode: mode }),

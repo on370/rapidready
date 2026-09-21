@@ -13,6 +13,7 @@ import { COLOR_PALETTE } from "../../../constants/culling";
 import { useToastStore } from "../../../stores/toastStore";
 import { useSettingsStore } from "../../../stores/settingsStore";
 import { parseCoordinates, formatDms, formatDd, ParseGpsResult } from "../../../utils/geo";
+import { useCollectionsStore, findAlbumById } from "../../../stores/collectionsStore";
 
 interface LibraryInspectorProps {
   close: () => void;
@@ -27,6 +28,12 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
     lastImportPaths, isViewingLastImport, rootPath 
   } = useLibraryStore();
   const gpsMapProvider = useSettingsStore((s) => s.gpsMapProvider);
+
+  const activeCollectionId = useCollectionsStore((s) => s.activeCollectionId);
+  const collectionsTree = useCollectionsStore((s) => s.collectionsTree);
+  const activeCollection = useMemo(() => {
+    return activeCollectionId ? findAlbumById(collectionsTree, activeCollectionId) : null;
+  }, [activeCollectionId, collectionsTree]);
 
   const [tagInput, setTagInput] = useState('');
   const [isSuggestOpen, setIsSuggestOpen] = useState(false);
@@ -80,6 +87,26 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
   }, [rootPath]);
 
   const scopedImages = useMemo(() => {
+    // When viewing an active collection, display collection images in their exact manual order!
+    if (activeCollectionId) {
+      if (!activeCollection) {
+        return [];
+      }
+      const imgMap = new Map<string, LibraryImage>();
+      for (const img of images) {
+        imgMap.set(normalizePath(img.path), img);
+      }
+      const list: LibraryImage[] = [];
+      for (const path of activeCollection.images) {
+        const norm = normalizePath(path);
+        const existing = imgMap.get(norm);
+        if (existing) {
+          list.push(existing);
+        }
+      }
+      return list;
+    }
+
     let list: LibraryImage[];
     if (isViewingLastImport) {
       list = images.filter(img => normLastImport.has(normalizePath(img.path)));
@@ -103,9 +130,18 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
       list = images;
     }
     return list.slice().sort((a, b) => a.path.localeCompare(b.path));
-  }, [images, isViewingLastImport, normLastImport, selectedFolderPaths, normActiveFolder, normRoot]);
+  }, [activeCollectionId, activeCollection, images, isViewingLastImport, normLastImport, selectedFolderPaths, normActiveFolder, normRoot]);
 
-  const activeImage = selectedPaths.size > 0 ? scopedImages[activeImageIndex] : undefined;
+  const activeImage = useMemo(() => {
+    if (selectedPaths.size === 0) return undefined;
+    const candidate = scopedImages[activeImageIndex];
+    if (candidate && selectedPaths.has(candidate.path)) {
+      return candidate;
+    }
+    const found = scopedImages.find(img => selectedPaths.has(img.path));
+    if (found) return found;
+    return images.find(img => selectedPaths.has(img.path));
+  }, [selectedPaths, scopedImages, activeImageIndex, images]);
 
   // Lazy-load detailed EXIF metadata when an image is selected
   useEffect(() => {
