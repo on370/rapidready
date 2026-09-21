@@ -1,11 +1,12 @@
 import { useTranslation } from "react-i18next";
-import { Settings, Folder, Plus, Globe, Settings2, Trash2, Edit2, Check, MapPin, Sparkles, RefreshCw, ArrowUpRight, CheckCircle2, AlertCircle, ChevronDown } from "lucide-react";
+import { Settings, Folder, Plus, Globe, Settings2, Trash2, Edit2, Check, MapPin, Sparkles, RefreshCw, ArrowUpRight, CheckCircle2, AlertCircle, ChevronDown, Compass } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { useLibraryUIStore } from "../../stores/libraryUIStore";
 import { useUpdateStore } from "../../stores/updateStore";
+import { useOnboardingStore } from "../../stores/onboardingStore";
 import { isCurrentBeta } from "../../services/updateService";
 import buildInfo from "../../build-info.json";
 
@@ -83,6 +84,7 @@ function EditableItem({
 
 export function SettingsView() {
   const { t, i18n } = useTranslation('settings');
+  const { t: tOnboarding } = useTranslation('onboarding');
   const { invertScrollZoom, setInvertScrollZoom } = useLibraryUIStore();
   const {
     /* Unconnected/dummy toggles hidden for MVP:
@@ -459,6 +461,31 @@ export function SettingsView() {
                 <span>{t('updates.checkNow')}</span>
               </button>
             </div>
+          </div>
+        </div>
+
+        {/* Guided Tour Section */}
+        <div className="bg-app-card border border-app-border rounded-xl overflow-hidden">
+          <div className="px-5 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center flex-shrink-0">
+                <Compass className="w-5 h-5 text-accent" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-txt-primary">{tOnboarding('settings.title', 'Geführte Einführung')}</h3>
+                <p className="text-xs text-txt-secondary mt-0.5 max-w-xl">
+                  {tOnboarding('settings.description', 'Starte die interaktive Tour durch RapidReady jederzeit erneut, um alle Arbeitsbereiche und Tastenkürzel kennenzulernen.')}
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => useOnboardingStore.getState().startTour('replay')}
+              className="px-3.5 py-2 rounded-lg bg-app-panel hover:bg-app-hover border border-app-border hover:border-accent/40 text-xs font-semibold text-txt-primary hover:text-accent transition-all flex items-center gap-2 cursor-pointer shadow-xs active:scale-98 flex-shrink-0"
+            >
+              <Compass className="w-3.5 h-3.5 text-accent" />
+              <span>{tOnboarding('settings.replayButton', 'Tour erneut starten')}</span>
+            </button>
           </div>
         </div>
 

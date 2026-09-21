@@ -28,7 +28,7 @@ export function Sidebar({ activeView, onViewChange }: SidebarProps) {
   );
 
   return (
-    <nav className="w-[60px] bg-app-panel border-r border-app-border flex flex-col items-center py-3 flex-shrink-0 z-10">
+    <nav data-tour="sidebar-nav" className="w-[60px] bg-app-panel border-r border-app-border flex flex-col items-center py-3 flex-shrink-0 z-10">
       {/* Top nav items */}
       <div className="flex flex-col gap-1 flex-1">
         <NavButton 
@@ -41,7 +41,7 @@ export function Sidebar({ activeView, onViewChange }: SidebarProps) {
         {/* v0.2 roadmap: Tools & Dashboard */}
         {/* <NavButton view="tools" icon={Wrench} label={t("nav.tools")} /> */}
       </div>
-      <div className="flex flex-col gap-1">
+      <div data-tour="sidebar-bottom" className="flex flex-col gap-1">
         <button
           className="nav-btn w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-150 text-txt-secondary hover:bg-app-hover hover:text-txt-primary"
           onClick={() => window.dispatchEvent(new Event('open-about-modal'))}

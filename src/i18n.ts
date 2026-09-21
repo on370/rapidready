@@ -7,12 +7,14 @@ import settingsEN from './locales/en/settings.json';
 import helpEN from './locales/en/help.json';
 import libraryEN from './locales/en/library.json';
 import importEN from './locales/en/import.json';
+import onboardingEN from './locales/en/onboarding.json';
 
 import commonDE from './locales/de/common.json';
 import settingsDE from './locales/de/settings.json';
 import helpDE from './locales/de/help.json';
 import libraryDE from './locales/de/library.json';
 import importDE from './locales/de/import.json';
+import onboardingDE from './locales/de/onboarding.json';
 
 i18n
   .use(LanguageDetector)
@@ -31,6 +33,7 @@ i18n
         help: helpEN,
         library: libraryEN,
         import: importEN,
+        onboarding: onboardingEN,
       },
       de: {
         common: commonDE,
@@ -38,9 +41,10 @@ i18n
         help: helpDE,
         library: libraryDE,
         import: importDE,
+        onboarding: onboardingDE,
       }
     },
-    ns: ['common', 'settings', 'help', 'library', 'import'],
+    ns: ['common', 'settings', 'help', 'library', 'import', 'onboarding'],
     defaultNS: 'common',
     fallbackLng: 'en',
     interpolation: {

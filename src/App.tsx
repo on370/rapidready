@@ -14,6 +14,9 @@ import { UpdateNotificationModal } from "./components/ui/UpdateNotificationModal
 import { TextContextMenu } from "./components/ui/TextContextMenu";
 import { ToastContainer } from "./components/ui/ToastContainer";
 import { DestructiveConfirmModal } from "./components/ui/DestructiveConfirmModal";
+import { TourWelcomePrompt } from "./components/onboarding/TourWelcomePrompt";
+import { TourOverlay } from "./components/onboarding/TourOverlay";
+import { useOnboardingStore } from "./stores/onboardingStore";
 import { useToastStore } from "./stores/toastStore";
 import { useSettingsStore } from "./stores/settingsStore";
 import { useUpdateStore } from "./stores/updateStore";
@@ -39,6 +42,25 @@ function App() {
       useUpdateStore.getState().checkNow(false);
     }, 3500);
     return () => clearTimeout(timer);
+  }, []);
+
+  // Check onboarding prompt eligibility after 1.5s
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      useOnboardingStore.getState().checkAndTriggerPrompt();
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Listen for native menu trigger to replay/start guided tour
+  useEffect(() => {
+    const unlistenPromise = listen("start-guided-tour", () => {
+      useOnboardingStore.getState().startTour('replay');
+    });
+
+    return () => {
+      unlistenPromise.then((unlisten) => unlisten());
+    };
   }, []);
 
   // Listen for menu trigger to check for updates
@@ -261,6 +283,8 @@ function App() {
       <UpdateNotificationModal />
       <ToastContainer />
       <DestructiveConfirmModal />
+      <TourWelcomePrompt />
+      <TourOverlay />
       {textMenu && (
         <TextContextMenu
           x={textMenu.x}

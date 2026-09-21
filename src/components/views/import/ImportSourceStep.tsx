@@ -69,13 +69,19 @@ export function ImportSourceStep() {
           <ImportProfileHeader />
 
           {/* 2. Unified Destination Selector (In-Place Locations) */}
-          <DestinationSelector />
+          <div data-tour="import-destination">
+            <DestinationSelector />
+          </div>
 
           {/* 3. Folder Structuring Options & Live Preview */}
-          <StructurePatternPicker />
+          <div data-tour="import-structure">
+            <StructurePatternPicker />
+          </div>
 
           {/* 4. Collection Assignment */}
-          <ImportCollectionSelector />
+          <div data-tour="import-collection">
+            <ImportCollectionSelector />
+          </div>
         </fieldset>
 
         {/* Floating Scroll Indicator Overlay */}

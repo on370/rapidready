@@ -117,6 +117,14 @@ pub fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         Some("CmdOrCtrl+Shift+?"),
     )?;
 
+    let start_tour_item = MenuItem::with_id(
+        app,
+        "start_guided_tour",
+        "Start Guided Tour...",
+        true,
+        None::<&str>,
+    )?;
+
     let check_updates_help_item = MenuItem::with_id(
         app,
         "check_updates_help",
@@ -139,6 +147,7 @@ pub fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         true,
         &[
             &help_item,
+            &start_tour_item,
             &PredefinedMenuItem::separator(app)?,
             &check_updates_help_item,
             &PredefinedMenuItem::separator(app)?,

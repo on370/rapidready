@@ -260,7 +260,7 @@ export function CollectionsTree({ onSelectCollection, activeCollectionId }: Coll
   return (
     <div className="flex flex-col space-y-0.5">
       {/* Action Header Button: New Collection */}
-      <div className="flex items-center justify-between px-2 py-1 mb-1 text-[11px] text-txt-tertiary">
+      <div data-tour="collection-export" className="flex items-center justify-between px-2 py-1 mb-1 text-[11px] text-txt-tertiary">
         <span className="font-semibold uppercase tracking-wider">{t('collections.title', 'Sammlungen')}</span>
         <button
           onClick={() => {

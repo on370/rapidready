@@ -555,7 +555,11 @@ export const CullingToolbar = React.memo(function CullingToolbar({
       </div>
 
       {/* 3. Culling Toolbar: Flags P/U/X, Delete, Stars, Color, Rotation, Share */}
-      <div ref={toolbarRef} className="relative z-30 flex items-center gap-3 px-4 py-2 border-b border-app-border bg-[#111114] flex-shrink-0 overflow-visible whitespace-nowrap">
+      <div 
+        data-tour="library-grid"
+        ref={toolbarRef} 
+        className="relative z-30 flex items-center gap-3 px-4 py-2 border-b border-app-border bg-[#111114] flex-shrink-0 overflow-visible whitespace-nowrap"
+      >
         {/* Flag Buttons */}
         <div className="flex items-center gap-0.5 flex-shrink-0">
           <button 

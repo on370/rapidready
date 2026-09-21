@@ -1,0 +1,80 @@
+{
+  "prompt": {
+    "firstRunTitle": "Willkommen bei RapidReady!",
+    "firstRunSubtitle": "Entdecke in einer kurzen 2-Minuten-Tour die wichtigsten Workflows, blitzschnelles Culling und den genialen Fotobuch-Trick.",
+    "newFeaturesTitle": "Neu in RapidReady",
+    "newFeaturesSubtitle": "Seit Deinem letzten Besuch gibt es neue Funktionen. Möchtest Du einen kurzen Überblick (30 Sekunden)?",
+    "startTour": "Tour starten",
+    "showMe": "Zeigen",
+    "skip": "Jetzt überspringen",
+    "dontShowAgain": "Nicht mehr anzeigen"
+  },
+  "ui": {
+    "stepCounter": "Schritt {{current}} von {{total}}",
+    "skipTour": "Tour beenden",
+    "prev": "Zurück",
+    "next": "Weiter",
+    "finish": "Verstanden!",
+    "close": "Schließen",
+    "skippedToast": "Tour übersprungen. Du kannst sie jederzeit über Hilfe → Geführte Tour oder Einstellungen neu starten."
+  },
+  "settings": {
+    "title": "Geführte Einführung",
+    "subtitle": "Die wichtigsten Workflows, Tastaturbefehle und Fotobuch-Exportfunktionen kennenlernen",
+    "replayBtn": "Tour wiederholen"
+  },
+  "steps": {
+    "sidebarNav": {
+      "title": "Deine Schaltzentrale",
+      "body": "Die Seitenleiste gibt Dir sofortigen Zugriff auf alles:\n\n• **Import** — Fotos von Karten, Laufwerken & Ordnern einlesen\n• **Bibliothek** — Archiv durchstöbern, bewerten & verwalten\n• **Hilfe & Einstellungen** — Tastaturkürzel, Voreinstellungen & Info"
+    },
+    "importSource": {
+      "title": "Schritt 1: Quelle wählen",
+      "body": "Wähle eine Speicherkarte, ein USB-Laufwerk oder einen Ordner als **Quelle** aus.\n\nRapidReady erkennt eingelegte Speicherkarten und Wechseldatenträger mit DCIM-Ordnern vollautomatisch."
+    },
+    "importDuplicates": {
+      "title": "Duplikat-Erkennung",
+      "body": "Bereits importierte Fotos werden sofort erkannt und standardmäßig ausgeblendet.\n\nSo vermeidest du doppelte Dateien auf der Festplatte und sparst wertvollen Speicherplatz."
+    },
+    "importDestination": {
+      "title": "Schritt 2: Archiv-Ziel festlegen",
+      "body": "Wähle den dauerhaften Speicherort für deine Fotos auf der Festplatte oder dem NAS.\n\nHäufig genutzte Archiv-Ziele kannst du als praktische Standorte für den Schnellzugriff speichern."
+    },
+    "importStructure": {
+      "title": "Ordnerstruktur & Live-Vorschau",
+      "body": "Bestimme, wie deine Fotos unterhalb des Ziels abgelegt werden — z. B. nach **Aufnahmedatum**, **Projektname** oder **flach**.\n\nDie interaktive **Live-Vorschau** zeigt dir sofort den exakten Zielpfad für deine Dateien an."
+    },
+    "importCollection": {
+      "title": "Direkt in Sammlung importieren",
+      "body": "Weise deine neuen Fotos bereits beim Import einem Album zu oder erstelle direkt eine neue Sammlung.\n\nSo sind deine Bilder in der Bibliothek sofort thematisch sortiert — ganz ohne Duplikate auf der Festplatte."
+    },
+    "libraryFolderTree": {
+      "title": "Archiv-Ordnerbaum",
+      "body": "Durchstöbere Dein gesamtes Archiv nach Ordnerstruktur. Halte **Strg/⌘** gedrückt, um mehrere Ordner gleichzeitig zu wählen, oder **Shift** für einen zusammenhängenden Bereich.\n\nRechtsklick auf einen Ordner für Optionen: Im Explorer/Finder anzeigen, Umbenennen, Unterordner erstellen oder Löschen (mit Sicherheits-Guardrails)."
+    },
+    "libraryCollections": {
+      "title": "Sammlungen & Alben",
+      "body": "Stelle Fotos in **virtuelle Alben** zusammen — unabhängig von Festplatten-Ordnern. Ein Foto kann in beliebig vielen Alben vorkommen, ohne zusätzlichen Speicherplatz zu verbrauchen.\n\n**Ziehe** Fotos aus dem Raster auf ein Album. Sortiere frei innerhalb jedes Albums — diese manuelle Reihenfolge ist die Grundlage für den Fotobuch-Export."
+    },
+    "libraryGrid": {
+      "title": "Foto-Raster & Zoom-Slider",
+      "body": "Deine Fotos erscheinen in einem responsiven, virtualisierten Raster — flüssig auch bei Archiven mit Zehntausenden von Bildern.\n\nNutze den **Zoom-Slider** unten, um Thumbnails von kompakter Übersicht bis große Vorschau zu skalieren. **G** = Rasteransicht, **E** = Lupenansicht."
+    },
+    "libraryLoupe": {
+      "title": "Lupenansicht & Schnelles Bewerten",
+      "body": "Drücke **E** oder Doppelklick für die Lupenansicht mit Filmstreifen. **Z** = sofortige 1:1-Pixelansicht.\n\nBlitzschnell bewerten: **P** = Auswahl, **X** = Abgelehnt, **1–5** = Sternbewertung, **6–9** = Farblabel. Alle Bewertungen werden als nicht-destruktive `.rrdata`-Sidecars gespeichert — Deine Originale bleiben unberührt."
+    },
+    "libraryInspector": {
+      "title": "Inspektor: Metadaten & GPS",
+      "body": "Der Inspektor zeigt vollständige EXIF-Daten: Kamera, Objektiv, Belichtung, ISO, Abmessungen und Aufnahmezeitpunkt.\n\nBearbeite **GPS-Koordinaten** direkt — oder nutze den 1-Klick-Link \"In Karten öffnen\". Tagge, bewerte und beschrifte Fotos ohne das Panel zu verlassen."
+    },
+    "collectionExport": {
+      "title": "Fotobuch-Export — Der geniale Trick",
+      "body": "Rechtsklick auf ein Album → **Exportieren**. Dateien werden in Deiner manuellen Drag & Drop-Reihenfolge kopiert und fortlaufend nummeriert (`001_Foto.jpg`).\n\nDer Clou: **Lineare EXIF-Zeitsynthese** (+10s pro Foto) garantiert, dass Deine exakte Reihenfolge in *jeder* Fotobuch-Software und jedem Cloud-Album erhalten bleibt."
+    },
+    "helpAndSettings": {
+      "title": "Hilfe, Einstellungen & RapidRAW",
+      "body": "Drücke jederzeit **F1** oder **⌘/** für die vollständige Tastaturkürzel-Referenz und Dokumentation.\n\n**Einstellungen** konfiguriert Startverhalten, Archiv-Standorte und Import-Presets.\n\nDrücke **R** auf jedem Foto, um es sofort im RAW-Entwickler **RapidRAW** zur nahtlosen Bearbeitung zu öffnen.\n\n*Du bist startklar — viel Spaß beim Fotografieren! 📷*"
+    }
+  }
+}

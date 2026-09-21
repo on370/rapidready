@@ -180,7 +180,10 @@ export const LoupeViewer = React.memo(function LoupeViewer({
       )}
 
       {/* Bottom Bar: Prev/Next Buttons + Info + Filmstrip Toggle */}
-      <div className="flex items-center justify-between px-4 py-2 border-t border-app-border bg-app-panel/80 flex-shrink-0">
+      <div 
+        data-tour="library-loupe"
+        className="flex items-center justify-between px-4 py-2 border-t border-app-border bg-app-panel/80 flex-shrink-0"
+      >
         <div className="flex items-center gap-2">
           <button 
             className="p-1.5 rounded-lg hover:bg-app-hover transition-colors text-txt-secondary hover:text-txt-primary cursor-pointer" 

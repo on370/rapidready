@@ -165,10 +165,11 @@ export const SourceDrivePicker = React.memo(function SourceDrivePicker() {
 
   return (
     <div className="flex-1 flex flex-col gap-4 min-w-0 min-h-0 overflow-y-auto pr-1">
-      <div className="flex items-center gap-2 mb-1">
-        <FolderInput className="w-4 h-4 text-txt-secondary" />
-        <h2 className="text-sm font-semibold text-txt-primary uppercase tracking-wider">{t('source.title')}</h2>
-      </div>
+      <div data-tour="import-source" className="flex flex-col gap-4">
+        <div className="flex items-center gap-2 mb-1">
+          <FolderInput className="w-4 h-4 text-txt-secondary" />
+          <h2 className="text-sm font-semibold text-txt-primary uppercase tracking-wider">{t('source.title')}</h2>
+        </div>
 
       {/* Source Cards */}
       {sourceDirectory ? (
@@ -302,8 +303,19 @@ export const SourceDrivePicker = React.memo(function SourceDrivePicker() {
         )
       )}
 
+        {/* Or Select Folder */}
+        <button 
+          onClick={handleSelectFolder}
+          disabled={isScanning}
+          className="flex items-center justify-center gap-2 py-3 px-4 border border-dashed border-app-border rounded-xl text-sm text-txt-secondary hover:border-accent hover:text-accent transition-all duration-200 hover:bg-accent/5 disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none cursor-pointer"
+        >
+          <FolderPlus className="w-4 h-4" />
+          <span>{isScanning ? t('source.scanning') : t('source.selectFolder')}</span>
+        </button>
+      </div>
+
       {/* Already Imported Indicator */}
-      <div className="bg-app-card border border-app-border rounded-xl p-4">
+      <div data-tour="import-duplicates" className="bg-app-card border border-app-border rounded-xl p-4">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <CheckCircle2 className={`w-4 h-4 ${alreadyImportedFiles.length > 0 ? 'text-success' : 'text-txt-tertiary'}`} />
@@ -351,16 +363,6 @@ export const SourceDrivePicker = React.memo(function SourceDrivePicker() {
           )}
         </div>
       </div>
-
-      {/* Or Select Folder */}
-      <button 
-        onClick={handleSelectFolder}
-        disabled={isScanning}
-        className="flex items-center justify-center gap-2 py-3 px-4 border border-dashed border-app-border rounded-xl text-sm text-txt-secondary hover:border-accent hover:text-accent transition-all duration-200 hover:bg-accent/5 disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none cursor-pointer"
-      >
-        <FolderPlus className="w-4 h-4" />
-        <span>{isScanning ? t('source.scanning') : t('source.selectFolder')}</span>
-      </button>
     </div>
   );
 });

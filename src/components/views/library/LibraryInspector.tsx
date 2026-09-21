@@ -568,7 +568,7 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
   const isRaw = !isVideo && (activeImage?.is_raw ?? ['CR2', 'CR3', 'ARW', 'NEF', 'DNG', 'ORF', 'RAF', 'RW2', 'PEF', '3FR'].includes(extension));
 
   return (
-    <div className="w-full h-full flex-shrink-0 bg-app-panel flex flex-col min-h-0 overflow-hidden">
+    <div data-tour="library-inspector" className="w-full h-full flex-shrink-0 bg-app-panel flex flex-col min-h-0 overflow-hidden">
       {/* Inspector Header */}
       <div className="px-4 py-3 border-b border-app-border flex items-center justify-between flex-shrink-0">
         <h2 className="text-xs font-semibold text-txt-secondary uppercase tracking-wider">

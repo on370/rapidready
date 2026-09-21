@@ -1081,7 +1081,7 @@ export function LibraryLeftSidebar() {
   return (
     <div className="w-full h-full bg-app-panel flex flex-col min-h-0 overflow-hidden">
       {/* Section 1: Collections */}
-      <div className="flex flex-col flex-shrink-0">
+      <div data-tour="library-collections" className="flex flex-col flex-shrink-0">
         <div className="px-4 py-3 border-b border-app-border flex items-center justify-between cursor-pointer hover:bg-app-hover/50 transition-colors" onClick={() => setCollectionsOpen(!collectionsOpen)}>
           <h2 className="text-xs font-semibold text-txt-secondary uppercase tracking-wider flex items-center gap-2">
             <Bookmark className="w-3.5 h-3.5" />{t("sidebar.collections")}</h2>
@@ -1132,7 +1132,7 @@ export function LibraryLeftSidebar() {
       </div>
 
       {/* Section 2: Library */}
-      <div className="flex flex-col flex-1 min-h-0">
+      <div data-tour="library-folder-tree" className="flex flex-col flex-1 min-h-0">
         <div className="px-4 py-3 border-b border-app-border flex items-center justify-between cursor-pointer hover:bg-app-hover/50 transition-colors flex-shrink-0" onClick={() => setLibraryOpen(!libraryOpen)}>
           <h2 className="text-xs font-semibold text-txt-secondary uppercase tracking-wider flex items-center gap-2">
             <HardDrive className="w-3.5 h-3.5" />

@@ -41,6 +41,8 @@ pub fn run() {
             app.on_menu_event(move |app, event| {
                 if event.id() == "open_help" {
                     let _ = app.emit("toggle-help-modal", ());
+                } else if event.id() == "start_guided_tour" {
+                    let _ = app.emit("start-guided-tour", ());
                 } else if event.id() == "open_about" || event.id() == "open_about_help" {
                     let _ = app.emit("toggle-about-modal", ());
                 } else if event.id() == "check_updates" || event.id() == "check_updates_help" {

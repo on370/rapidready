@@ -1,0 +1,80 @@
+{
+  "prompt": {
+    "firstRunTitle": "Welcome to RapidReady!",
+    "firstRunSubtitle": "Take a quick 2-minute guided tour to explore the core workflows, lightning-fast culling, and photo book superpowers.",
+    "newFeaturesTitle": "What's New in RapidReady",
+    "newFeaturesSubtitle": "New features have been added since your last visit. Would you like a quick 30-second tour of what's new?",
+    "startTour": "Start Tour",
+    "showMe": "Show Me",
+    "skip": "Skip for Now",
+    "dontShowAgain": "Don't show again"
+  },
+  "ui": {
+    "stepCounter": "Step {{current}} of {{total}}",
+    "skipTour": "Skip Tour",
+    "prev": "Back",
+    "next": "Next",
+    "finish": "Got it!",
+    "close": "Close",
+    "skippedToast": "Tour skipped. You can replay it anytime via Help → Start Guided Tour or Settings."
+  },
+  "settings": {
+    "title": "Guided Tour",
+    "subtitle": "Discover core features, keyboard shortcuts, and photo book export workflows",
+    "replayBtn": "Replay Tour"
+  },
+  "steps": {
+    "sidebarNav": {
+      "title": "Your Command Center",
+      "body": "The sidebar gives you instant access to everything:\n\n• **Import** — ingest photos from memory cards, USB drives & folders\n• **Library** — browse, rapidly cull & organize your archive\n• **Help & Settings** — complete shortcut matrix, preferences & about"
+    },
+    "importSource": {
+      "title": "Step 1: Choose Source",
+      "body": "Select a memory card, USB drive, or any folder as your **source**.\n\nRapidReady automatically detects inserted memory cards and removable media with DCIM folders."
+    },
+    "importDuplicates": {
+      "title": "Duplicate Detection",
+      "body": "Previously imported photos are detected instantly and hidden by default.\n\nThis prevents duplicate files on disk and saves valuable storage space."
+    },
+    "importDestination": {
+      "title": "Step 2: Set Archive Destination",
+      "body": "Choose the permanent home for your photos on your hard drive or NAS.\n\nSave frequently used destinations as archive locations for 1-click access."
+    },
+    "importStructure": {
+      "title": "Folder Structure & Live Preview",
+      "body": "Choose how photos are organized within your destination — e.g. by **shooting date**, **project name**, or **flat**.\n\nThe interactive **live preview** instantly shows the exact target path for your files."
+    },
+    "importCollection": {
+      "title": "Import into Collection",
+      "body": "Assign newly imported photos directly to an existing album or create a new collection on the fly.\n\nYour images arrive organized and ready to cull — without creating duplicate files on disk."
+    },
+    "libraryFolderTree": {
+      "title": "Archive Folder Tree",
+      "body": "Browse your entire archive by folder hierarchy. Hold **Ctrl/⌘** to select multiple folders at once, or **Shift** for a contiguous range.\n\nRight-click any folder for options: Reveal in Explorer/Finder, Rename, Create Subfolder, or Delete (with safety guardrails)."
+    },
+    "libraryCollections": {
+      "title": "Collections & Virtual Albums",
+      "body": "Curate photos into **virtual albums** — independent of physical disk folders. One photo can live in many albums without duplicating files.\n\n**Drag & drop** photos onto an album. Reorder freely inside any album — this custom order forms the basis for photo book exports."
+    },
+    "libraryGrid": {
+      "title": "Photo Grid & Zoom Slider",
+      "body": "Your photos appear in a responsive, virtualized grid — smoothly handling archives with tens of thousands of images.\n\nUse the **zoom slider** at the bottom to scale thumbnails from compact overview to large previews. Press **G** for Grid, **E** for Loupe."
+    },
+    "libraryLoupe": {
+      "title": "Loupe View & Rapid Culling",
+      "body": "Press **E** or double-click a photo to enter Loupe view with the filmstrip below. Press **Z** for instant 1:1 pixel zoom.\n\nCull at speed: **P** = Pick, **X** = Reject, **1–5** = Star Rating, **6–9** = Color Labels. All ratings are saved non-destructively in `.rrdata` sidecars."
+    },
+    "libraryInspector": {
+      "title": "Inspector: Metadata & GPS",
+      "body": "The Inspector displays full EXIF data: camera model, lens, exposure, ISO, dimensions, and shooting timestamps.\n\nEdit **GPS coordinates** directly or use the 1-click \"Open in Maps\" link. Batch-tag, color-label, and rate photos without leaving this panel."
+    },
+    "collectionExport": {
+      "title": "Photo Book Export — The Clever Trick",
+      "body": "Right-click any album → **Export**. Files are copied in your curated drag & drop order with sequential numbering (`001_Photo.jpg`).\n\nThe clever trick: **Linear EXIF timestamp synthesis** (+10s per photo) guarantees your exact order is preserved in *every* photo book software and cloud album."
+    },
+    "helpAndSettings": {
+      "title": "Help, Settings & RapidRAW",
+      "body": "Press **F1** or **⌘/** anytime for the full shortcut reference and documentation.\n\n**Settings** configures startup behavior, archive locations, and presets.\n\nPress **R** on any photo to open it in **RapidRAW** for professional editing.\n\n*You're all set — happy shooting! 📷*"
+    }
+  }
+}

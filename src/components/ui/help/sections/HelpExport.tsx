@@ -47,7 +47,7 @@ export function HelpExport() {
           title={isEn ? 'Linear EXIF Capture Times (+10s)' : 'Lineare EXIF-Aufnahmedaten (+10s)'}
         >
           {isEn
-            ? 'The secret weapon for flawless photo books: writes strictly ascending capture timestamps in 10-second intervals into exported image files.'
+            ? 'The clever trick for flawless photo books: writes strictly ascending capture timestamps in 10-second intervals into exported image files.'
             : 'Das Geheimnis für perfekte Fotobücher: Schreibt in 10-Sekunden-Schritten aufsteigende Aufnahmezeiten in die exportierten Bilddateien.'}
         </FeatureCard>
 
