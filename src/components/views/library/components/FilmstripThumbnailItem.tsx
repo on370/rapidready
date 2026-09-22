@@ -56,6 +56,17 @@ export const FilmstripThumbnailItem = React.memo(function FilmstripThumbnailItem
           loadedThumbnailCache.add(cacheKey);
           setLoaded(true);
         }}
+        onError={(e) => {
+          const target = e.currentTarget as HTMLImageElement;
+          const retryCount = Number(target.dataset.retryCount || 0);
+          if (retryCount < 2) {
+            target.dataset.retryCount = String(retryCount + 1);
+            setTimeout(() => {
+              const baseSrc = getRrImageUrl(img.path, false, img.culling?.orientation, 1);
+              target.src = `${baseSrc}&retry=${Date.now()}`;
+            }, 500 * (retryCount + 1));
+          }
+        }}
       />
       {!loaded && (
         <div className="absolute inset-0 bg-[#161619] flex items-center justify-center pointer-events-none">

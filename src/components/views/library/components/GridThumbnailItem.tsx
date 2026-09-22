@@ -113,6 +113,20 @@ export const GridThumbnailItem = React.memo(function GridThumbnailItem({
               placeholderRef.current.style.display = 'none';
             }
           }}
+          onError={(e) => {
+            // If thumbnail generation failed (e.g. file momentarily locked by external process or mid-write), retry once after a short pause
+            const target = e.currentTarget as HTMLImageElement;
+            const retryCount = Number(target.dataset.retryCount || 0);
+            if (retryCount < 2) {
+              target.dataset.retryCount = String(retryCount + 1);
+              setTimeout(() => {
+                if (imgRef.current) {
+                  const baseSrc = getRrImageUrl(img.path, false, img.culling?.orientation, scale);
+                  imgRef.current.src = `${baseSrc}&retry=${Date.now()}`;
+                }
+              }, 600 * (retryCount + 1));
+            }
+          }}
         />
       )}
       <div 

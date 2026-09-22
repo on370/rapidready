@@ -323,13 +323,65 @@ pub fn extract_embedded_thumbnail(path: &Path, target_orient: Option<u32>) -> Op
     }
 }
 
+pub fn extract_raster_thumbnail(
+    path: &Path,
+    scale: u32,
+    target_orient: Option<u32>,
+) -> Option<Vec<u8>> {
+    // Retry up to 3 times with 50ms pause in case writer process still holds a lock
+    let mut open_res = image::ImageReader::open(path);
+    for _ in 0..3 {
+        if open_res.is_ok() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        open_res = image::ImageReader::open(path);
+    }
+    let reader = open_res.ok()?.with_guessed_format().ok()?;
+    let dyn_img = reader.decode().ok()?;
+
+    let target_size = match scale {
+        0 => 160,
+        2 => 720,
+        _ => 384,
+    };
+
+    let resized = dyn_img.thumbnail(target_size, target_size);
+    let resolved_orient = target_orient.or_else(|| get_effective_orientation(path));
+    let file_orient = read_exif_orientation(path);
+    let rotated = apply_effective_orientation(resized, resolved_orient, file_orient);
+
+    // Composite over dark card background (#18181b) if image has alpha,
+    // avoiding pitch-black transparent pixel artifacts when encoding to JPEG.
+    let rgb = if rotated.color().has_alpha() {
+        let rgba = rotated.to_rgba8();
+        let mut rgb = image::RgbImage::new(rgba.width(), rgba.height());
+        for (x, y, pixel) in rgba.enumerate_pixels() {
+            let a = pixel[3] as f32 / 255.0;
+            // Background color #18181b (R: 24, G: 24, B: 27) matching app theme
+            let r = (pixel[0] as f32 * a + 24.0 * (1.0 - a)) as u8;
+            let g = (pixel[1] as f32 * a + 24.0 * (1.0 - a)) as u8;
+            let b = (pixel[2] as f32 * a + 27.0 * (1.0 - a)) as u8;
+            rgb.put_pixel(x, y, image::Rgb([r, g, b]));
+        }
+        rgb
+    } else {
+        rotated.into_rgb8()
+    };
+
+    let mut buffer = Cursor::new(Vec::new());
+    rgb.write_to(&mut buffer, ImageFormat::Jpeg).ok()?;
+    Some(buffer.into_inner())
+}
+
 pub fn get_preview_jpeg_with_orient(
     path: &Path,
     scale: u32,
     target_orient: Option<u32>,
 ) -> Result<Vec<u8>> {
     let resolved_orient = target_orient.or_else(|| get_effective_orientation(path));
-    let cache_key = format!("{}:{}:{}", path.to_string_lossy(), scale, resolved_orient.unwrap_or(1));
+    let mtime = std::fs::metadata(path).and_then(|m| m.modified()).ok();
+    let cache_key = format!("{}:{}:{}:{:?}", path.to_string_lossy(), scale, resolved_orient.unwrap_or(1), mtime);
     
     if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
         if let Some(cached) = cache.get(&cache_key) {
@@ -337,7 +389,21 @@ pub fn get_preview_jpeg_with_orient(
         }
     }
 
-    // Fast-path:
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+
+    // Fast-path 1: For PNG and WebP files, decode directly with pure-Rust image decoder!
+    // This avoids Windows Shell / OS thumbnail delays, 32x32 generic file icons,
+    // and network share thumbnail blocks.
+    if ext == "png" || ext == "webp" {
+        if let Some(raster_bytes) = extract_raster_thumbnail(path, scale, resolved_orient) {
+            if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
+                cache.put(cache_key, raster_bytes.clone());
+            }
+            return Ok(raster_bytes);
+        }
+    }
+
+    // Fast-path 2:
     // For scale == 0: directly use extract_embedded_thumbnail (160x120 for Sony/Canon, 720x480 for DNG).
     if scale == 0 {
         if let Some(fast_bytes) = extract_embedded_thumbnail(path, resolved_orient) {
@@ -374,6 +440,14 @@ pub fn get_preview_jpeg_with_orient(
             }
             return Ok(full_bytes);
         }
+
+        // Fallback 3: Standard raster images (PNG, JPG, WebP, TIFF, BMP) decoded directly in pure Rust!
+        if let Some(raster_bytes) = extract_raster_thumbnail(path, scale, resolved_orient) {
+            if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
+                cache.put(cache_key, raster_bytes.clone());
+            }
+            return Ok(raster_bytes);
+        }
     }
 
     let thumb = thumb_res.map_err(|e| anyhow::anyhow!("thumb_rs error: {:?}", e))?;
@@ -405,7 +479,8 @@ pub fn get_preview_jpeg(path: &Path, scale: u32) -> Result<Vec<u8>> {
 
 pub fn get_max_preview_jpeg(path: &Path) -> Result<Vec<u8>> {
     let target_orient = get_effective_orientation(path);
-    let cache_key = format!("{}:fullres:{}", path.to_string_lossy(), target_orient.unwrap_or(1));
+    let mtime = std::fs::metadata(path).and_then(|m| m.modified()).ok();
+    let cache_key = format!("{}:fullres:{}:{:?}", path.to_string_lossy(), target_orient.unwrap_or(1), mtime);
     
     if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
         if let Some(cached) = cache.get(&cache_key) {
@@ -743,6 +818,43 @@ mod tests {
             let img_max = image::load_from_memory(&max_thumb).expect("Decoded max preview JPEG");
             assert!(img_max.width() >= 1200, "Max preview should be high resolution poster frame, got {}x{}", img_max.width(), img_max.height());
         }
+    }
+
+    #[test]
+    fn test_thumbnail_png() {
+        let temp_dir = std::env::temp_dir().join(format!("rapidready_test_png_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        // 1. Opaque PNG
+        let png_path = temp_dir.join("test_opaque.png");
+        let img = image::RgbImage::from_fn(400, 300, |x, y| {
+            image::Rgb([(x % 255) as u8, (y % 255) as u8, 128])
+        });
+        img.save(&png_path).unwrap();
+
+        let thumb_res = thumb_rs::get_thumbnail(&png_path, thumb_rs::ThumbnailScale(1));
+        println!("Opaque PNG thumb_rs result: {:?}", thumb_res.as_ref().map(|t| (t.width, t.height, t.rgba.len())));
+        let preview = get_preview_jpeg(&png_path, 1);
+        println!("Opaque PNG get_preview_jpeg: {:?}", preview.as_ref().map(|b| b.len()));
+
+        // 2. Transparent PNG (pixel 0,0 transparent)
+        let png_trans_path = temp_dir.join("test_trans.png");
+        let img_trans = image::RgbaImage::from_fn(400, 300, |x, y| {
+            if x < 50 && y < 50 {
+                image::Rgba([0, 0, 0, 0])
+            } else {
+                image::Rgba([200, 100, 50, 255])
+            }
+        });
+        img_trans.save(&png_trans_path).unwrap();
+
+        let thumb_trans_res = thumb_rs::get_thumbnail(&png_trans_path, thumb_rs::ThumbnailScale(1));
+        println!("Transparent PNG thumb_rs result: {:?}", thumb_trans_res.as_ref().map(|t| (t.width, t.height, t.rgba.len())));
+        let preview_trans = get_preview_jpeg(&png_trans_path, 1);
+        println!("Transparent PNG get_preview_jpeg: {:?}", preview_trans.as_ref().map(|b| b.len()));
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }
 
