@@ -131,6 +131,10 @@ export function HelpPopover({ viewMode }: HelpPopoverProps) {
                   <span className="text-txt-secondary">{t('tooltip.navigate')}</span>
                   <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">← / → / J / K</span>
                 </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-txt-secondary">{t('shortcuts.actions.deselectOrAllPhotos', 'Gesamtes Archiv / Deselect')}</span>
+                  <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">Esc</span>
+                </div>
               </>
             )}
           </div>

@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { SectionHeading, Kbd, TipBox, FeatureCard } from '../HelpShared';
-import { Zap, CheckCircle2, XCircle, Flag, ZoomIn, Eye } from 'lucide-react';
+import { Zap, CheckCircle2, XCircle, Flag, ZoomIn, Eye, ArrowRightToLine } from 'lucide-react';
 
 export function HelpCulling() {
   const { i18n } = useTranslation();
@@ -76,7 +76,7 @@ export function HelpCulling() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
         <FeatureCard
-          icon={<Zap className="w-4 h-4" />}
+          icon={<ArrowRightToLine className="w-4 h-4" />}
           title={isEn ? 'Auto-Advance' : 'Auto-Advance (Automatischer Sprung)'}
         >
           {isEn ? (

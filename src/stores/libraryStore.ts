@@ -179,23 +179,38 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
   addDiscoveredFolders: (folders) => set((state) => {
     if (!folders || folders.length === 0) return state;
     const next = new Set(state.discoveredFolders);
+    const lowerMap = new Map<string, string>();
+    for (const existing of state.discoveredFolders) {
+      lowerMap.set(existing.toLowerCase(), existing);
+    }
     let changed = false;
     for (const f of folders) {
-      const norm = normalizePath(f);
-      if (!next.has(norm)) {
+      const norm = normalizeSlash(f);
+      const lower = norm.toLowerCase();
+      if (!lowerMap.has(lower)) {
         next.add(norm);
+        lowerMap.set(lower, norm);
         changed = true;
+      } else {
+        const existing = lowerMap.get(lower)!;
+        if (norm !== lower && existing === lower) {
+          next.delete(existing);
+          next.add(norm);
+          lowerMap.set(lower, norm);
+          changed = true;
+        }
       }
     }
     return changed ? { discoveredFolders: next } : state;
   }),
   removeFolder: (folderPath) => set((state) => {
-    const norm = normalizePath(folderPath);
+    const norm = normalizeSlash(folderPath).toLowerCase();
     const prefix = norm + '/';
     const next = new Set<string>();
     let changed = false;
     for (const f of state.discoveredFolders) {
-      if (f === norm || f.startsWith(prefix)) {
+      const fNorm = normalizeSlash(f).toLowerCase();
+      if (fNorm === norm || fNorm.startsWith(prefix)) {
         changed = true;
       } else {
         next.add(f);
@@ -207,12 +222,26 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
     let nextFolders = state.discoveredFolders;
     if (dirs && dirs.length > 0) {
       const updated = new Set(state.discoveredFolders);
+      const lowerMap = new Map<string, string>();
+      for (const existing of state.discoveredFolders) {
+        lowerMap.set(existing.toLowerCase(), existing);
+      }
       let fChanged = false;
       for (const d of dirs) {
-        const normD = normalizePath(d);
-        if (!updated.has(normD)) {
+        const normD = normalizeSlash(d);
+        const lowerD = normD.toLowerCase();
+        if (!lowerMap.has(lowerD)) {
           updated.add(normD);
+          lowerMap.set(lowerD, normD);
           fChanged = true;
+        } else {
+          const existing = lowerMap.get(lowerD)!;
+          if (normD !== lowerD && existing === lowerD) {
+            updated.delete(existing);
+            updated.add(normD);
+            lowerMap.set(lowerD, normD);
+            fChanged = true;
+          }
         }
       }
       if (fChanged) nextFolders = updated;
@@ -248,12 +277,26 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
     let nextFolders = state.discoveredFolders;
     if (newDirs && newDirs.length > 0) {
       const updated = new Set(state.discoveredFolders);
+      const lowerMap = new Map<string, string>();
+      for (const existing of state.discoveredFolders) {
+        lowerMap.set(existing.toLowerCase(), existing);
+      }
       let fChanged = false;
       for (const d of newDirs) {
-        const normD = normalizePath(d);
-        if (!updated.has(normD)) {
+        const normD = normalizeSlash(d);
+        const lowerD = normD.toLowerCase();
+        if (!lowerMap.has(lowerD)) {
           updated.add(normD);
+          lowerMap.set(lowerD, normD);
           fChanged = true;
+        } else {
+          const existing = lowerMap.get(lowerD)!;
+          if (normD !== lowerD && existing === lowerD) {
+            updated.delete(existing);
+            updated.add(normD);
+            lowerMap.set(lowerD, normD);
+            fChanged = true;
+          }
         }
       }
       if (fChanged) nextFolders = updated;
@@ -429,7 +472,7 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
       rootPath: path,
       activeFolderPath: path,
       selectedFolderPaths: path ? new Set([normalizePath(path)]) : new Set(),
-      discoveredFolders: isContinuing ? s.discoveredFolders : (path ? new Set([normalizePath(path)]) : new Set()),
+      discoveredFolders: isContinuing ? s.discoveredFolders : (path ? new Set([normalizeSlash(path)]) : new Set()),
       viewMode: 'grid',
       isLoading: true,
       scanState: isContinuing ? 'scanning' : 'connecting',
@@ -477,8 +520,24 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
             imageIndexMap.set(normalizePath(allImages[i].path), i);
           }
           const nextFolders = new Set(state.discoveredFolders);
+          const lowerMap = new Map<string, string>();
+          for (const existing of state.discoveredFolders) {
+            lowerMap.set(existing.toLowerCase(), existing);
+          }
           for (const d of loadedDirs) {
-            nextFolders.add(normalizePath(d));
+            const normD = normalizeSlash(d);
+            const lowerD = normD.toLowerCase();
+            if (!lowerMap.has(lowerD)) {
+              nextFolders.add(normD);
+              lowerMap.set(lowerD, normD);
+            } else {
+              const existing = lowerMap.get(lowerD)!;
+              if (normD !== lowerD && existing === lowerD) {
+                nextFolders.delete(existing);
+                nextFolders.add(normD);
+                lowerMap.set(lowerD, normD);
+              }
+            }
           }
           return { images: allImages, imageIndexMap, discoveredFolders: nextFolders, isLoading: false, scanState: nextScanState };
         });
@@ -491,9 +550,28 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
           imageIndexMap.set(normalizePath(sorted[i].path), i);
         }
         const nextFolders = new Set(useLibraryStore.getState().discoveredFolders);
-        if (path) nextFolders.add(normalizePath(path));
+        if (path) {
+          const normP = normalizeSlash(path);
+          nextFolders.add(normP);
+        }
+        const lowerMap = new Map<string, string>();
+        for (const existing of nextFolders) {
+          lowerMap.set(existing.toLowerCase(), existing);
+        }
         for (const d of loadedDirs) {
-          nextFolders.add(normalizePath(d));
+          const normD = normalizeSlash(d);
+          const lowerD = normD.toLowerCase();
+          if (!lowerMap.has(lowerD)) {
+            nextFolders.add(normD);
+            lowerMap.set(lowerD, normD);
+          } else {
+            const existing = lowerMap.get(lowerD)!;
+            if (normD !== lowerD && existing === lowerD) {
+              nextFolders.delete(existing);
+              nextFolders.add(normD);
+              lowerMap.set(lowerD, normD);
+            }
+          }
         }
         set({ images: sorted, imageIndexMap, discoveredFolders: nextFolders, isLoading: false, scanState: nextScanState });
       }
@@ -658,12 +736,12 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
       let foldersChanged = false;
       for (const p of state.discoveredFolders) {
         const normP = normalizeSlash(p);
-        if (normP.startsWith(oldPrefix)) {
+        if (normP.toLowerCase().startsWith(oldPrefix.toLowerCase())) {
           const rel = normP.substring(oldPrefix.length);
-          updatedDiscoveredFolders.add(normalizePath(newPrefix + rel));
+          updatedDiscoveredFolders.add(normalizeSlash(newPrefix + rel));
           foldersChanged = true;
-        } else if (normP === normOld) {
-          updatedDiscoveredFolders.add(normalizePath(normNew));
+        } else if (normP.toLowerCase() === normOld.toLowerCase()) {
+          updatedDiscoveredFolders.add(normalizeSlash(normNew));
           foldersChanged = true;
         } else {
           updatedDiscoveredFolders.add(p);

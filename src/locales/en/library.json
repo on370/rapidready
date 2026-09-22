@@ -13,7 +13,9 @@
     "scanning": "Scanning library...",
     "refreshFolder": "Refresh folder (F5)",
     "exactLocationTooltip": "Contains the currently selected photo",
-    "ancestorLocationTooltip": "Contains subfolders with the currently selected photo"
+    "ancestorLocationTooltip": "Contains subfolders with the currently selected photo",
+    "entireArchive": "Entire Archive",
+    "entireArchiveTooltip": "Show entire archive (Esc)"
   },
   "header": {
     "lastImport": "Latest Import",
@@ -30,7 +32,9 @@
     "viewLoupe": "Loupe",
     "toggleInspector": "Toggle Inspector",
     "autoAdvance": "Auto-Advance",
-    "autoAdvanceTooltip": "Toggle Auto-Advance after rating",
+    "autoAdvanceTooltip": "Auto-Advance: Automatically advance to next photo after rating",
+    "autoAdvanceTooltipActive": "Auto-Advance active: Automatically advance to next photo after rating (Click to disable)",
+    "autoAdvanceTooltipInactive": "Auto-Advance disabled: Click to enable",
     "zoomThumbnailSize": "Thumbnail Size: {{size}}px",
     "zoomFit": "Zoom: Fit",
     "zoomPercent": "Zoom: {{percent}}%",

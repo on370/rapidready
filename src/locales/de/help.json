@@ -27,6 +27,7 @@
       "grid": "Raster-Ansicht",
       "fullscreen": "Vollbild umschalten",
       "selectAll": "Alle Bilder auswählen",
+      "deselectOrAllPhotos": "Gesamtes Archiv / Auswahl aufheben",
       "import": "Import-Ansicht",
       "library": "Bibliothek-Ansicht",
       "zoom": "Zoom an/aus",

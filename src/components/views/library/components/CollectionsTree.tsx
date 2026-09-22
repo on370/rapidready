@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Folder,
@@ -21,38 +21,50 @@ import {
 import { useLibraryStore } from '../../../../stores/libraryStore';
 import { useToastStore } from '../../../../stores/toastStore';
 
+export interface CollectionsTreeRef {
+  openCreateAlbum: () => void;
+}
+
 interface CollectionsTreeProps {
   onSelectCollection: (id: string | null, name: string | null) => void;
   activeCollectionId: string | null;
 }
 
-export function CollectionsTree({ onSelectCollection, activeCollectionId }: CollectionsTreeProps) {
-  const { t } = useTranslation('library');
-  const {
-    collectionsTree,
-    expandedGroups,
-    toggleGroup,
-    createCollection,
-    renameCollection,
-    deleteCollection,
-    addToCollection,
-    openExportModal,
-  } = useCollectionsStore();
+export const CollectionsTree = forwardRef<CollectionsTreeRef, CollectionsTreeProps>(
+  function CollectionsTree({ onSelectCollection, activeCollectionId }, ref) {
+    const { t } = useTranslation('library');
+    const {
+      collectionsTree,
+      expandedGroups,
+      toggleGroup,
+      createCollection,
+      renameCollection,
+      deleteCollection,
+      addToCollection,
+      openExportModal,
+    } = useCollectionsStore();
 
-  const [contextMenu, setContextMenu] = useState<{
-    x: number;
-    y: number;
-    item: AlbumItem;
-  } | null>(null);
+    const [contextMenu, setContextMenu] = useState<{
+      x: number;
+      y: number;
+      item: AlbumItem;
+    } | null>(null);
 
-  const [activeModal, setActiveModal] = useState<{
-    type: 'create_album' | 'create_group' | 'rename';
-    targetItem?: AlbumItem;
-    parentId?: string | null;
-  } | null>(null);
+    const [activeModal, setActiveModal] = useState<{
+      type: 'create_album' | 'create_group' | 'rename';
+      targetItem?: AlbumItem;
+      parentId?: string | null;
+    } | null>(null);
 
-  const [inputName, setInputName] = useState('');
-  const [dragOverAlbumId, setDragOverAlbumId] = useState<string | null>(null);
+    const [inputName, setInputName] = useState('');
+    const [dragOverAlbumId, setDragOverAlbumId] = useState<string | null>(null);
+
+    useImperativeHandle(ref, () => ({
+      openCreateAlbum: () => {
+        setInputName('');
+        setActiveModal({ type: 'create_album' });
+      },
+    }));
 
   // Close context menu on outside click
   useEffect(() => {
@@ -259,21 +271,6 @@ export function CollectionsTree({ onSelectCollection, activeCollectionId }: Coll
 
   return (
     <div className="flex flex-col space-y-0.5">
-      {/* Action Header Button: New Collection */}
-      <div data-tour="collection-export" className="flex items-center justify-between px-2 py-1 mb-1 text-[11px] text-txt-tertiary">
-        <span className="font-semibold uppercase tracking-wider">{t('collections.title', 'Sammlungen')}</span>
-        <button
-          onClick={() => {
-            setInputName('');
-            setActiveModal({ type: 'create_album' });
-          }}
-          className="p-1 hover:bg-app-hover rounded text-txt-secondary hover:text-accent transition-colors flex items-center gap-1"
-          title={t('collections.newCollection', 'Neue Sammlung')}
-        >
-          <Plus className="w-3.5 h-3.5" />
-        </button>
-      </div>
-
       {collectionsTree.length === 0 ? (
         <div className="px-2 py-1.5 text-xs text-txt-tertiary italic">
           {t('collections.noCollectionsYet', 'Keine Sammlungen angelegt')}
@@ -411,4 +408,4 @@ export function CollectionsTree({ onSelectCollection, activeCollectionId }: Coll
       )}
     </div>
   );
-}
+});

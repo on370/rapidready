@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { 
-  LayoutGrid, Scan, PanelRight, Zap, Star, Trash2, Check, 
+  LayoutGrid, Scan, PanelRight, ArrowRightToLine, Star, Trash2, Check, 
   Rocket, FolderOpen, ZoomIn, ZoomOut, RotateCw, RotateCcw, 
   SquareArrowOutUpRight, CircleSlash, Tag, ChevronDown, X 
 } from 'lucide-react';
@@ -154,15 +154,15 @@ export const CullingToolbar = React.memo(function CullingToolbar({
           {/* Auto-Advance Toggle */}
           <button 
             onClick={() => setAutoAdvance(!autoAdvance)} 
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer ${
+            className={`w-[30px] h-[30px] flex items-center justify-center rounded-lg border transition-colors cursor-pointer ${
               autoAdvance 
-                ? 'bg-warning/15 border-warning/30 text-warning hover:bg-warning/25' 
+                ? 'bg-accent/15 border-accent/40 text-accent hover:bg-accent/25' 
                 : 'bg-app-card border-app-border text-txt-tertiary hover:text-txt-secondary hover:border-app-border-hover'
             }`}
-            title={t('toolbar.autoAdvanceTooltip')}
+            title={autoAdvance ? t('toolbar.autoAdvanceTooltipActive') : t('toolbar.autoAdvanceTooltipInactive')}
+            aria-label={t('toolbar.autoAdvance')}
           >
-            <Zap className={`w-3.5 h-3.5 ${autoAdvance ? 'fill-warning text-warning' : 'text-txt-tertiary'}`} />
-            <span className="hidden sm:inline">{t('toolbar.autoAdvance')}</span>
+            <ArrowRightToLine className="w-3.5 h-3.5" />
           </button>
 
           <div className="w-px h-5 bg-app-border mx-0.5"></div>
