@@ -154,11 +154,7 @@ where
     let initial_count = existing_paths.map(|s| s.len()).unwrap_or(0);
     let mut files = Vec::new();
     let mut all_directories = Vec::new();
-    let supported_exts = [
-        "jpg", "jpeg", "png", "tif", "tiff", "heic", "heif", "hif", "webp", "avif", // Raster
-        "cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2", "pef", "3fr", "x3f", "nrw", "rwl", "fff", "iiq", "crw", "erf", // RAW
-        "mp4", "mov", "m4v", "avi", // Video
-    ];
+    let supported_exts = SUPPORTED_EXTENSIONS;
 
     let mut current_chunk = Vec::with_capacity(100);
     let mut current_dir_chunk = Vec::new();
@@ -336,6 +332,137 @@ pub fn scan_archive_directory(dir: &Path) -> Result<ArchiveScanResult> {
     scan_archive_directory_streaming(dir, None, 0, 0, controller, |_| {}, |_, _| {})
 }
 
+pub const SUPPORTED_EXTENSIONS: &[&str] = &[
+    "jpg", "jpeg", "png", "tif", "tiff", "heic", "heif", "hif", "webp", "avif", // Raster
+    "cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2", "pef", "3fr", "x3f", "nrw", "rwl", "fff", "iiq", "crw", "erf", // RAW
+    "mp4", "mov", "m4v", "avi", // Video
+];
+
+pub fn is_supported_archive_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|s| s.to_str())
+        .map(|ext| SUPPORTED_EXTENSIONS.contains(&ext.to_lowercase().as_str()))
+        .unwrap_or(false)
+}
+
+pub fn create_archive_file(path: &Path) -> Option<ArchiveFile> {
+    if !path.is_file() || !is_supported_archive_file(path) {
+        return None;
+    }
+
+    let metadata = std::fs::metadata(path).ok();
+    let size = metadata.as_ref().map(|m| m.len()).unwrap_or(0);
+    let name = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
+    let date = get_fast_creation_date(path, metadata.as_ref());
+    let is_raw = crate::metadata_resolver::is_raw_path(path);
+    let is_video = crate::metadata_resolver::is_video_path(path);
+    let culling = read_sidecar(path);
+
+    Some(ArchiveFile {
+        path: path.to_string_lossy().into_owned(),
+        name,
+        size,
+        date,
+        camera: None,
+        lens: None,
+        iso: None,
+        aperture: None,
+        shutter: None,
+        culling,
+        is_raw,
+        is_video,
+    })
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReconcileDiff {
+    pub folder_path: String,
+    pub added: Vec<ArchiveFile>,
+    pub removed: Vec<String>,
+    pub new_dirs: Vec<String>,
+}
+
+pub fn normalize_path_for_comparison(p: &str) -> String {
+    let s = p.replace('\\', "/");
+    let trimmed = s.trim_end_matches('/');
+    if cfg!(target_os = "linux") {
+        trimmed.to_string()
+    } else {
+        trimmed.to_lowercase()
+    }
+}
+
+pub fn reconcile_directory_files(folder: &Path, known_paths: &[String]) -> Result<ReconcileDiff> {
+    let folder_norm = folder.to_string_lossy().replace('\\', "/").trim_end_matches('/').to_string();
+    if !folder.exists() || !folder.is_dir() {
+        return Ok(ReconcileDiff {
+            folder_path: folder_norm,
+            added: Vec::new(),
+            removed: Vec::new(),
+            new_dirs: Vec::new(),
+        });
+    }
+
+    let folder_comp = normalize_path_for_comparison(&folder_norm);
+
+    let known_set: std::collections::HashSet<String> = known_paths
+        .iter()
+        .map(|p| normalize_path_for_comparison(p))
+        .collect();
+
+    let mut added = Vec::new();
+    let mut new_dirs = Vec::new();
+    let mut current_on_disk = std::collections::HashSet::new();
+
+    if let Ok(entries) = std::fs::read_dir(folder) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_dir() {
+                let dir_norm = p.to_string_lossy().replace('\\', "/");
+                new_dirs.push(dir_norm);
+            } else if p.is_file() && is_supported_archive_file(&p) {
+                let norm = p.to_string_lossy().replace('\\', "/");
+                let comp_key = normalize_path_for_comparison(&norm);
+                current_on_disk.insert(comp_key.clone());
+                if !known_set.contains(&comp_key) {
+                    if let Some(archive_file) = create_archive_file(&p) {
+                        added.push(archive_file);
+                    }
+                }
+            }
+        }
+    }
+
+    let mut removed = Vec::new();
+    for p in known_paths {
+        let p_norm = p.replace('\\', "/");
+        let is_in_folder = if let Some(parent) = p_norm.rfind('/') {
+            let parent_dir = &p_norm[..parent];
+            normalize_path_for_comparison(parent_dir) == folder_comp
+        } else {
+            false
+        };
+
+        if is_in_folder {
+            let comp_key = normalize_path_for_comparison(&p_norm);
+            if !current_on_disk.contains(&comp_key) && !Path::new(p).exists() {
+                removed.push(p.clone());
+            }
+        }
+    }
+
+    added.sort_unstable_by(|a, b| a.path.cmp(&b.path));
+    removed.sort_unstable();
+    new_dirs.sort_unstable();
+
+    Ok(ReconcileDiff {
+        folder_path: folder_norm,
+        added,
+        removed,
+        new_dirs,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -451,6 +578,54 @@ mod tests {
         let jpg = res.files.iter().find(|f| f.name == "photo.jpg").expect("Must find photo.jpg");
         assert!(!jpg.is_video);
         assert!(!jpg.is_raw);
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_create_archive_file_and_reconcile() {
+        let temp_dir = std::env::temp_dir().join(format!("rapidready_test_reconcile_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let file1 = temp_dir.join("photo1.jpg");
+        std::fs::write(&file1, b"jpg1").unwrap();
+
+        let af1 = create_archive_file(&file1).expect("create_archive_file should succeed on valid jpg");
+        assert_eq!(af1.name, "photo1.jpg");
+        assert_eq!(af1.size, 4);
+
+        // Initial reconcile with no known paths: photo1 should be added
+        let diff1 = reconcile_directory_files(&temp_dir, &[]).expect("reconcile should succeed");
+        assert_eq!(diff1.added.len(), 1);
+        assert_eq!(diff1.added[0].name, "photo1.jpg");
+        assert!(diff1.removed.is_empty());
+
+        // Reconcile with photo1 known: nothing added, nothing removed
+        let known = vec![file1.to_string_lossy().replace('\\', "/")];
+        let diff2 = reconcile_directory_files(&temp_dir, &known).expect("reconcile should succeed");
+        assert!(diff2.added.is_empty());
+        assert!(diff2.removed.is_empty());
+
+        // Add photo2: should be detected as added
+        let file2 = temp_dir.join("photo2.jpg");
+        std::fs::write(&file2, b"jpg2_new").unwrap();
+
+        let diff3 = reconcile_directory_files(&temp_dir, &known).expect("reconcile should succeed");
+        assert_eq!(diff3.added.len(), 1);
+        assert_eq!(diff3.added[0].name, "photo2.jpg");
+        assert!(diff3.removed.is_empty());
+
+        // Delete photo1: should be detected as removed when known
+        let _ = std::fs::remove_file(&file1);
+        let known2 = vec![
+            file1.to_string_lossy().replace('\\', "/"),
+            file2.to_string_lossy().replace('\\', "/"),
+        ];
+        let diff4 = reconcile_directory_files(&temp_dir, &known2).expect("reconcile should succeed");
+        assert!(diff4.added.is_empty());
+        assert_eq!(diff4.removed.len(), 1);
+        assert_eq!(diff4.removed[0].replace('\\', "/"), file1.to_string_lossy().replace('\\', "/"));
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }

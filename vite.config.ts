@@ -30,4 +30,9 @@ export default defineConfig(async () => ({
       ignored: ["**/src-tauri/**"],
     },
   },
+
+  build: {
+    // Desktop apps run locally with near-zero latency from SSD; silence web-specific 500kB warning
+    chunkSizeWarningLimit: 1200,
+  },
 }));

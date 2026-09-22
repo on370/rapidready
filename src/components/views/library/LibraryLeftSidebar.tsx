@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useSettingsStore } from "../../../stores/settingsStore";
-import { Bookmark, ChevronDown, Plus, HardDrive, Folder, ChevronRight, FolderOpen, Sparkles, Loader2, Camera } from "lucide-react";
+import { Bookmark, ChevronDown, Plus, HardDrive, Folder, ChevronRight, FolderOpen, Sparkles, Loader2, Camera, RefreshCw } from "lucide-react";
 import { open, ask } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
 import { useLibraryStore, LibraryImage } from "../../../stores/libraryStore";
@@ -1139,7 +1139,16 @@ export function LibraryLeftSidebar() {
             {t("sidebar.library")}
             {isLoading && <Loader2 className="w-3 h-3 text-accent animate-spin ml-1" />}
           </h2>
-          <ChevronDown className={`w-3.5 h-3.5 text-txt-tertiary transition-transform ${!libraryOpen ? "-rotate-90" : ""}`} />
+          <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => useLibraryStore.getState().reconcileActiveFolder()}
+              className="p-1 text-txt-tertiary hover:text-txt-primary hover:bg-white/10 rounded transition-colors cursor-pointer"
+              title={t("sidebar.refreshFolder", "Ordner aktualisieren (F5)")}
+            >
+              <RefreshCw className="w-3 h-3" />
+            </button>
+            <ChevronDown className={`w-3.5 h-3.5 text-txt-tertiary transition-transform ${!libraryOpen ? "-rotate-90" : ""}`} />
+          </div>
         </div>
         
         <div className={`flex flex-col flex-1 min-h-0 ${!libraryOpen ? "hidden" : ""}`}>
@@ -1248,6 +1257,7 @@ export function LibraryLeftSidebar() {
           rejectedCount={contextMenu.rejectedPhotoCount}
           onClose={() => setContextMenu(null)}
           onShowInFinder={() => handleShowInFinder([contextMenu.node.path])}
+          onRefreshFolder={() => useLibraryStore.getState().reconcileFolder(contextMenu.node.path)}
           onSelectAllInFolder={() => {
             if (contextMenu.isMultiSelect) {
               handleSelectAllInMultiFolders(contextMenu.topSelectedPaths, contextMenu.allSelectedFolderPaths);

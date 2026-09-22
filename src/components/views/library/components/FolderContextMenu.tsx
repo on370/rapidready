@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { 
   FolderOpen, CheckSquare, ChevronDown, ChevronRight, 
-  FolderPlus, Trash2, XCircle, Pencil 
+  FolderPlus, Trash2, XCircle, Pencil, RefreshCw 
 } from 'lucide-react';
 import { isMac } from '../../../../utils/platform';
 
@@ -21,6 +21,7 @@ export interface FolderContextMenuProps {
   rejectedCount?: number;
   onClose: () => void;
   onShowInFinder: () => void;
+  onRefreshFolder?: () => void;
   onSelectAllInFolder: () => void;
   onExpandAll?: () => void;
   onCollapseAll?: () => void;
@@ -43,6 +44,7 @@ export const FolderContextMenu: React.FC<FolderContextMenuProps> = ({
   rejectedCount = 0,
   onClose,
   onShowInFinder,
+  onRefreshFolder,
   onSelectAllInFolder,
   onExpandAll,
   onCollapseAll,
@@ -110,6 +112,19 @@ export const FolderContextMenu: React.FC<FolderContextMenuProps> = ({
             <FolderOpen className="w-3.5 h-3.5 text-accent flex-shrink-0" />
             <span className="truncate">
               {isMac ? t('folderMenu.showInFinder', 'Im Finder anzeigen') : t('folderMenu.showInExplorer', 'Im Explorer anzeigen')}
+            </span>
+          </button>
+        )}
+
+        {/* Refresh folder */}
+        {onRefreshFolder && (
+          <button
+            onClick={() => { onRefreshFolder(); onClose(); }}
+            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-white/10 text-txt-secondary hover:text-white transition-colors cursor-pointer text-left"
+          >
+            <RefreshCw className="w-3.5 h-3.5 text-accent flex-shrink-0" />
+            <span className="truncate">
+              {t('folderMenu.refreshFolder', 'Ordner aktualisieren')}
             </span>
           </button>
         )}

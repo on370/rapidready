@@ -217,6 +217,7 @@ pub fn get_removable_drives() -> Vec<rapidready_core::drives::DriveInfo> {
 pub struct SidecarWatcherState {
     pub watcher: Mutex<Option<RecommendedWatcher>>,
     pub watched_dir: Mutex<Option<PathBuf>>,
+    pub tx: Mutex<Option<std::sync::mpsc::Sender<PathBuf>>>,
 }
 
 impl Default for SidecarWatcherState {
@@ -224,6 +225,7 @@ impl Default for SidecarWatcherState {
         Self {
             watcher: Mutex::new(None),
             watched_dir: Mutex::new(None),
+            tx: Mutex::new(None),
         }
     }
 }
@@ -266,26 +268,86 @@ pub fn start_watching_dir_internal(
     };
 
     if should_watch {
+        // Clean up previous sender
+        *state.tx.lock().unwrap() = None;
+        *state.watcher.lock().unwrap() = None;
+
+        let (tx, rx) = std::sync::mpsc::channel::<PathBuf>();
         let app_handle = app.clone();
+
+        std::thread::spawn(move || {
+            while let Ok(first_path) = rx.recv() {
+                let mut paths = std::collections::HashSet::new();
+                paths.insert(first_path);
+                let start = std::time::Instant::now();
+                loop {
+                    match rx.recv_timeout(std::time::Duration::from_millis(300)) {
+                        Ok(next_path) => {
+                            paths.insert(next_path);
+                            if start.elapsed() >= std::time::Duration::from_millis(1500) {
+                                break;
+                            }
+                        }
+                        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                            break;
+                        }
+                        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                            break;
+                        }
+                    }
+                }
+
+                let mut added_files = Vec::new();
+                let mut removed_files = Vec::new();
+                let mut new_dirs = Vec::new();
+
+                for p in paths {
+                    let path_str = p.to_string_lossy();
+                    if path_str.ends_with(".rrdata") {
+                        let img_path_str = path_str.strip_suffix(".rrdata").unwrap_or(&path_str).to_string();
+                        let img_path = PathBuf::from(&img_path_str);
+                        let culling = rapidready_core::culling::read_sidecar(&img_path);
+                        let _ = app_handle.emit("sidecar-updated", serde_json::json!({
+                            "path": img_path_str,
+                            "culling": culling
+                        }));
+                    } else if p.is_dir() {
+                        let dir_norm = p.to_string_lossy().replace('\\', "/");
+                        new_dirs.push(dir_norm);
+                    } else if rapidready_core::archive::is_supported_archive_file(&p) {
+                        if p.exists() && p.is_file() {
+                            if let Some(archive_file) = rapidready_core::archive::create_archive_file(&p) {
+                                added_files.push(archive_file);
+                            }
+                        } else if !p.exists() {
+                            let norm = p.to_string_lossy().replace('\\', "/");
+                            removed_files.push(norm);
+                        }
+                    }
+                }
+
+                if !added_files.is_empty() || !removed_files.is_empty() || !new_dirs.is_empty() {
+                    let _ = app_handle.emit("archive-files-changed", serde_json::json!({
+                        "added": added_files,
+                        "removed": removed_files,
+                        "new_dirs": new_dirs
+                    }));
+                }
+            }
+        });
+
+        let tx_clone = tx.clone();
+        let app_err = app.clone();
         let mut watcher = notify::recommended_watcher(move |res: Result<notify::Event, notify::Error>| {
             match res {
                 Ok(event) => {
                     for p in event.paths {
-                        let path_str = p.to_string_lossy();
-                        if path_str.ends_with(".rrdata") {
-                            let img_path_str = path_str.strip_suffix(".rrdata").unwrap_or(&path_str).to_string();
-                            let img_path = PathBuf::from(&img_path_str);
-                            let culling = rapidready_core::culling::read_sidecar(&img_path);
-                            let _ = app_handle.emit("sidecar-updated", serde_json::json!({
-                                "path": img_path_str,
-                                "culling": culling
-                            }));
-                        }
+                        let _ = tx_clone.send(p);
                     }
                 }
                 Err(e) => {
-                    eprintln!("Sidecar watcher error: {}", e);
-                    let _ = app_handle.emit("sidecar-watcher-error", e.to_string());
+                    eprintln!("Directory watcher error: {}", e);
+                    let _ = app_err.emit("sidecar-watcher-error", e.to_string());
                 }
             }
         }).map_err(|e| e.to_string())?;
@@ -293,6 +355,7 @@ pub fn start_watching_dir_internal(
         watcher.watch(dir, notify::RecursiveMode::Recursive).map_err(|e| e.to_string())?;
         *state.watcher.lock().unwrap() = Some(watcher);
         *state.watched_dir.lock().unwrap() = Some(dir.to_path_buf());
+        *state.tx.lock().unwrap() = Some(tx);
     }
     Ok(())
 }
@@ -315,7 +378,23 @@ pub fn stop_watching_directory(
     *watcher = None;
     let mut watched_dir = state.watched_dir.lock().unwrap();
     *watched_dir = None;
+    let mut tx = state.tx.lock().unwrap();
+    *tx = None;
     Ok(())
+}
+
+#[tauri::command]
+pub async fn reconcile_folder(
+    folder_path: String,
+    known_paths: Vec<String>,
+) -> Result<rapidready_core::archive::ReconcileDiff, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let p = std::path::PathBuf::from(&folder_path);
+        rapidready_core::archive::reconcile_directory_files(&p, &known_paths)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]

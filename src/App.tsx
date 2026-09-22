@@ -118,7 +118,7 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [setActiveView]);
 
-  // Real-time synchronization for RapidRAW / external sidecar changes
+  // Real-time synchronization for RapidRAW / external sidecar and file changes
   useEffect(() => {
     const unlistenPromise = listen<{ path: string; culling: CullingState }>(
       "sidecar-updated",
@@ -126,6 +126,20 @@ function App() {
         useLibraryStore.getState().updateImageCullingByPath(event.payload.path, event.payload.culling);
       }
     );
+
+    const unlistenFilesChanged = listen<{
+      added: LibraryImage[];
+      removed: string[];
+      new_dirs: string[];
+    }>("archive-files-changed", (event) => {
+      const store = useLibraryStore.getState();
+      if ((event.payload.added && event.payload.added.length > 0) || (event.payload.new_dirs && event.payload.new_dirs.length > 0)) {
+        store.addImages(event.payload.added || [], event.payload.new_dirs || []);
+      }
+      if (event.payload.removed && event.payload.removed.length > 0) {
+        store.removeImages(event.payload.removed);
+      }
+    });
 
     const unlistenWatcherError = listen<string>(
       "sidecar-watcher-error",
@@ -148,11 +162,14 @@ function App() {
           state.updateImageCullingByPath(active.path, culling);
         } catch {}
       }
+      // Reconcile active folder in background when window gains focus
+      state.reconcileActiveFolder().catch(() => {});
     };
     window.addEventListener("focus", handleWindowFocus);
 
     return () => {
       unlistenPromise.then((unlisten) => unlisten());
+      unlistenFilesChanged.then((unlisten) => unlisten());
       unlistenWatcherError.then((unlisten) => unlisten());
       window.removeEventListener("focus", handleWindowFocus);
     };

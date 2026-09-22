@@ -228,6 +228,8 @@ pub fn run() {
             commands::rotate_images,
             commands::get_culling_state,
             commands::start_watching_directory,
+            commands::stop_watching_directory,
+            commands::reconcile_folder,
             commands::delete_files,
             commands::delete_folder,
             commands::delete_folders,

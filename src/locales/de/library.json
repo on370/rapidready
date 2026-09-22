@@ -11,6 +11,7 @@
     "lastImport": "Letzter Import",
     "locationsTitle": "Locations",
     "scanning": "Bibliothek wird gescannt...",
+    "refreshFolder": "Ordner aktualisieren (F5)",
     "exactLocationTooltip": "Enthält das aktuell ausgewählte Foto",
     "ancestorLocationTooltip": "Enthält Unterordner mit dem aktuell ausgewählten Foto"
   },
@@ -202,6 +203,7 @@
   "folderMenu": {
     "showInFinder": "Im Finder anzeigen",
     "showInExplorer": "Im Explorer anzeigen",
+    "refreshFolder": "Ordner aktualisieren",
     "selectAllImages": "Alle Bilder in diesem Ordner auswählen",
     "expandSubfolders": "Alle Unterordner aufklappen",
     "collapseSubfolders": "Alle Unterordner einklappen",

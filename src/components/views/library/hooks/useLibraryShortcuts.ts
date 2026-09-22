@@ -57,6 +57,13 @@ export function useLibraryShortcuts({
         return;
       }
 
+      // Shortcut: F5 or Cmd/Ctrl + Shift + R -> Refresh / Reconcile active folder
+      if (e.key === 'F5' || ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'r' || e.key === 'R'))) {
+        e.preventDefault();
+        useLibraryStore.getState().reconcileActiveFolder();
+        return;
+      }
+
       // Shortcut: Cmd/Ctrl + R -> Rotate CW
       if ((e.metaKey || e.ctrlKey) && (e.key === 'r' || e.key === 'R')) {
         e.preventDefault();

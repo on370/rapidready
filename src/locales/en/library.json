@@ -11,6 +11,7 @@
     "lastImport": "Latest Import",
     "locationsTitle": "Locations",
     "scanning": "Scanning library...",
+    "refreshFolder": "Refresh folder (F5)",
     "exactLocationTooltip": "Contains the currently selected photo",
     "ancestorLocationTooltip": "Contains subfolders with the currently selected photo"
   },
@@ -202,6 +203,7 @@
   "folderMenu": {
     "showInFinder": "Reveal in Finder",
     "showInExplorer": "Show in Explorer",
+    "refreshFolder": "Refresh Folder",
     "selectAllImages": "Select All Images in Folder",
     "expandSubfolders": "Expand All Subfolders",
     "collapseSubfolders": "Collapse All Subfolders",

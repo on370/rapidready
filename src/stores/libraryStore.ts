@@ -108,6 +108,10 @@ interface LibraryStore {
   scanState: 'idle' | 'connecting' | 'scanning' | 'paused' | 'stopped' | 'completed';
   scanProgress: ArchiveScanProgress | null;
   appendImageChunk: (chunk: LibraryImage[], dirs?: string[]) => void;
+  addImages: (newImages: LibraryImage[], newDirs?: string[]) => void;
+  removeImages: (paths: string[]) => void;
+  reconcileFolder: (folderPath?: string) => Promise<void>;
+  reconcileActiveFolder: () => Promise<void>;
   setScanState: (state: 'idle' | 'connecting' | 'scanning' | 'paused' | 'stopped' | 'completed') => void;
   setScanProgress: (progress: ArchiveScanProgress | null) => void;
   pauseScan: () => void;
@@ -240,6 +244,145 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
       discoveredFolders: nextFolders,
     };
   }),
+  addImages: (newImages, newDirs = []) => set((state) => {
+    let nextFolders = state.discoveredFolders;
+    if (newDirs && newDirs.length > 0) {
+      const updated = new Set(state.discoveredFolders);
+      let fChanged = false;
+      for (const d of newDirs) {
+        const normD = normalizePath(d);
+        if (!updated.has(normD)) {
+          updated.add(normD);
+          fChanged = true;
+        }
+      }
+      if (fChanged) nextFolders = updated;
+    }
+
+    if (!newImages || newImages.length === 0) {
+      return nextFolders !== state.discoveredFolders ? { discoveredFolders: nextFolders } : state;
+    }
+
+    const validImages = state.rootPath
+      ? newImages.filter(img => {
+          const normRoot = normalizePath(state.rootPath!);
+          const normPath = normalizePath(img.path);
+          return normPath.startsWith(normRoot.endsWith('/') ? normRoot : normRoot + '/') || normPath === normRoot;
+        })
+      : newImages;
+
+    if (validImages.length === 0) {
+      return nextFolders !== state.discoveredFolders ? { discoveredFolders: nextFolders } : state;
+    }
+
+    const nextImages = [...state.images];
+    const nextMap = new Map(state.imageIndexMap);
+    let changed = false;
+
+    for (const img of validImages) {
+      const norm = normalizePath(img.path);
+      const existingIdx = nextMap.get(norm);
+      if (existingIdx !== undefined) {
+        nextImages[existingIdx] = { ...nextImages[existingIdx], ...img };
+        changed = true;
+      } else {
+        const newIdx = nextImages.length;
+        nextImages.push(img);
+        nextMap.set(norm, newIdx);
+        changed = true;
+      }
+    }
+
+    if (!changed && nextFolders === state.discoveredFolders) {
+      return state;
+    }
+
+    return {
+      images: nextImages,
+      imageIndexMap: nextMap,
+      discoveredFolders: nextFolders,
+    };
+  }),
+  removeImages: (paths) => set((state) => {
+    if (!paths || paths.length === 0) return state;
+
+    const toRemove = new Set<string>();
+    for (const p of paths) {
+      toRemove.add(normalizePath(p));
+    }
+
+    let anyFound = false;
+    for (const p of toRemove) {
+      if (state.imageIndexMap.has(p)) {
+        anyFound = true;
+        break;
+      }
+    }
+
+    if (!anyFound) return state;
+
+    const nextImages = state.images.filter(img => !toRemove.has(normalizePath(img.path)));
+    const nextMap = new Map<string, number>();
+    for (let i = 0; i < nextImages.length; i++) {
+      nextMap.set(normalizePath(nextImages[i].path), i);
+    }
+
+    const nextSelected = new Set(state.selectedPaths);
+    for (const p of toRemove) {
+      nextSelected.delete(p);
+    }
+
+    const nextActiveIndex = state.activeImageIndex >= nextImages.length
+      ? Math.max(0, nextImages.length - 1)
+      : state.activeImageIndex;
+
+    return {
+      images: nextImages,
+      imageIndexMap: nextMap,
+      selectedPaths: nextSelected,
+      activeImageIndex: nextActiveIndex,
+    };
+  }),
+  reconcileFolder: async (targetPath?: string) => {
+    const folder = targetPath || get().activeFolderPath;
+    if (!folder) return;
+
+    const normFolder = normalizePath(folder);
+    const knownPaths = get().images
+      .filter(img => {
+        const p = normalizePath(img.path);
+        const lastSlash = p.lastIndexOf('/');
+        const dir = lastSlash >= 0 ? p.substring(0, lastSlash) : '';
+        return dir === normFolder;
+      })
+      .map(img => img.path);
+
+    try {
+      const diff = await invoke<{
+        folder_path: string;
+        added: LibraryImage[];
+        removed: string[];
+        new_dirs: string[];
+      }>('reconcile_folder', {
+        folderPath: folder,
+        knownPaths,
+      });
+
+      if (diff) {
+        if ((diff.added && diff.added.length > 0) || (diff.new_dirs && diff.new_dirs.length > 0)) {
+          get().addImages(diff.added || [], diff.new_dirs || []);
+        }
+        if (diff.removed && diff.removed.length > 0) {
+          get().removeImages(diff.removed);
+        }
+      }
+    } catch (err) {
+      console.error('Error reconciling folder:', err);
+    }
+  },
+  reconcileActiveFolder: async () => {
+    return get().reconcileFolder();
+  },
   setScanState: (scanState) => set({ scanState }),
   setScanProgress: (scanProgress) => set({ scanProgress }),
   pauseScan: () => {
