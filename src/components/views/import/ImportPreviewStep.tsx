@@ -1,14 +1,19 @@
-import { GitBranch, Folder, ChevronDown, MousePointerClick, Camera, CheckCircle2, Filter, X, Info, Maximize2, ArrowLeft, AlertTriangle, HardDrive, Play } from "lucide-react";
+import { 
+  GitBranch, Folder, ChevronDown, MousePointerClick, Camera, CheckCircle2, 
+  Filter, X, Info, Maximize2, ArrowLeft, AlertTriangle, HardDrive, Play,
+  Check, Minus, Circle 
+} from "lucide-react";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { useImportStore, ScannedFile } from '../../../stores/importStore';
-import { getRrImageUrl, isVideoFilename } from '../../../utils/image';
+import { 
+  getRrImageUrl, isVideoFilename, RAW_EXTENSIONS, COMPANION_IMAGE_EXTENSIONS, 
+  isRawFilename, isCompanionFilename 
+} from '../../../utils/image';
 import { DestinationInfoBar } from './components/DestinationInfoBar';
 import { ImportLightboxModal } from './components/ImportLightboxModal';
 
-const RAW_EXTENSIONS = new Set(["cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2", "pef", "3fr", "x3f", "nrw"]);
-const COMPANION_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "heic", "heif", "hif", "webp", "avif"]);
 
 export interface PairedImportItem {
   id: string;
@@ -58,6 +63,7 @@ export function ImportPreviewStep({ onBack }: ImportPreviewStepProps = {}) {
     scannedFiles, 
     toggleFileSelection, 
     toggleGroupSelection, 
+    toggleFormatSelection,
     hideImported,
     sourceDirectory,
     isSourceDisconnected,
@@ -259,6 +265,27 @@ export function ImportPreviewStep({ onBack }: ImportPreviewStepProps = {}) {
   const totalPhotosCount = allPairs.length;
   const selectedPhotosCount = allPairs.filter(p => p.selected || p.partiallySelected).length;
 
+  const rawFiles = useMemo(
+    () => (hideImported ? scannedFiles.filter(f => !f.already_imported && isRawFilename(f.name)) : scannedFiles.filter(f => isRawFilename(f.name))),
+    [scannedFiles, hideImported]
+  );
+  const companionFiles = useMemo(
+    () => (hideImported ? scannedFiles.filter(f => !f.already_imported && isCompanionFilename(f.name)) : scannedFiles.filter(f => isCompanionFilename(f.name))),
+    [scannedFiles, hideImported]
+  );
+
+  const rawTotal = rawFiles.length;
+  const rawSelected = rawFiles.filter(f => f.selected).length;
+  const rawState: 'all' | 'none' | 'partial' = 
+    rawTotal === 0 ? 'none' : rawSelected === 0 ? 'none' : rawSelected === rawTotal ? 'all' : 'partial';
+
+  const companionTotal = companionFiles.length;
+  const companionSelected = companionFiles.filter(f => f.selected).length;
+  const companionState: 'all' | 'none' | 'partial' = 
+    companionTotal === 0 ? 'none' : companionSelected === 0 ? 'none' : companionSelected === companionTotal ? 'all' : 'partial';
+
+  const hasMixedMedia = rawTotal > 0 && companionTotal > 0;
+
   const CheckboxIcon = () => (
     <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
       <path d="M2 5L4.5 7.5L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -332,7 +359,51 @@ export function ImportPreviewStep({ onBack }: ImportPreviewStepProps = {}) {
               Importing <span className="text-accent font-semibold">{selectedPhotosCount}</span> of {totalPhotosCount} photos ({selectedFilesCount} files)
             </span>
           </div>
-          <div className="text-[10px] text-txt-tertiary">Click ✗ to exclude</div>
+
+          {/* Format Toggles (only rendered if both RAW and Companion exist) */}
+          {hasMixedMedia && (
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="text-[11px] text-txt-tertiary font-medium mr-0.5">{t('preview.formatsLabel')}:</span>
+
+              {/* RAW Pill */}
+              <button
+                type="button"
+                onClick={() => toggleFormatSelection('raw')}
+                className={`px-2 py-0.5 rounded-md font-mono text-[10px] font-semibold flex items-center gap-1.5 transition-all cursor-pointer border select-none active:scale-[0.97] ${
+                  rawState === 'all'
+                    ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25 shadow-sm'
+                    : rawState === 'partial'
+                    ? 'bg-amber-500/10 text-amber-200 border-amber-500/30 hover:bg-amber-500/20'
+                    : 'bg-app-deepest text-txt-tertiary line-through opacity-40 border-app-border hover:opacity-75'
+                }`}
+                title={t('preview.toggleAllRawTooltip', { count: rawTotal })}
+              >
+                {rawState === 'all' && <Check className="w-3 h-3 text-amber-400 stroke-[2.5]" />}
+                {rawState === 'partial' && <Minus className="w-3 h-3 text-amber-400 stroke-[2.5]" />}
+                {rawState === 'none' && <Circle className="w-2.5 h-2.5 text-txt-tertiary" />}
+                <span>RAW {rawState === 'partial' ? `${rawSelected}/${rawTotal}` : rawTotal}</span>
+              </button>
+
+              {/* JPG Pill */}
+              <button
+                type="button"
+                onClick={() => toggleFormatSelection('companion')}
+                className={`px-2 py-0.5 rounded-md font-mono text-[10px] font-semibold flex items-center gap-1.5 transition-all cursor-pointer border select-none active:scale-[0.97] ${
+                  companionState === 'all'
+                    ? 'bg-accent/15 text-accent border-accent/40 hover:bg-accent/25 shadow-sm'
+                    : companionState === 'partial'
+                    ? 'bg-accent/10 text-accent/80 border-accent/30 hover:bg-accent/20'
+                    : 'bg-app-deepest text-txt-tertiary line-through opacity-40 border-app-border hover:opacity-75'
+                }`}
+                title={t('preview.toggleAllCompanionTooltip', { count: companionTotal })}
+              >
+                {companionState === 'all' && <Check className="w-3 h-3 text-accent stroke-[2.5]" />}
+                {companionState === 'partial' && <Minus className="w-3 h-3 text-accent stroke-[2.5]" />}
+                {companionState === 'none' && <Circle className="w-2.5 h-2.5 text-txt-tertiary" />}
+                <span>JPG {companionState === 'partial' ? `${companionSelected}/${companionTotal}` : companionTotal}</span>
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto bg-app-card border border-app-border rounded-xl p-3 space-y-0.5">

@@ -31,7 +31,9 @@
     "gbFree": "{{size}} GB frei",
     "sdCardDefault": "Speicherkarte",
     "pairStats": "{{total}} Fotos ({{pairs}} Paare)",
-    "baseLabel": "Basis:"
+    "baseLabel": "Basis:",
+    "cancel": "Abbrechen",
+    "cancelTooltip": "Import abbrechen und Quellenauswahl zurücksetzen"
   },
   "destination": {
     "title": "Ziel & Struktur",
@@ -84,6 +86,10 @@
     "pairBadge": "Paar",
     "toggleRaw": "RAW ({{ext}}) - Klicke zum Umschalten",
     "toggleJpg": "JPEG - Klicke zum Umschalten",
+    "formatsLabel": "Formate",
+    "toggleAllRawTooltip": "Alle {{count}} RAW-Dateien an-/abwählen",
+    "toggleAllCompanionTooltip": "Alle {{count}} JPG-Dateien an-/abwählen",
+    "importingCount": "Importiere <1>{{selectedPhotos}}</1> von {{totalPhotos}} Fotos ({{selectedFiles}} Dateien)",
     "excludePhoto": "Foto vom Import ausschließen",
     "destinationLabel": "Importziel:",
     "noDestination": "Kein Zielverzeichnis festgelegt!",

@@ -16,6 +16,21 @@
 
 ## 🚀 Released Milestones
 
+### Released in `v0.3.8-beta-RC2` (Build `00DC`)
+- [x] **Import Step 1 – Native Source Scan Cancellation & Clean Reset (`v0.3.8-beta-RC2` / Build `00DC`):**
+  - Added dedicated `[ ✕ Abbrechen ]` button in the active source card header next to media badges (`SD-Karte` / `Ordner`).
+  - Implemented true background task cancellation in Rust (`scan_directory` in `rapidready-core` and Tauri command `cancel_source_scan`): immediately halts the disk-reading worker thread via atomic cancellation token (`Arc<AtomicBool>`).
+  - Clears `scan_progress` event listeners cleanly, preventing zombie scans and ghost progress leaps.
+- [x] **Import Step 2 – Bulk RAW & JPG Companion Selection Pills (`v0.3.8-beta-RC2` / Build `00DA`):**
+  - Conditional Tri-State format pills (`RAW` amber, `JPG` cyan) in pre-import culling info bar, automatically rendered when mixed media is detected on source storage.
+  - Interactive multi-state feedback (`✓` full format inclusion, `–` partial selection with counter `12/245`, `○` deselected format).
+  - Cleaned up obsolete `"Click ✗ to exclude"` culling notice.
+- [x] **Library Splitter & Hit-Target Ergonomics (`v0.3.8-beta-RC2` / Build `00D9`):**
+  - Expanded 7px invisible interactive grab area on tree and inspector dividers (`-left-[3px] -right-[3px]`).
+  - RapidRAW dual-line parity: translucent hover track highlighting the crisp 1px central border line, with calm monochrome drag states.
+- [x] **Grid View Jitter & Layout Thrashing Resolution (`v0.3.8-beta-RC2` / Build `00D7`):**
+  - Eliminated thumbnail grid feedback loop between scrollbar visibility and dynamic column calculation via stable scrollbar gutters and 5% column hysteresis deadbands.
+
 ### Released in `v0.3.7-beta` (Build `00A1`)
 - [x] **GEO Part 1: Universal Geotagging & Intelligent GPS Coordinate Editor (`v0.3.7-beta` / Build `009C`):**
   - Universal client-side parser supporting Google Maps, Apple Maps, OpenStreetMap URLs, Geo-URIs (RFC 5870), DMS (Unicode prime resilience, German O / English E, decimal seconds), DMM, and Decimal Degrees (DD).

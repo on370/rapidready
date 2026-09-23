@@ -2,6 +2,7 @@ use anyhow::Result;
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use walkdir::WalkDir;
 
 use crate::date_resolver::get_fast_creation_date;
@@ -30,6 +31,7 @@ pub struct ScanProgress {
 pub fn scan_directory<F>(
     dir: &Path,
     import_index: &ImportIndex,
+    cancel_flag: Option<&AtomicBool>,
     progress_callback: F,
 ) -> Result<Vec<ScannedFile>>
 where
@@ -47,6 +49,11 @@ where
     // Phase 1: Fast directory walk (reads directory entries from filesystem cache)
     let mut candidate_entries = Vec::new();
     for entry in WalkDir::new(dir).into_iter().filter_map(|e| e.ok()) {
+        if let Some(cancel) = cancel_flag {
+            if cancel.load(Ordering::Relaxed) {
+                return Err(anyhow::anyhow!("Scan cancelled"));
+            }
+        }
         let path = entry.path();
         if path.is_file() {
             if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
@@ -79,6 +86,11 @@ where
     // Phase 2: In-memory metadata & smart pre-filtered hash verification
     let mut files = Vec::with_capacity(total);
     for (idx, entry) in candidate_entries.into_iter().enumerate() {
+        if let Some(cancel) = cancel_flag {
+            if cancel.load(Ordering::Relaxed) {
+                return Err(anyhow::anyhow!("Scan cancelled"));
+            }
+        }
         let path = entry.path();
         let meta = entry.metadata().ok();
         let size = meta.as_ref().map(|m| m.len()).unwrap_or(0);
@@ -152,7 +164,7 @@ mod tests {
         let _ = std::fs::write(&txt, b"dummy text");
 
         let import_index = ImportIndex::new(&temp_dir).expect("Create dummy import index");
-        let scanned = scan_directory(&temp_dir, &import_index, |_| {}).expect("scan directory");
+        let scanned = scan_directory(&temp_dir, &import_index, None, |_| {}).expect("scan directory");
 
         let names: Vec<_> = scanned.iter().map(|f| f.name.as_str()).collect();
         assert!(names.contains(&"photo1.jpg"));
@@ -160,6 +172,23 @@ mod tests {
         assert!(names.contains(&"photo3.HEIF"));
         assert!(names.contains(&"photo4.hif"));
         assert!(!names.contains(&"notes.txt"));
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_scanner_cancellation() {
+        let temp_dir = std::env::temp_dir().join(format!("rr_scanner_cancel_{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&temp_dir);
+
+        for i in 0..10 {
+            let _ = std::fs::write(temp_dir.join(format!("photo{}.jpg", i)), b"dummy");
+        }
+
+        let import_index = ImportIndex::new(&temp_dir).expect("Create dummy import index");
+        let cancel_flag = AtomicBool::new(true); // Pre-cancelled
+        let res = scan_directory(&temp_dir, &import_index, Some(&cancel_flag), |_| {});
+        assert!(res.is_err(), "Scan should return Err when cancelled");
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }

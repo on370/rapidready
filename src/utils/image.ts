@@ -69,4 +69,15 @@ export function isVideoFilename(filename: string | undefined | null): boolean {
   return ext ? VIDEO_EXTENSIONS.has(ext) : false;
 }
 
+export const COMPANION_IMAGE_EXTENSIONS = new Set([
+  'jpg', 'jpeg', 'heic', 'heif', 'hif', 'webp', 'avif'
+]);
+
+export function isCompanionFilename(filename: string | undefined | null): boolean {
+  if (!filename) return false;
+  const ext = filename.split('.').pop()?.toLowerCase();
+  return ext ? COMPANION_IMAGE_EXTENSIONS.has(ext) : false;
+}
+
+
 

@@ -21,6 +21,7 @@ pub fn run() {
         .manage(commands::SidecarWatcherState::default())
         .manage(commands::ArchiveScanState::default())
         .manage(commands::CollectionExportState::default())
+        .manage(commands::SourceScanState::default())
         .setup(|app| {
             #[cfg(target_os = "macos")]
             {
@@ -216,6 +217,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::scan_source_directory,
+            commands::cancel_source_scan,
             commands::execute_import,
             commands::get_removable_drives,
             commands::scan_archive_directory,

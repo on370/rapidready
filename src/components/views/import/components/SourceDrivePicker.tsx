@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   FolderInput, HardDrive, Folder, RefreshCw, File, Database, Calendar, 
-  CheckCircle2, EyeOff, Sparkles, FolderPlus 
+  CheckCircle2, EyeOff, Sparkles, FolderPlus, X 
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
@@ -31,7 +31,8 @@ export const SourceDrivePicker = React.memo(function SourceDrivePicker() {
     setSourceDirectory, sourceDirectory,
     scannedFiles, setScannedFiles, isScanning, setIsScanning,
     scanProgress, setScanProgress,
-    hideImported, setHideImported
+    hideImported, setHideImported,
+    setIsSourceDisconnected
   } = useImportStore();
 
   const [drives, setDrives] = useState<DriveInfo[]>([]);
@@ -66,9 +67,13 @@ export const SourceDrivePicker = React.memo(function SourceDrivePicker() {
     return () => clearInterval(interval);
   }, [sourceDirectory, setSourceDirectory, setScannedFiles, setIsScanning, setScanProgress]);
 
+  const currentScanIdRef = useRef(0);
+  const unlistenFnRef = useRef<(() => void) | null>(null);
+
   // Central scan function with watchdog inactivity protection
   const scanPath = async (path: string) => {
     if (isScanning) return;
+    const scanId = ++currentScanIdRef.current;
     setSourceDirectory(path);
     setScannedFiles([]);
     setScanProgress(null);
@@ -91,9 +96,12 @@ export const SourceDrivePicker = React.memo(function SourceDrivePicker() {
 
         try {
           unlistenFn = await listen<ScanProgress>('scan_progress', (event) => {
-            setScanProgress(event.payload);
+            if (currentScanIdRef.current === scanId) {
+              setScanProgress(event.payload);
+            }
             resetWatchdog(reject);
           });
+          unlistenFnRef.current = unlistenFn;
 
           const result = await invoke<ScannedFile[]>('scan_source_directory', { path });
           resolve(result);
@@ -103,18 +111,53 @@ export const SourceDrivePicker = React.memo(function SourceDrivePicker() {
       });
 
       const files = await scanPromise;
-      setScannedFiles(files);
+      if (currentScanIdRef.current === scanId) {
+        setScannedFiles(files);
+      }
     } catch (error: any) {
-      console.error("Failed to scan directory:", error);
-      alert(error.message || String(error));
-      setSourceDirectory(null);
-      setScannedFiles([]);
+      if (currentScanIdRef.current === scanId) {
+        const errMsg = String(error?.message || error || '');
+        if (!errMsg.toLowerCase().includes('cancel') && !errMsg.toLowerCase().includes('abgebrochen')) {
+          console.error("Failed to scan directory:", error);
+          alert(errMsg);
+        }
+        setSourceDirectory(null);
+        setScannedFiles([]);
+      }
     } finally {
       if (watchdogTimer) clearTimeout(watchdogTimer);
-      if (unlistenFn) unlistenFn();
-      setIsScanning(false);
+      if (unlistenFn) {
+        unlistenFn();
+        if (unlistenFnRef.current === unlistenFn) {
+          unlistenFnRef.current = null;
+        }
+      }
+      if (currentScanIdRef.current === scanId) {
+        setIsScanning(false);
+      }
     }
   };
+
+  const handleCancelSource = async () => {
+    currentScanIdRef.current++;
+    if (unlistenFnRef.current) {
+      try {
+        unlistenFnRef.current();
+      } catch {}
+      unlistenFnRef.current = null;
+    }
+    try {
+      await invoke('cancel_source_scan');
+    } catch (err) {
+      console.warn("Failed to invoke cancel_source_scan:", err);
+    }
+    setSourceDirectory(null);
+    setScannedFiles([]);
+    setScanProgress(null);
+    setIsScanning(false);
+    setIsSourceDisconnected(false);
+  };
+
 
   const handleSelectFolder = async () => {
     if (isScanning) return;
@@ -258,13 +301,23 @@ export const SourceDrivePicker = React.memo(function SourceDrivePicker() {
                 </>
               )}
             </div>
-            <div className="flex-shrink-0">
+            <div className="flex-shrink-0 flex items-center gap-2">
               <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-semibold tracking-wide ${
                 isRemovableSource ? 'bg-warning/15 text-warning border border-warning/30' : 'bg-accent/15 text-accent border border-accent/30'
               }`}>
-                {isRemovableSource ? <HardDrive className="w-3 h-3" /> : <Folder className="w-3 h-3" />}
+                {isRemovableSource ? <HardDrive className="w-3.5 h-3.5" /> : <Folder className="w-3.5 h-3.5" />}
                 <span>{isRemovableSource ? t('source.badgeSdCard') : t('source.badgeFolder')}</span>
               </span>
+
+              <button
+                type="button"
+                onClick={handleCancelSource}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium text-txt-secondary hover:text-danger hover:bg-danger/10 border border-app-border hover:border-danger/30 transition-all cursor-pointer group active:scale-95"
+                title={t('source.cancelTooltip')}
+              >
+                <X className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
+                <span>{t('source.cancel')}</span>
+              </button>
             </div>
           </div>
         </div>

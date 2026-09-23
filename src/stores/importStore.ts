@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { ImportPreset } from './settingsStore';
+import { isRawFilename, isCompanionFilename } from '../utils/image';
 
 export const normalizeDateFormat = (df?: string): string => {
   if (!df) return '{year}/{year}-{month}-{day}';
@@ -76,6 +77,7 @@ interface ImportState {
   setHideImported: (hide: boolean) => void;
   toggleFileSelection: (path: string) => void;
   toggleGroupSelection: (paths: string[], forceState?: boolean) => void;
+  toggleFormatSelection: (formatType: 'raw' | 'companion', forceState?: boolean) => void;
   getEffectiveTemplate: () => string;
 }
 
@@ -204,6 +206,27 @@ export const useImportStore = create<ImportState>()(
             : f
         )
       })),
+      toggleFormatSelection: (formatType, forceState) => set((state) => {
+        const isMatch = (name: string) => 
+          formatType === 'raw' ? isRawFilename(name) : isCompanionFilename(name);
+
+        const candidateFiles = state.hideImported 
+          ? state.scannedFiles.filter(f => isMatch(f.name) && !f.already_imported)
+          : state.scannedFiles.filter(f => isMatch(f.name));
+
+        const allSelected = candidateFiles.length > 0 && candidateFiles.every(f => f.selected);
+        const targetState = forceState !== undefined ? forceState : !allSelected;
+
+        return {
+          scannedFiles: state.scannedFiles.map(f => {
+            if (isMatch(f.name)) {
+              if (state.hideImported && f.already_imported) return f;
+              return { ...f, selected: targetState };
+            }
+            return f;
+          })
+        };
+      }),
       getEffectiveTemplate: () => {
         const state = get();
         switch (state.structureMode) {

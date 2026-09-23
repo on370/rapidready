@@ -31,7 +31,9 @@
     "gbFree": "{{size}} GB free",
     "sdCardDefault": "SD Card",
     "pairStats": "{{total}} photos ({{pairs}} pairs)",
-    "baseLabel": "Base:"
+    "baseLabel": "Base:",
+    "cancel": "Cancel",
+    "cancelTooltip": "Cancel import and reset source selection"
   },
   "destination": {
     "title": "Destination",
@@ -84,6 +86,10 @@
     "pairBadge": "Pair",
     "toggleRaw": "RAW ({{ext}}) - Click to toggle",
     "toggleJpg": "JPEG - Click to toggle",
+    "formatsLabel": "Formats",
+    "toggleAllRawTooltip": "Toggle all {{count}} RAW files",
+    "toggleAllCompanionTooltip": "Toggle all {{count}} JPG files",
+    "importingCount": "Importing <1>{{selectedPhotos}}</1> of {{totalPhotos}} photos ({{selectedFiles}} files)",
     "excludePhoto": "Exclude photo from import",
     "destinationLabel": "Destination:",
     "noDestination": "No destination directory selected!",
