@@ -88,9 +88,22 @@ export function LibraryView() {
         
         {/* Left Divider */}
         <div 
-          className={`w-px flex-shrink-0 bg-app-border cursor-col-resize hover:bg-accent/50 transition-colors z-10 ${isDraggingLeft ? 'bg-accent' : ''}`}
+          className="relative w-px flex-shrink-0 group cursor-col-resize z-20 select-none"
           onMouseDown={(e) => { e.preventDefault(); setIsDraggingLeft(true); }}
-        />
+        >
+          {/* 7px hit-area & subtle RapidRAW hover track */}
+          <div 
+            className={`absolute inset-y-0 -left-[3px] -right-[3px] transition-colors rounded-[1px] group-hover:bg-white/[0.08] ${
+              isDraggingLeft ? 'bg-white/[0.15]' : ''
+            }`}
+          />
+          {/* Sharp 1px center line */}
+          <div 
+            className={`absolute inset-y-0 left-0 w-px transition-colors ${
+              isDraggingLeft ? 'bg-white/70' : 'bg-app-border group-hover:bg-app-border-hover'
+            }`} 
+          />
+        </div>
         
         {/* Center */}
         <div className="flex-1 min-w-[400px] flex min-h-0 bg-app-bg relative z-0">
@@ -103,9 +116,22 @@ export function LibraryView() {
           <>
             {/* Right Divider */}
             <div 
-              className={`w-px flex-shrink-0 bg-app-border cursor-col-resize hover:bg-accent/50 transition-colors z-10 ${isDraggingRight ? 'bg-accent' : ''}`}
+              className="relative w-px flex-shrink-0 group cursor-col-resize z-20 select-none"
               onMouseDown={(e) => { e.preventDefault(); setIsDraggingRight(true); }}
-            />
+            >
+              {/* 7px hit-area & subtle RapidRAW hover track */}
+              <div 
+                className={`absolute inset-y-0 -left-[3px] -right-[3px] transition-colors rounded-[1px] group-hover:bg-white/[0.08] ${
+                  isDraggingRight ? 'bg-white/[0.15]' : ''
+                }`}
+              />
+              {/* Sharp 1px center line */}
+              <div 
+                className={`absolute inset-y-0 left-0 w-px transition-colors ${
+                  isDraggingRight ? 'bg-white/70' : 'bg-app-border group-hover:bg-app-border-hover'
+                }`} 
+              />
+            </div>
             {/* Right Sidebar */}
             <div style={{ width: rightWidth }} className="flex-shrink-0 flex min-h-0 relative">
               <LibraryInspector close={() => setIsInspectorOpen(false)} />
