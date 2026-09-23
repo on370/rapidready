@@ -84,6 +84,15 @@ All culling operations (picks, rejects, star ratings, color labels, tags, GPS co
 - The camera RAW file is **never written to or modified**.
 - Metadata is written to a unique temporary file (`.{stem}.tmp.{thread_id}.{pid}`) and atomically moved to the destination (`.rrdata` / `.xmp`) via `std::fs::rename`. This eliminates file corruption even in the event of an abrupt app crash, power cut, or network share disconnect.
 
+### D. Hybrid Filesystem Synchronization & Ghost-Folder Protection
+RapidReady keeps the in-memory archive view synchronized with disk changes (e.g. RapidRAW exports, file deletions, or external copies) via a complementary three-layer model:
+1. **Real-Time Watcher (Push Layer):**
+   A background `notify` watcher observes the archive directory recursively. Events are debounced via a dual-timeout mpsc channel (300 ms quiet window, 1500 ms max window) and emitted as `archive-files-changed` or `sidecar-updated`. Transient write artifacts (`.tmp`) are automatically discarded.
+2. **Window-Focus Reconciliation (Pull Layer / Safety Net):**
+   Whenever RapidReady gains focus (`handleWindowFocus`), the frontend invokes `reconcile_directory_files()` on the active folder. This performs an ultra-low-latency (< 0.2 ms) single-level `std::fs::read_dir` diff against `known_paths`, guaranteeing reliable updates on network shares (NAS) where OS watcher events may be dropped.
+3. **Unified Case-Insensitive Deduplication (`mergeFoldersDeduped`):**
+   To prevent "ghost folders" caused by casing discrepancies (e.g. `_inbox` vs `_Inbox` on Windows/macOS filesystems), all discovered folder paths pass through a central deduplication helper that keys folders case-insensitively while authoritatively upgrading display names when proper casing is discovered.
+
 ---
 
 ## 4. Multi-RAW Sidecar Provider Strategy

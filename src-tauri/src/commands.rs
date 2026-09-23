@@ -302,6 +302,15 @@ pub fn start_watching_dir_internal(
                 let mut new_dirs = Vec::new();
 
                 for p in paths {
+                    let file_name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                    // Ignore transient / temporary write files (e.g. atomic sidecar files .*.tmp.* or *.tmp/*.temp)
+                    if file_name.starts_with('.') && file_name.contains(".tmp.") {
+                        continue;
+                    }
+                    if file_name.ends_with(".tmp") || file_name.ends_with(".temp") {
+                        continue;
+                    }
+
                     let path_str = p.to_string_lossy();
                     if path_str.ends_with(".rrdata") {
                         let img_path_str = path_str.strip_suffix(".rrdata").unwrap_or(&path_str).to_string();

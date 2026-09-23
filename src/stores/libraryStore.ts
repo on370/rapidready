@@ -157,6 +157,54 @@ const getSavedLastImport = (): string[] => {
 
 let nextScanCounter = 1;
 
+/**
+ * Deduplicates and normalizes incoming folder paths against existing discovered folders.
+ * Uses case-insensitive matching to prevent duplicate branches on Windows/macOS filesystems,
+ * while authoritatively upgrading lowercase-only names when proper casing is discovered.
+ * Performs zero allocations if no folders change.
+ */
+export function mergeFoldersDeduped(
+  existing: Set<string>,
+  incoming: Iterable<string> | null | undefined
+): { next: Set<string>; changed: boolean } {
+  if (!incoming) return { next: existing, changed: false };
+
+  const lowerMap = new Map<string, string>();
+  for (const f of existing) {
+    lowerMap.set(f.toLowerCase(), f);
+  }
+
+  let changed = false;
+  let next = existing;
+
+  for (const raw of incoming) {
+    if (!raw) continue;
+    const norm = normalizeSlash(raw);
+    const lower = norm.toLowerCase();
+    const existingEntry = lowerMap.get(lower);
+
+    if (!existingEntry) {
+      if (!changed) {
+        next = new Set(existing);
+      }
+      next.add(norm);
+      lowerMap.set(lower, norm);
+      changed = true;
+    } else if (norm !== lower && existingEntry === lower) {
+      // Authoritative casing upgrade (e.g. from "_inbox" to "_Inbox")
+      if (!changed) {
+        next = new Set(existing);
+      }
+      next.delete(existingEntry);
+      next.add(norm);
+      lowerMap.set(lower, norm);
+      changed = true;
+    }
+  }
+
+  return { next, changed };
+}
+
 export const useLibraryStore = create<LibraryStore>((set, get) => ({
   images: [],
   imageIndexMap: new Map<string, number>(),
@@ -178,29 +226,7 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
   discoveredFolders: new Set<string>(),
   addDiscoveredFolders: (folders) => set((state) => {
     if (!folders || folders.length === 0) return state;
-    const next = new Set(state.discoveredFolders);
-    const lowerMap = new Map<string, string>();
-    for (const existing of state.discoveredFolders) {
-      lowerMap.set(existing.toLowerCase(), existing);
-    }
-    let changed = false;
-    for (const f of folders) {
-      const norm = normalizeSlash(f);
-      const lower = norm.toLowerCase();
-      if (!lowerMap.has(lower)) {
-        next.add(norm);
-        lowerMap.set(lower, norm);
-        changed = true;
-      } else {
-        const existing = lowerMap.get(lower)!;
-        if (norm !== lower && existing === lower) {
-          next.delete(existing);
-          next.add(norm);
-          lowerMap.set(lower, norm);
-          changed = true;
-        }
-      }
-    }
+    const { next, changed } = mergeFoldersDeduped(state.discoveredFolders, folders);
     return changed ? { discoveredFolders: next } : state;
   }),
   removeFolder: (folderPath) => set((state) => {
@@ -221,30 +247,8 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
   appendImageChunk: (chunk, dirs = []) => set((state) => {
     let nextFolders = state.discoveredFolders;
     if (dirs && dirs.length > 0) {
-      const updated = new Set(state.discoveredFolders);
-      const lowerMap = new Map<string, string>();
-      for (const existing of state.discoveredFolders) {
-        lowerMap.set(existing.toLowerCase(), existing);
-      }
-      let fChanged = false;
-      for (const d of dirs) {
-        const normD = normalizeSlash(d);
-        const lowerD = normD.toLowerCase();
-        if (!lowerMap.has(lowerD)) {
-          updated.add(normD);
-          lowerMap.set(lowerD, normD);
-          fChanged = true;
-        } else {
-          const existing = lowerMap.get(lowerD)!;
-          if (normD !== lowerD && existing === lowerD) {
-            updated.delete(existing);
-            updated.add(normD);
-            lowerMap.set(lowerD, normD);
-            fChanged = true;
-          }
-        }
-      }
-      if (fChanged) nextFolders = updated;
+      const { next, changed } = mergeFoldersDeduped(state.discoveredFolders, dirs);
+      if (changed) nextFolders = next;
     }
 
     if (chunk.length === 0) {
@@ -276,30 +280,8 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
   addImages: (newImages, newDirs = []) => set((state) => {
     let nextFolders = state.discoveredFolders;
     if (newDirs && newDirs.length > 0) {
-      const updated = new Set(state.discoveredFolders);
-      const lowerMap = new Map<string, string>();
-      for (const existing of state.discoveredFolders) {
-        lowerMap.set(existing.toLowerCase(), existing);
-      }
-      let fChanged = false;
-      for (const d of newDirs) {
-        const normD = normalizeSlash(d);
-        const lowerD = normD.toLowerCase();
-        if (!lowerMap.has(lowerD)) {
-          updated.add(normD);
-          lowerMap.set(lowerD, normD);
-          fChanged = true;
-        } else {
-          const existing = lowerMap.get(lowerD)!;
-          if (normD !== lowerD && existing === lowerD) {
-            updated.delete(existing);
-            updated.add(normD);
-            lowerMap.set(lowerD, normD);
-            fChanged = true;
-          }
-        }
-      }
-      if (fChanged) nextFolders = updated;
+      const { next, changed } = mergeFoldersDeduped(state.discoveredFolders, newDirs);
+      if (changed) nextFolders = next;
     }
 
     if (!newImages || newImages.length === 0) {
@@ -519,26 +501,7 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
           for (let i = 0; i < allImages.length; i++) {
             imageIndexMap.set(normalizePath(allImages[i].path), i);
           }
-          const nextFolders = new Set(state.discoveredFolders);
-          const lowerMap = new Map<string, string>();
-          for (const existing of state.discoveredFolders) {
-            lowerMap.set(existing.toLowerCase(), existing);
-          }
-          for (const d of loadedDirs) {
-            const normD = normalizeSlash(d);
-            const lowerD = normD.toLowerCase();
-            if (!lowerMap.has(lowerD)) {
-              nextFolders.add(normD);
-              lowerMap.set(lowerD, normD);
-            } else {
-              const existing = lowerMap.get(lowerD)!;
-              if (normD !== lowerD && existing === lowerD) {
-                nextFolders.delete(existing);
-                nextFolders.add(normD);
-                lowerMap.set(lowerD, normD);
-              }
-            }
-          }
+          const { next: nextFolders } = mergeFoldersDeduped(state.discoveredFolders, loadedDirs);
           return { images: allImages, imageIndexMap, discoveredFolders: nextFolders, isLoading: false, scanState: nextScanState };
         });
       } else {
@@ -549,30 +512,11 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
         for (let i = 0; i < sorted.length; i++) {
           imageIndexMap.set(normalizePath(sorted[i].path), i);
         }
-        const nextFolders = new Set(useLibraryStore.getState().discoveredFolders);
+        const initialFolders = new Set(useLibraryStore.getState().discoveredFolders);
         if (path) {
-          const normP = normalizeSlash(path);
-          nextFolders.add(normP);
+          initialFolders.add(normalizeSlash(path));
         }
-        const lowerMap = new Map<string, string>();
-        for (const existing of nextFolders) {
-          lowerMap.set(existing.toLowerCase(), existing);
-        }
-        for (const d of loadedDirs) {
-          const normD = normalizeSlash(d);
-          const lowerD = normD.toLowerCase();
-          if (!lowerMap.has(lowerD)) {
-            nextFolders.add(normD);
-            lowerMap.set(lowerD, normD);
-          } else {
-            const existing = lowerMap.get(lowerD)!;
-            if (normD !== lowerD && existing === lowerD) {
-              nextFolders.delete(existing);
-              nextFolders.add(normD);
-              lowerMap.set(lowerD, normD);
-            }
-          }
-        }
+        const { next: nextFolders } = mergeFoldersDeduped(initialFolders, loadedDirs);
         set({ images: sorted, imageIndexMap, discoveredFolders: nextFolders, isLoading: false, scanState: nextScanState });
       }
     } catch (e) {

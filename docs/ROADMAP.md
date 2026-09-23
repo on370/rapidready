@@ -107,6 +107,18 @@
 
 ## 📌 Active Backlog & Future Milestones
 
+### Milestone: Professional Culling Precision & Smart Ingest Ergonomics
+- [ ] **Focus Peaking & Sharpness Inspection (Grid & Loupe View):**
+  - **Context & Goal:** Fast culling requires instantly evaluating whether focus hit the subject's eyes or focal point without continuously zooming in to 100%.
+  - **Color Overlay & Zebra Patterns:** Highlight in-focus high-frequency contrast edges with configurable signal colors (e.g. Red, Blue, Green) or zebra hatching.
+  - **Dual-View Availability:** Real-time edge detection overlay in Loupe view (Fit & 1:1) and optional sharpness indicators / badges in Grid view thumbnails.
+  - **High-Performance Implementation:** Hardware-accelerated WebGL / Canvas shader (< 2 ms overhead) or native Rust edge filter with adjustable threshold levels (Fine / Normal / Coarse).
+
+- [ ] **Import Step 2 – Format Filter Quick Selection (Batch Toggle RAWs / JPGs):**
+  - **Context & Goal:** When shooting dual-slot or single-slot RAW + JPG, photographers frequently want to ingest only one format (e.g. only RAWs to save disk space and offload time, or only JPGs for fast client delivery).
+  - **Batch Format Toggles:** Dedicated 1-click action buttons / format pills in the Step 2 source preview toolbar (`[ Select only RAWs ]`, `[ Deselect all JPGs ]`, `[ Videos ]`).
+  - **Dynamic Volume Feedback:** Instantly recalculates transfer file count, total bytes, and destination disk headroom without requiring manual folder-by-folder unchecking.
+
 ### Milestone: Multi-RAW Developer & Universal Sidecar Architecture
 - [ ] **Industry Standard Adobe XMP Sidecars (`.xmp`) & Multi-RAW Developer Integration:**
   - **Context & Goal:**  
