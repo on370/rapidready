@@ -75,7 +75,7 @@ export const useLibraryUIStore = create<LibraryUIStore>((set) => ({
   },
   
   gridColumns: 4,
-  setGridColumns: (cols) => set({ gridColumns: cols }),
+  setGridColumns: (cols) => set((state) => (state.gridColumns === cols ? state : { gridColumns: cols })),
   
   gridScrollTop: 0,
   setGridScrollTop: (top) => set({ gridScrollTop: top }),

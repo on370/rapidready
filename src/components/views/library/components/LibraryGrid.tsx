@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, useLayoutEffect } from 'react';
+import React, { useRef, useState, useEffect, useLayoutEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useLibraryStore, LibraryImage } from '../../../../stores/libraryStore';
@@ -82,7 +82,6 @@ export const LibraryGrid = React.memo(function LibraryGrid({
 }: LibraryGridProps) {
   const { t } = useTranslation('library');
   const gridThumbnailSize = useLibraryUIStore((s) => s.gridThumbnailSize);
-  const gridScrollTop = useLibraryUIStore((s) => s.gridScrollTop);
   const setGridScrollTop = useLibraryUIStore((s) => s.setGridScrollTop);
   const setGridColumns = useLibraryUIStore((s) => s.setGridColumns);
   const gridContainerRef = useRef<HTMLDivElement>(null);
@@ -169,8 +168,9 @@ export const LibraryGrid = React.memo(function LibraryGrid({
     if (!el) return;
 
     const updateSize = () => {
-      if (el.clientWidth > 0) {
-        setContainerWidth(el.clientWidth);
+      const w = el.clientWidth;
+      if (w > 0) {
+        setContainerWidth((prev) => (Math.abs(prev - w) >= 2 ? w : prev));
       }
     };
 
@@ -189,8 +189,21 @@ export const LibraryGrid = React.memo(function LibraryGrid({
   const targetWidth = gridThumbnailSize;
   const availableWidth = Math.max(100, containerWidth - paddingX);
 
-  // Responsive number of columns based on container width
-  const numColumns = Math.max(1, Math.floor((availableWidth + gap) / (targetWidth + gap)));
+  // Responsive number of columns based on container width with hysteresis
+  const rawRatio = (availableWidth + gap) / (targetWidth + gap);
+  const lastColsRef = useRef<number>(1);
+  const numColumns = useMemo(() => {
+    const last = lastColsRef.current;
+    let cols: number;
+    if (last > 1 && rawRatio < last && rawRatio >= last - 0.05) {
+      // 5% hysteresis deadband prevents oscillating when container width fluctuates near an integer boundary
+      cols = last;
+    } else {
+      cols = Math.max(1, Math.floor(rawRatio));
+    }
+    lastColsRef.current = cols;
+    return cols;
+  }, [rawRatio]);
   const totalGaps = (numColumns - 1) * gap;
   const itemWidth = (availableWidth - totalGaps) / numColumns;
   const itemHeight = itemWidth * (2 / 3); // 3:2 aspect ratio
@@ -239,11 +252,12 @@ export const LibraryGrid = React.memo(function LibraryGrid({
       const el = gridContainerRef.current;
       if (!el) return;
 
-      if (gridScrollTop > 0) {
-        el.scrollTop = gridScrollTop;
+      const savedScroll = useLibraryUIStore.getState().gridScrollTop;
+      if (savedScroll > 0) {
+        el.scrollTop = savedScroll;
       }
     }
-  }, [displayedImages.length, gridScrollTop]);
+  }, [displayedImages.length]);
 
   // Transition from Loupe View back to Grid View:
   // Check if the active image is still within the visible grid viewport.
@@ -293,7 +307,11 @@ export const LibraryGrid = React.memo(function LibraryGrid({
 
     // Trigger on column change or significant itemHeight change (>0.5px)
     if (oldCols !== numColumns || Math.abs(oldItemH - itemHeight) > 0.5) {
-      if (displayedImages.length === 0) return;
+      if (displayedImages.length === 0) {
+        prevColumnsRef.current = numColumns;
+        prevItemHeightRef.current = itemHeight;
+        return;
+      }
 
       rowVirtualizer.measure();
 
@@ -363,7 +381,8 @@ export const LibraryGrid = React.memo(function LibraryGrid({
   return (
     <div 
       ref={gridContainerRef} 
-      className="flex-1 overflow-auto p-6 relative"
+      style={{ scrollbarGutter: 'stable' }}
+      className="flex-1 overflow-y-auto overflow-x-hidden p-6 relative [scrollbar-gutter:stable]"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           onClearSelection?.();
