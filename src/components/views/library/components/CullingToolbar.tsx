@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { 
   LayoutGrid, Scan, PanelRight, ArrowRightToLine, Star, Trash2, Check, 
   Rocket, FolderOpen, ZoomIn, ZoomOut, RotateCw, RotateCcw, 
-  SquareArrowOutUpRight, CircleSlash, Tag, ChevronDown, X 
+  SquareArrowOutUpRight, CircleSlash, Tag, ChevronDown, X, ScanEye
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
@@ -68,6 +68,12 @@ export const CullingToolbar = React.memo(function CullingToolbar({
     setGridThumbnailSize,
     loupeScale,
     setLoupeScale,
+    focusPeakingEnabled,
+    toggleFocusPeaking,
+    focusPeakingColor,
+    setFocusPeakingColor,
+    focusPeakingThreshold,
+    setFocusPeakingThreshold,
   } = useLibraryUIStore();
 
   const toolbarRef = useRef<HTMLDivElement>(null);
@@ -76,12 +82,14 @@ export const CullingToolbar = React.memo(function CullingToolbar({
   const ratingFilterRef = useRef<HTMLDivElement>(null);
   const colorFilterRef = useRef<HTMLDivElement>(null);
   const tagFilterRef = useRef<HTMLDivElement>(null);
+  const focusMenuRef = useRef<HTMLDivElement>(null);
 
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [isColorPaletteOpen, setIsColorPaletteOpen] = useState(false);
   const [isRatingFilterOpen, setIsRatingFilterOpen] = useState(false);
   const [isColorFilterOpen, setIsColorFilterOpen] = useState(false);
   const [isTagFilterOpen, setIsTagFilterOpen] = useState(false);
+  const [isFocusSettingsOpen, setIsFocusSettingsOpen] = useState(false);
 
   // Close menus when clicking outside
   useEffect(() => {
@@ -100,6 +108,9 @@ export const CullingToolbar = React.memo(function CullingToolbar({
       }
       if (tagFilterRef.current && !tagFilterRef.current.contains(e.target as Node)) {
         setIsTagFilterOpen(false);
+      }
+      if (focusMenuRef.current && !focusMenuRef.current.contains(e.target as Node)) {
+        setIsFocusSettingsOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -250,6 +261,126 @@ export const CullingToolbar = React.memo(function CullingToolbar({
               <Scan className="w-3.5 h-3.5" />
               <span>{t('toolbar.viewLoupe')}</span>
             </button>
+          </div>
+
+          <div className="w-px h-5 bg-app-border mx-0.5"></div>
+
+          {/* Focus Peaking Button & Settings Dropdown */}
+          <div className="relative" ref={focusMenuRef}>
+            <div className={`flex items-center rounded-lg p-0.5 border transition-all ${
+              focusPeakingEnabled 
+                ? 'bg-accent/15 border-accent/40 text-accent shadow-sm' 
+                : 'bg-app-card border-app-border text-txt-tertiary'
+            }`}>
+              <button
+                onClick={toggleFocusPeaking}
+                className={`px-2 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all duration-150 cursor-pointer ${
+                  focusPeakingEnabled 
+                    ? 'text-accent font-semibold' 
+                    : 'text-txt-tertiary hover:text-txt-secondary'
+                }`}
+                title={t('toolbar.focusPeakingTooltip', 'Focus Peaking (F)')}
+              >
+                <ScanEye className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">{t('toolbar.focusPeaking', 'Focus')}</span>
+              </button>
+              <button
+                onClick={() => setIsFocusSettingsOpen(prev => !prev)}
+                className={`px-1 py-1.5 rounded-r-md transition-colors cursor-pointer ${
+                  focusPeakingEnabled
+                    ? 'text-accent/80 hover:text-accent hover:bg-accent/20'
+                    : 'text-txt-tertiary hover:text-txt-secondary hover:bg-app-hover'
+                }`}
+                title={t('toolbar.focusSettings', 'Focus-Einstellungen')}
+              >
+                <ChevronDown className="w-3 h-3 opacity-70" />
+              </button>
+            </div>
+
+            {/* Focus Settings Popover */}
+            {isFocusSettingsOpen && (
+              <div className="absolute right-0 top-full mt-1.5 w-60 bg-[#18181b] border border-app-border rounded-xl shadow-2xl p-3 z-50 animate-in fade-in zoom-in-95 duration-100">
+                <div className="text-[11px] font-semibold text-txt-primary mb-2 flex items-center justify-between">
+                  <span>{t('toolbar.focusSettingsTitle', 'Focus Peaking')}</span>
+                  <kbd className="text-[10px] font-mono text-txt-tertiary bg-app-card border border-app-border px-1.5 py-0.5 rounded">F</kbd>
+                </div>
+
+                {/* Color selection */}
+                <div className="mb-3">
+                  <label className="text-[10px] uppercase tracking-wider font-semibold text-txt-tertiary block mb-1.5">
+                    {t('toolbar.focusColor', 'Farbe')}
+                  </label>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {(['green', 'red', 'cyan', 'yellow'] as const).map((color) => {
+                      const bgClass = color === 'green' 
+                        ? 'bg-[#00ff40]' 
+                        : color === 'red' 
+                        ? 'bg-[#ff2a4b]' 
+                        : color === 'cyan' 
+                        ? 'bg-[#00e5ff]' 
+                        : 'bg-[#ffee00]';
+                      const isSelected = focusPeakingColor === color;
+                      return (
+                        <button
+                          key={color}
+                          onClick={() => setFocusPeakingColor(color)}
+                          className={`h-7 rounded-md flex items-center justify-center transition-all cursor-pointer border ${
+                            isSelected 
+                              ? 'border-white ring-2 ring-white/30 scale-105' 
+                              : 'border-transparent opacity-60 hover:opacity-100'
+                          } ${bgClass}`}
+                          title={t(`toolbar.focusColor_${color}`, color)}
+                        >
+                          {isSelected && <Check className="w-3.5 h-3.5 text-black drop-shadow" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Threshold / Sensitivity Presets */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-[10px] uppercase tracking-wider font-semibold text-txt-tertiary">
+                      {t('toolbar.focusSensitivity', 'Empfindlichkeit')}
+                    </label>
+                    <span className="text-[10px] font-mono text-txt-tertiary">
+                      {focusPeakingThreshold < 0.06 
+                        ? t('toolbar.focusSensHigh', 'Hoch') 
+                        : focusPeakingThreshold >= 0.12 
+                        ? t('toolbar.focusSensLow', 'Niedrig') 
+                        : t('toolbar.focusSensNormal', 'Normal')}
+                    </span>
+                  </div>
+                  <div className="flex rounded-lg bg-app-card border border-app-border p-0.5">
+                    <button
+                      onClick={() => setFocusPeakingThreshold(0.15)}
+                      className={`flex-1 py-1 rounded text-[10px] font-medium transition-all cursor-pointer ${
+                        focusPeakingThreshold >= 0.12 ? 'bg-accent/20 text-accent font-semibold' : 'text-txt-tertiary hover:text-txt-secondary'
+                      }`}
+                    >
+                      {t('toolbar.focusSensLow', 'Niedrig')}
+                    </button>
+                    <button
+                      onClick={() => setFocusPeakingThreshold(0.08)}
+                      className={`flex-1 py-1 rounded text-[10px] font-medium transition-all cursor-pointer ${
+                        focusPeakingThreshold >= 0.06 && focusPeakingThreshold < 0.12 ? 'bg-accent/20 text-accent font-semibold' : 'text-txt-tertiary hover:text-txt-secondary'
+                      }`}
+                    >
+                      {t('toolbar.focusSensNormal', 'Normal')}
+                    </button>
+                    <button
+                      onClick={() => setFocusPeakingThreshold(0.04)}
+                      className={`flex-1 py-1 rounded text-[10px] font-medium transition-all cursor-pointer ${
+                        focusPeakingThreshold < 0.06 ? 'bg-accent/20 text-accent font-semibold' : 'text-txt-tertiary hover:text-txt-secondary'
+                      }`}
+                    >
+                      {t('toolbar.focusSensHigh', 'Hoch')}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
           <div className="w-px h-5 bg-app-border mx-1"></div>
           <HelpPopover viewMode={viewMode} />

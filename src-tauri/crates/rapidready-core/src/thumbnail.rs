@@ -127,10 +127,19 @@ pub fn inject_orientation_into_jpeg(jpeg_bytes: &[u8], orient: u16) -> Vec<u8> {
     out.extend_from_slice(&jpeg_bytes[..2]); // FF D8
     out.extend_from_slice(&app1);
 
-    // If existing JPEG had an APP1 segment, skip it so we don't have conflicting EXIF blocks
+    // If existing JPEG had an APP1 segment, skip it so we don't have conflicting EXIF blocks.
+    // In JPEG syntax (ISO/IEC 10918-1 B.1.1.4):
+    // Marker FF E1 is 2 bytes (bytes 2..3).
+    // app1_len is 2 bytes (bytes 4..5), and its value includes the 2 length bytes.
+    // Therefore, the payload ends at index 4 + app1_len.
+    // The next marker begins at index 4 + app1_len.
     if jpeg_bytes.len() > 4 && jpeg_bytes[2] == 0xFF && jpeg_bytes[3] == 0xE1 {
         let app1_len = ((jpeg_bytes[4] as usize) << 8) | (jpeg_bytes[5] as usize);
-        let skip_to = (2 + 2 + app1_len).min(jpeg_bytes.len());
+        let mut skip_to = (4 + app1_len).min(jpeg_bytes.len());
+        // Verify skip_to lands on a valid JPEG marker prefix (0xFF)
+        while skip_to < jpeg_bytes.len() && jpeg_bytes[skip_to] != 0xFF {
+            skip_to += 1;
+        }
         out.extend_from_slice(&jpeg_bytes[skip_to..]);
     } else {
         out.extend_from_slice(&jpeg_bytes[2..]);
@@ -160,10 +169,19 @@ pub fn extract_largest_embedded_jpeg(path: &Path, target_orient: Option<u32>) ->
             let mut dims = None;
             while sof_pos + 8 < search_limit {
                 if data[sof_pos] == 0xFF && (data[sof_pos+1] == 0xC0 || data[sof_pos+1] == 0xC2) {
-                    let h = ((data[sof_pos+5] as usize) << 8) | (data[sof_pos+6] as usize);
-                    let w = ((data[sof_pos+7] as usize) << 8) | (data[sof_pos+8] as usize);
-                    dims = Some((w, h));
-                    break;
+                    if sof_pos + 9 < search_limit {
+                        let precision = data[sof_pos+4];
+                        let h = ((data[sof_pos+5] as usize) << 8) | (data[sof_pos+6] as usize);
+                        let w = ((data[sof_pos+7] as usize) << 8) | (data[sof_pos+8] as usize);
+                        let num_components = data[sof_pos+9];
+                        if precision == 8 && (num_components == 1 || num_components == 3) && w <= 16000 && h <= 16000 && w > 0 && h > 0 {
+                            let aspect = (w as f32) / (h as f32);
+                            if aspect >= 0.33 && aspect <= 3.0 {
+                                dims = Some((w, h));
+                                break;
+                            }
+                        }
+                    }
                 }
                 sof_pos += 1;
             }
@@ -477,8 +495,8 @@ pub fn get_preview_jpeg(path: &Path, scale: u32) -> Result<Vec<u8>> {
     get_preview_jpeg_with_orient(path, scale, None)
 }
 
-pub fn get_max_preview_jpeg(path: &Path) -> Result<Vec<u8>> {
-    let target_orient = get_effective_orientation(path);
+pub fn get_max_preview_jpeg_with_orient(path: &Path, explicit_orient: Option<u32>) -> Result<Vec<u8>> {
+    let target_orient = explicit_orient.or_else(|| get_effective_orientation(path));
     let mtime = std::fs::metadata(path).and_then(|m| m.modified()).ok();
     let cache_key = format!("{}:fullres:{}:{:?}", path.to_string_lossy(), target_orient.unwrap_or(1), mtime);
     
@@ -517,27 +535,41 @@ pub fn get_max_preview_jpeg(path: &Path) -> Result<Vec<u8>> {
         }
     }
     
-    let thumb = best_thumb.ok_or_else(|| anyhow::anyhow!("Failed to extract a valid preview"))?;
-    
-    let img = RgbaImage::from_raw(thumb.width, thumb.height, thumb.rgba)
-        .context("Failed to construct RgbaImage from raw bytes")?;
+    if let Some(thumb) = best_thumb {
+        let img = RgbaImage::from_raw(thumb.width, thumb.height, thumb.rgba)
+            .context("Failed to construct RgbaImage from raw bytes")?;
+            
+        let dyn_img = image::DynamicImage::ImageRgba8(img);
+        let file_orient = read_exif_orientation(path);
+        let rotated_img = apply_effective_orientation(dyn_img, target_orient, file_orient);
+        let rgb_img = rotated_img.into_rgb8();
         
-    let dyn_img = image::DynamicImage::ImageRgba8(img);
-    let file_orient = read_exif_orientation(path);
-    let rotated_img = apply_effective_orientation(dyn_img, target_orient, file_orient);
-    let rgb_img = rotated_img.into_rgb8();
-    
-    let mut buffer = Cursor::new(Vec::new());
-    rgb_img.write_to(&mut buffer, ImageFormat::Jpeg)
-        .context("Failed to encode JPEG")?;
+        let mut buffer = Cursor::new(Vec::new());
+        rgb_img.write_to(&mut buffer, ImageFormat::Jpeg)
+            .context("Failed to encode JPEG")?;
+            
+        let bytes = buffer.into_inner();
         
-    let bytes = buffer.into_inner();
-    
-    if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
-        cache.put(cache_key, bytes.clone());
+        if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
+            cache.put(cache_key, bytes.clone());
+        }
+            
+        return Ok(bytes);
     }
-        
-    Ok(bytes)
+
+    // Fallback: If thumb_rs could not produce a preview on Windows/macOS, extract any embedded thumbnail
+    if let Some(fast_bytes) = extract_embedded_thumbnail(path, target_orient) {
+        if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
+            cache.put(cache_key, fast_bytes.clone());
+        }
+        return Ok(fast_bytes);
+    }
+
+    anyhow::bail!("Failed to extract a valid preview for {:?}", path);
+}
+
+pub fn get_max_preview_jpeg(path: &Path) -> Result<Vec<u8>> {
+    get_max_preview_jpeg_with_orient(path, None)
 }
 
 #[cfg(test)]
@@ -703,6 +735,7 @@ mod tests {
 
     #[test]
     fn test_inject_orientation_into_jpeg() {
+        // 1. JPEG without existing APP1
         let fake_jpeg = vec![0xFF, 0xD8, 0xFF, 0xDB, 0x00, 0x04, 0x00, 0x00, 0xFF, 0xD9];
         let injected = inject_orientation_into_jpeg(&fake_jpeg, 8);
         assert!(injected.len() > fake_jpeg.len());
@@ -711,6 +744,26 @@ mod tests {
         let exif = exifreader.read_from_container(&mut cursor).expect("Must read injected EXIF");
         let orient = exif.get_field(exif::Tag::Orientation, exif::In::PRIMARY).and_then(|f| f.value.get_uint(0));
         assert_eq!(orient, Some(8));
+
+        // 2. JPEG with EXISTING APP1 segment - must cleanly replace APP1 without truncating following markers (e.g. FF DB)
+        let fake_with_app1 = vec![
+            0xFF, 0xD8,                         // SOI (bytes 0, 1)
+            0xFF, 0xE1, 0x00, 0x08,             // APP1 marker (bytes 2, 3) + length 8 bytes (bytes 4, 5)
+            b'E', b'x', b'i', b'f', 0x00, 0x00, // 6 bytes data (total 8 bytes: 2 len + 6 data) (bytes 6-11)
+            0xFF, 0xDB, 0x00, 0x04, 0x11, 0x22, // Next marker: DQT at index 12 (must NOT be truncated!)
+            0xFF, 0xD9                          // EOI
+        ];
+        let injected_replaced = inject_orientation_into_jpeg(&fake_with_app1, 6);
+        let mut cursor2 = std::io::Cursor::new(&injected_replaced);
+        let exif2 = exifreader.read_from_container(&mut cursor2).expect("Must read replaced EXIF");
+        let orient2 = exif2.get_field(exif::Tag::Orientation, exif::In::PRIMARY).and_then(|f| f.value.get_uint(0));
+        assert_eq!(orient2, Some(6));
+
+        // Verify that FF DB is preserved immediately following the new APP1!
+        let app1_new_len = ((injected_replaced[4] as usize) << 8) | (injected_replaced[5] as usize);
+        let next_marker_pos = 4 + app1_new_len;
+        assert_eq!(injected_replaced[next_marker_pos], 0xFF, "Next marker must start with 0xFF");
+        assert_eq!(injected_replaced[next_marker_pos + 1], 0xDB, "Next marker must be 0xDB (Quantization Table)");
     }
 
     #[test]
@@ -855,6 +908,41 @@ mod tests {
         println!("Transparent PNG get_preview_jpeg: {:?}", preview_trans.as_ref().map(|b| b.len()));
 
         let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_user_files_inspection() {
+        let files = [
+            r"C:\Users\ole\Pictures\2026\2026-09-22\R0002848.DNG",
+            r"C:\Users\ole\Pictures\2026\2026-09-22\R0002845.DNG",
+            r"C:\Users\ole\Pictures\2026\2026-09-22\R0002844.DNG",
+        ];
+
+        for f in &files {
+            let path = Path::new(f);
+            println!("\n========================================================");
+            println!("Testing file: {:?}", path);
+            if !path.exists() {
+                println!("File does not exist!");
+                continue;
+            }
+            let file_size = std::fs::metadata(path).unwrap().len();
+            println!("File size: {} MB", file_size / (1024 * 1024));
+
+            for orient_test in [None, Some(1), Some(6), Some(8)] {
+                let max_preview = get_max_preview_jpeg_with_orient(path, orient_test);
+                match max_preview {
+                    Ok(bytes) => {
+                        assert!(!bytes.is_empty(), "Preview bytes should not be empty");
+                        let img = image::load_from_memory(&bytes).expect("Preview must decode cleanly for all orientations");
+                        assert!(img.width() >= 1000 && img.height() >= 1000, "Preview must be full-res");
+                    }
+                    Err(e) => {
+                        panic!("Failed to extract preview for {:?} with orient {:?}: {:?}", path, orient_test, e);
+                    }
+                }
+            }
+        }
     }
 }
 

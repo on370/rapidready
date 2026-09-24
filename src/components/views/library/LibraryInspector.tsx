@@ -2,10 +2,11 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import { 
   X, MousePointerClick, Star, Check, RotateCw, RotateCcw, Tag, CircleSlash,
   Info, Camera, MapPin, ExternalLink, ChevronDown, ChevronRight,
-  Pencil, Trash2, CheckCircle2, AlertTriangle, Play
+  Pencil, Trash2, CheckCircle2, AlertTriangle, Play, ScanEye
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useLibraryStore, LibraryImage } from "../../../stores/libraryStore";
+import { useLibraryUIStore } from "../../../stores/libraryUIStore";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { getRrImageUrl, normalizePath, isVideoFilename } from "../../../utils/image";
@@ -14,6 +15,7 @@ import { useToastStore } from "../../../stores/toastStore";
 import { useSettingsStore } from "../../../stores/settingsStore";
 import { parseCoordinates, formatDms, formatDd, ParseGpsResult } from "../../../utils/geo";
 import { useCollectionsStore, findAlbumById } from "../../../stores/collectionsStore";
+import { FocusPeakingOverlay } from "./components/FocusPeakingOverlay";
 
 interface LibraryInspectorProps {
   close: () => void;
@@ -142,6 +144,32 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
     if (found) return found;
     return images.find(img => selectedPaths.has(img.path));
   }, [selectedPaths, scopedImages, activeImageIndex, images]);
+
+  const { focusPeakingEnabled, toggleFocusPeaking } = useLibraryUIStore();
+  const inspectorImageRef = useRef<HTMLImageElement | null>(null);
+  const inspectorContainerRef = useRef<HTMLDivElement | null>(null);
+  const [inspectorPreviewSrc, setInspectorPreviewSrc] = useState<string>('');
+
+
+  // Progressive preview loading: instant thumbnail + background fullres
+  useEffect(() => {
+    if (!activeImage) {
+      setInspectorPreviewSrc('');
+      return;
+    }
+    const currentPath = activeImage.path;
+    const thumbUrl = getRrImageUrl(currentPath, false, activeImage.culling?.orientation, 1);
+    const targetFullresUrl = getRrImageUrl(currentPath, true, activeImage.culling?.orientation);
+
+    setInspectorPreviewSrc(thumbUrl);
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = targetFullresUrl;
+    img.onload = () => {
+      setInspectorPreviewSrc(prev => (prev === thumbUrl ? targetFullresUrl : prev));
+    };
+  }, [activeImage?.path, activeImage?.culling?.orientation]);
 
   // Lazy-load detailed EXIF metadata when an image is selected
   useEffect(() => {
@@ -606,20 +634,49 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
                     {t('inspector.preview', 'Vorschau')}
                   </h3>
                 </div>
-                {isCollapsed('preview') && (
-                  <span className="text-[10px] text-txt-tertiary font-mono">
-                    {extension} · {(activeImage.size / (1024 * 1024)).toFixed(1)} MB
-                  </span>
-                )}
+                <div className="flex items-center gap-2">
+                  {!isCollapsed('preview') && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleFocusPeaking();
+                      }}
+                      className={`p-1 rounded transition-all cursor-pointer ${
+                        focusPeakingEnabled 
+                          ? 'bg-accent/20 text-accent ring-1 ring-accent/40' 
+                          : 'text-txt-tertiary hover:text-txt-secondary hover:bg-app-hover'
+                      }`}
+                      title={t('toolbar.focusPeakingTooltip', 'Focus Peaking (F)')}
+                    >
+                      <ScanEye className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  {isCollapsed('preview') && (
+                    <span className="text-[10px] text-txt-tertiary font-mono">
+                      {extension} · {(activeImage.size / (1024 * 1024)).toFixed(1)} MB
+                    </span>
+                  )}
+                </div>
               </div>
 
               {!isCollapsed('preview') && (
                 <>
-                  <div className="relative w-full aspect-[3/2] rounded-xl overflow-hidden border border-app-border bg-app-deepest group">
+                  <div 
+                    ref={inspectorContainerRef}
+                    className="relative w-full aspect-[3/2] rounded-xl overflow-hidden border border-app-border bg-app-deepest group"
+                  >
                     <img 
-                      src={getRrImageUrl(activeImage.path, false, activeImage.culling?.orientation)} 
+                      ref={inspectorImageRef}
+                      src={inspectorPreviewSrc || getRrImageUrl(activeImage.path, false, activeImage.culling?.orientation)} 
                       alt={activeImage.name} 
+                      crossOrigin="anonymous"
                       className="w-full h-full object-contain" 
+                    />
+                    <FocusPeakingOverlay 
+                      imageRef={inspectorImageRef}
+                      containerRef={inspectorContainerRef}
+                      triggerUpdate={inspectorPreviewSrc}
                     />
                     {activeImage.culling.flag === -1 && (
                       <div className="absolute inset-0 bg-danger/25 pointer-events-none z-10" />

@@ -32,7 +32,49 @@ interface LibraryUIStore {
   
   invertScrollZoom: boolean;
   setInvertScrollZoom: (invert: boolean) => void;
+
+  focusPeakingEnabled: boolean;
+  setFocusPeakingEnabled: (enabled: boolean) => void;
+  toggleFocusPeaking: () => void;
+
+  focusPeakingColor: FocusPeakingColor;
+  setFocusPeakingColor: (color: FocusPeakingColor) => void;
+
+  focusPeakingThreshold: number;
+  setFocusPeakingThreshold: (threshold: number) => void;
 }
+
+export type FocusPeakingColor = 'green' | 'red' | 'cyan' | 'yellow';
+
+const getSavedFocusPeakingEnabled = (): boolean => {
+  try {
+    return localStorage.getItem('rapidready_focus_peaking_enabled') === 'true';
+  } catch (_) {}
+  return false;
+};
+
+const getSavedFocusPeakingColor = (): FocusPeakingColor => {
+  try {
+    const val = localStorage.getItem('rapidready_focus_peaking_color');
+    if (val === 'green' || val === 'red' || val === 'cyan' || val === 'yellow') {
+      return val;
+    }
+  } catch (_) {}
+  return 'green';
+};
+
+const getSavedFocusPeakingThreshold = (): number => {
+  try {
+    const val = localStorage.getItem('rapidready_focus_peaking_threshold');
+    if (val) {
+      const parsed = parseFloat(val);
+      if (!isNaN(parsed) && parsed >= 0.02 && parsed <= 0.80) {
+        return parsed;
+      }
+    }
+  } catch (_) {}
+  return 0.08;
+};
 
 const getSavedThumbSize = (): number => {
   try {
@@ -100,4 +142,35 @@ export const useLibraryUIStore = create<LibraryUIStore>((set) => ({
   
   invertScrollZoom: false,
   setInvertScrollZoom: (invert) => set({ invertScrollZoom: invert }),
+
+  focusPeakingEnabled: getSavedFocusPeakingEnabled(),
+  setFocusPeakingEnabled: (enabled) => {
+    try {
+      localStorage.setItem('rapidready_focus_peaking_enabled', enabled ? 'true' : 'false');
+    } catch (_) {}
+    set({ focusPeakingEnabled: enabled });
+  },
+  toggleFocusPeaking: () => set((state) => {
+    const next = !state.focusPeakingEnabled;
+    try {
+      localStorage.setItem('rapidready_focus_peaking_enabled', next ? 'true' : 'false');
+    } catch (_) {}
+    return { focusPeakingEnabled: next };
+  }),
+
+  focusPeakingColor: getSavedFocusPeakingColor(),
+  setFocusPeakingColor: (color) => {
+    try {
+      localStorage.setItem('rapidready_focus_peaking_color', color);
+    } catch (_) {}
+    set({ focusPeakingColor: color });
+  },
+
+  focusPeakingThreshold: getSavedFocusPeakingThreshold(),
+  setFocusPeakingThreshold: (threshold) => {
+    try {
+      localStorage.setItem('rapidready_focus_peaking_threshold', threshold.toString());
+    } catch (_) {}
+    set({ focusPeakingThreshold: threshold });
+  },
 }));

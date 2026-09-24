@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, MouseEvent as ReactMouseEvent, WheelEvent } from "react";
 import { useLibraryUIStore } from "../../../stores/libraryUIStore";
+import { FocusPeakingOverlay } from "./components/FocusPeakingOverlay";
 
 interface ZoomableImageProps {
   src: string;
@@ -14,6 +15,8 @@ export function ZoomableImage({ src, previewSrc, alt, onContextMenu }: ZoomableI
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [isMinimapDragging, setIsMinimapDragging] = useState(false);
+  const [isZoomTransitioning, setIsZoomTransitioning] = useState(false);
+  const zoomTransitionTimeoutRef = useRef<number | null>(null);
   
   const isZoomed = loupeScale > 0;
   const scale = loupeScale > 0 ? loupeScale : 1;
@@ -22,6 +25,15 @@ export function ZoomableImage({ src, previewSrc, alt, onContextMenu }: ZoomableI
   const imageRef = useRef<HTMLImageElement>(null);
   const minimapRef = useRef<HTMLDivElement>(null);
   const startDragPos = useRef({ x: 0, y: 0 });
+
+  // Cleanup zoom transition timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (zoomTransitionTimeoutRef.current !== null) {
+        window.clearTimeout(zoomTransitionTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Reset state & progressive load: show preview immediately, load full-res in background
   useEffect(() => {
@@ -85,6 +97,15 @@ export function ZoomableImage({ src, previewSrc, alt, onContextMenu }: ZoomableI
   }, [loupeScale, setLoupeScale]);
 
   const toggleZoom = useCallback((e?: ReactMouseEvent) => {
+    setIsZoomTransitioning(true);
+    if (zoomTransitionTimeoutRef.current !== null) {
+      window.clearTimeout(zoomTransitionTimeoutRef.current);
+    }
+    zoomTransitionTimeoutRef.current = window.setTimeout(() => {
+      setIsZoomTransitioning(false);
+      zoomTransitionTimeoutRef.current = null;
+    }, 250);
+
     if (isZoomed) {
       setLoupeScale(0);
       setPosition({ x: 0, y: 0 });
@@ -109,9 +130,11 @@ export function ZoomableImage({ src, previewSrc, alt, onContextMenu }: ZoomableI
         toggleZoom();
       }
       if (e.key === '+' || e.key === '=') {
+        setIsZoomTransitioning(false);
         performZoomIn(0.5);
       }
       if (e.key === '-' || e.key === '_') {
+        setIsZoomTransitioning(false);
         performZoomOut(0.5);
       }
     };
@@ -126,6 +149,13 @@ export function ZoomableImage({ src, previewSrc, alt, onContextMenu }: ZoomableI
       return;
     }
     e.preventDefault();
+    if (isZoomTransitioning) {
+      setIsZoomTransitioning(false);
+      if (zoomTransitionTimeoutRef.current !== null) {
+        window.clearTimeout(zoomTransitionTimeoutRef.current);
+        zoomTransitionTimeoutRef.current = null;
+      }
+    }
     setIsDragging(true);
     startDragPos.current = { 
       x: e.clientX - position.x,
@@ -133,15 +163,7 @@ export function ZoomableImage({ src, previewSrc, alt, onContextMenu }: ZoomableI
     };
   };
 
-  const onMinimapMouseDown = (e: ReactMouseEvent) => {
-    if (e.button !== 0) return;
-    e.stopPropagation();
-    e.preventDefault();
-    setIsMinimapDragging(true);
-    handleMinimapMove(e);
-  };
-  
-  const handleMinimapMove = (e: ReactMouseEvent | MouseEvent) => {
+  const handleMinimapMove = useCallback((e: ReactMouseEvent | MouseEvent) => {
     if (!minimapRef.current || !containerRef.current || !imageRef.current) return;
     const rect = minimapRef.current.getBoundingClientRect();
     
@@ -151,42 +173,68 @@ export function ZoomableImage({ src, previewSrc, alt, onContextMenu }: ZoomableI
     px = Math.max(0, Math.min(1, px));
     py = Math.max(0, Math.min(1, py));
     
-    // Center is 0.5. If px = 0.5, we want translation 0.
-    // If px = 0, we want translation maxTx.
-    // If px = 1, we want translation -maxTx.
     const contRect = containerRef.current.getBoundingClientRect();
-    const imgW = imageRef.current.getBoundingClientRect().width;
-    const imgH = imageRef.current.getBoundingClientRect().height;
+    const natW = imageRef.current.naturalWidth || imageRef.current.clientWidth;
+    const natH = imageRef.current.naturalHeight || imageRef.current.clientHeight;
+    const imgW = natW * scale;
+    const imgH = natH * scale;
     
     const maxTx = Math.max(0, (imgW - contRect.width) / 2);
     const maxTy = Math.max(0, (imgH - contRect.height) / 2);
     
     setPosition({
-      x: (0.5 - px) * maxTx * 2,
-      y: (0.5 - py) * maxTy * 2
+      x: Math.max(-maxTx, Math.min(maxTx, (0.5 - px) * maxTx * 2)),
+      y: Math.max(-maxTy, Math.min(maxTy, (0.5 - py) * maxTy * 2)),
     });
-  };
+  }, [scale]);
 
-  const onMouseMove = (e: ReactMouseEvent) => {
-    if (isMinimapDragging) { 
-      handleMinimapMove(e); 
-      return; 
+  const onMinimapMouseDown = (e: ReactMouseEvent) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    e.preventDefault();
+    if (isZoomTransitioning) {
+      setIsZoomTransitioning(false);
+      if (zoomTransitionTimeoutRef.current !== null) {
+        window.clearTimeout(zoomTransitionTimeoutRef.current);
+        zoomTransitionTimeoutRef.current = null;
+      }
     }
-    if (!isDragging || !isZoomed) return;
-    
-    clampAndSetPosition(
-      e.clientX - startDragPos.current.x,
-      e.clientY - startDragPos.current.y
-    );
+    setIsMinimapDragging(true);
+    handleMinimapMove(e);
   };
 
-  const onMouseUp = () => {
-    setIsDragging(false);
-    setIsMinimapDragging(false);
-  };
-  
+  // Robust window mouse listeners: never drop tracking even if mouse moves fast or outside container
+  useEffect(() => {
+    if (!isDragging && !isMinimapDragging) return;
+
+    const handleWindowMouseMove = (e: MouseEvent) => {
+      if (isMinimapDragging) {
+        handleMinimapMove(e);
+      } else if (isDragging && isZoomed) {
+        clampAndSetPosition(
+          e.clientX - startDragPos.current.x,
+          e.clientY - startDragPos.current.y
+        );
+      }
+    };
+
+    const handleWindowMouseUp = () => {
+      setIsDragging(false);
+      setIsMinimapDragging(false);
+    };
+
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+    };
+  }, [isDragging, isMinimapDragging, isZoomed, clampAndSetPosition, handleMinimapMove]);
+
   const onWheel = (e: WheelEvent) => {
     e.preventDefault();
+    setIsZoomTransitioning(false);
     const isZoomIn = invertScrollZoom ? e.deltaY > 0 : e.deltaY < 0;
     if (isZoomIn) {
       performZoomIn(0.15); // Smooth scrolling step
@@ -243,9 +291,6 @@ export function ZoomableImage({ src, previewSrc, alt, onContextMenu }: ZoomableI
     <div 
       ref={containerRef}
       className="relative w-full h-full overflow-hidden flex items-center justify-center bg-app-deepest"
-      onMouseMove={onMouseMove}
-      onMouseUp={onMouseUp}
-      onMouseLeave={onMouseUp}
       onWheel={onWheel}
       onContextMenu={onContextMenu}
     >
@@ -277,8 +322,10 @@ export function ZoomableImage({ src, previewSrc, alt, onContextMenu }: ZoomableI
         ref={imageRef}
         src={currentSrc}
         alt={alt}
+        crossOrigin="anonymous"
         onMouseDown={onMouseDown}
-        className={`select-none ${!isDragging ? "transition-transform duration-200" : ""}`}
+        onTransitionEnd={() => setIsZoomTransitioning(false)}
+        className={`select-none ${isZoomTransitioning ? "transition-transform duration-200" : ""}`}
         style={{
           cursor: isZoomed ? (isDragging ? 'grabbing' : 'grab') : 'zoom-in',
           transform: isZoomed 
@@ -289,6 +336,12 @@ export function ZoomableImage({ src, previewSrc, alt, onContextMenu }: ZoomableI
           objectFit: isZoomed ? 'none' : 'contain',
         }}
         draggable={false}
+      />
+
+      <FocusPeakingOverlay
+        imageRef={imageRef}
+        containerRef={containerRef}
+        triggerUpdate={{ position, currentSrc }}
       />
     </div>
   );

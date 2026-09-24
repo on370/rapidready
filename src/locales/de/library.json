@@ -50,7 +50,20 @@
     "share": "Teilen",
     "shareTooltip": "Aktionen für dieses Bild (R / ⌘⇧F)",
     "colorLabel": "Farblabel",
-    "colorLabelTooltip": "Farblabel zuweisen (6=Rot, 7=Gelb, 8=Grün, 9=Blau)"
+    "colorLabelTooltip": "Farblabel zuweisen (6=Rot, 7=Gelb, 8=Grün, 9=Blau)",
+    "focusPeaking": "Focus",
+    "focusPeakingTooltip": "Focus Peaking ein-/ausschalten (F)",
+    "focusSettings": "Focus-Einstellungen",
+    "focusSettingsTitle": "Focus Peaking",
+    "focusColor": "Peaking-Farbe",
+    "focusColor_green": "Neon-Grün",
+    "focusColor_red": "Neon-Rot",
+    "focusColor_cyan": "Neon-Cyan",
+    "focusColor_yellow": "Neon-Gelb",
+    "focusSensitivity": "Empfindlichkeit",
+    "focusSensHigh": "Hoch",
+    "focusSensNormal": "Normal",
+    "focusSensLow": "Niedrig"
   },
   "contextMenu": {
     "selectedCount": "{{count}} Bilder ausgewählt",

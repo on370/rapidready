@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useLibraryStore, LibraryImage } from '../../../../stores/libraryStore';
 import { useCollectionsStore } from '../../../../stores/collectionsStore';
+import { useLibraryUIStore } from '../../../../stores/libraryUIStore';
 
 interface UseLibraryShortcutsProps {
   activeImage: LibraryImage | undefined;
@@ -171,6 +172,11 @@ export function useLibraryShortcuts({
           case 'G':
             setViewMode('grid');
             e.preventDefault();
+            break;
+          case 'f':
+          case 'F':
+            e.preventDefault();
+            useLibraryUIStore.getState().toggleFocusPeaking();
             break;
           case 'Escape':
             e.preventDefault();

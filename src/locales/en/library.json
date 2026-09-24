@@ -50,7 +50,20 @@
     "share": "Share",
     "shareTooltip": "Actions for this image (R / ⌘⇧F)",
     "colorLabel": "Color Label",
-    "colorLabelTooltip": "Assign color label (6=Red, 7=Yellow, 8=Green, 9=Blue)"
+    "colorLabelTooltip": "Assign color label (6=Red, 7=Yellow, 8=Green, 9=Blue)",
+    "focusPeaking": "Focus",
+    "focusPeakingTooltip": "Toggle Focus Peaking (F)",
+    "focusSettings": "Focus Settings",
+    "focusSettingsTitle": "Focus Peaking",
+    "focusColor": "Peaking Color",
+    "focusColor_green": "Neon Green",
+    "focusColor_red": "Neon Red",
+    "focusColor_cyan": "Neon Cyan",
+    "focusColor_yellow": "Neon Yellow",
+    "focusSensitivity": "Sensitivity",
+    "focusSensHigh": "High",
+    "focusSensNormal": "Normal",
+    "focusSensLow": "Low"
   },
   "contextMenu": {
     "selectedCount": "{{count}} images selected",

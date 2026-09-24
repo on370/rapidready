@@ -42,6 +42,7 @@
       "colorLabels": "Color labels (6=Red, 7=Yellow, 8=Green, 9=Blue)",
       "rotateCw": "Rotate Clockwise",
       "rotateCcw": "Rotate Counter-Clockwise",
+      "focusPeaking": "Toggle Focus Peaking",
       "openRapidRaw": "Edit in RapidRAW",
       "showInFinder": "Show in Finder",
       "showInExplorer": "Show in Explorer",

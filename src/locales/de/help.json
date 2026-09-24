@@ -42,6 +42,7 @@
       "colorLabels": "Farblabels (6=Rot, 7=Gelb, 8=Grün, 9=Blau)",
       "rotateCw": "Im UZS drehen",
       "rotateCcw": "Gegen UZS drehen",
+      "focusPeaking": "Focus Peaking an/aus",
       "openRapidRaw": "In RapidRAW bearbeiten",
       "showInFinder": "Im Finder anzeigen",
       "showInExplorer": "Im Explorer anzeigen",
