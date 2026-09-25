@@ -345,34 +345,34 @@ export const CullingToolbar = React.memo(function CullingToolbar({
                       {t('toolbar.focusSensitivity', 'Empfindlichkeit')}
                     </label>
                     <span className="text-[10px] font-mono text-txt-tertiary">
-                      {focusPeakingThreshold < 0.06 
+                      {focusPeakingThreshold < 0.030 
                         ? t('toolbar.focusSensHigh', 'Hoch') 
-                        : focusPeakingThreshold >= 0.12 
+                        : focusPeakingThreshold >= 0.055 
                         ? t('toolbar.focusSensLow', 'Niedrig') 
                         : t('toolbar.focusSensNormal', 'Normal')}
                     </span>
                   </div>
                   <div className="flex rounded-lg bg-app-card border border-app-border p-0.5">
                     <button
-                      onClick={() => setFocusPeakingThreshold(0.15)}
+                      onClick={() => setFocusPeakingThreshold(0.070)}
                       className={`flex-1 py-1 rounded text-[10px] font-medium transition-all cursor-pointer ${
-                        focusPeakingThreshold >= 0.12 ? 'bg-accent/20 text-accent font-semibold' : 'text-txt-tertiary hover:text-txt-secondary'
+                        focusPeakingThreshold >= 0.055 ? 'bg-accent/20 text-accent font-semibold' : 'text-txt-tertiary hover:text-txt-secondary'
                       }`}
                     >
                       {t('toolbar.focusSensLow', 'Niedrig')}
                     </button>
                     <button
-                      onClick={() => setFocusPeakingThreshold(0.08)}
+                      onClick={() => setFocusPeakingThreshold(0.040)}
                       className={`flex-1 py-1 rounded text-[10px] font-medium transition-all cursor-pointer ${
-                        focusPeakingThreshold >= 0.06 && focusPeakingThreshold < 0.12 ? 'bg-accent/20 text-accent font-semibold' : 'text-txt-tertiary hover:text-txt-secondary'
+                        focusPeakingThreshold >= 0.030 && focusPeakingThreshold < 0.055 ? 'bg-accent/20 text-accent font-semibold' : 'text-txt-tertiary hover:text-txt-secondary'
                       }`}
                     >
                       {t('toolbar.focusSensNormal', 'Normal')}
                     </button>
                     <button
-                      onClick={() => setFocusPeakingThreshold(0.04)}
+                      onClick={() => setFocusPeakingThreshold(0.020)}
                       className={`flex-1 py-1 rounded text-[10px] font-medium transition-all cursor-pointer ${
-                        focusPeakingThreshold < 0.06 ? 'bg-accent/20 text-accent font-semibold' : 'text-txt-tertiary hover:text-txt-secondary'
+                        focusPeakingThreshold < 0.030 ? 'bg-accent/20 text-accent font-semibold' : 'text-txt-tertiary hover:text-txt-secondary'
                       }`}
                     >
                       {t('toolbar.focusSensHigh', 'Hoch')}

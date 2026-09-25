@@ -68,12 +68,12 @@ const getSavedFocusPeakingThreshold = (): number => {
     const val = localStorage.getItem('rapidready_focus_peaking_threshold');
     if (val) {
       const parsed = parseFloat(val);
-      if (!isNaN(parsed) && parsed >= 0.02 && parsed <= 0.80) {
+      if (!isNaN(parsed) && parsed >= 0.005 && parsed <= 0.200) {
         return parsed;
       }
     }
   } catch (_) {}
-  return 0.08;
+  return 0.040;
 };
 
 const getSavedThumbSize = (): number => {
