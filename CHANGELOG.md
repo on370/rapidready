@@ -5,6 +5,47 @@ All notable changes to RapidReady will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-09-27
+
+Major milestone release dropping the beta suffix! Introduces hardware-accelerated dual-view Focus Peaking powered by darktable's Difference-of-Gradients bandpass filter, Virtual Collections (Albums) with custom drag-and-drop sequencing and EXIF-injected export, automatic filesystem reconciliation for external editors (e.g., RapidRAW), instant background scan cancellation in the Rust core, format quick-selection pills in import preview, an interactive onboarding tour with an overhauled help system, and enhanced UI ergonomics.
+
+### Added
+- **Hardware-Accelerated Focus Peaking & Sharpness Inspection (`FocusPeakingOverlay.tsx`, `ZoomableImage.tsx`, `LibraryInspector.tsx`):**
+  - **Dual-View Sharpness Inspection:** Instant Focus Peaking toggle (`F` key) available simultaneously in the 1:1 Loupe Viewer and the Inspector preview panel.
+  - **darktable-Inspired Difference-of-Gradients Bandpass Filter:**
+    - High-performance WebGL fragment shader implementation evaluating focus metrics across two spatial scales (close gradient at $\Delta = 1\text{px}$, far gradient at $\Delta = 2\text{px}$).
+    - Distinguishes genuine optical micro-contrast from blurry macro-contrasts, reliably ignoring out-of-focus background bokeh, bright skylines, and high-contrast out-of-focus edges (e.g. tree branches against a bright sky).
+    - Integrated $3\times3$ noise-floor threshold (`microRange < 0.012`) to eliminate false positives on high-ISO sensor grain.
+  - **Customizable Signal Indicators:**
+    - 4 vibrant peaking colors: Neon Green (`#00ff40`), Vivid Red (`#ff2a4b`), Electric Cyan (`#00e5ff`), and Bright Yellow (`#ffee00`).
+    - 3 calibrated sensitivity presets: High (`0.020`), Normal (`0.040`), and Low (`0.070`).
+    - Zero-latency GPU canvas synchronization during 120 FPS panning, zooming transitions, and minimap navigation.
+- **Virtual Collections (Albums) & Custom Sequencing (`CollectionsTree.tsx`, `collectionsStore.ts`):**
+  - **Hierarchical Virtual Collections:** Dedicated tree view in the left sidebar allowing flexible organization into albums and nested album folders without duplicating physical image assets on disk.
+  - **Drag-and-Drop Manual Sequencing:** Intuitive re-ordering of photos within collections to establish custom narrative sequences independent of capture timestamp or filename.
+  - **Import-Time Collection Assignment:** Ingested media can be assigned directly to an existing or newly created collection right inside the Import wizard.
+- **Collection Export Engine with EXIF Injection (`ExportCollectionModal.tsx`, `export.rs`):**
+  - Full-featured collection exporter supporting standard exports and sequential numerical renaming (e.g., `001_Project.jpg`, `002_Project.jpg`).
+  - Automatic EXIF injection preserving capture dates, camera orientation, and culling metadata tags.
+- **Native Background Import Scan Cancellation (`scanner.rs`, `commands.rs`):**
+  - Dedicated `[ ✕ Cancel ]` button during storage scans with atomic cancellation tokens (`AtomicBool`) in the Rust backend.
+  - Immediately aborts recursive directory traversal and releases hardware I/O handles without blocking the UI thread.
+- **Format Filter Pills in Import Preview (`ImportPreviewStep.tsx`):**
+  - Interactive format selection badges in Step 2 of the import wizard (`RAW`, `JPG`, `HEIC`, `Video`).
+  - One-click filtering of mixed-media cards with real-time recalculation of selected image count and disk storage requirements.
+- **Automatic Filesystem Reconciliation (`sync.rs`, `libraryStore.ts`):**
+  - Proactive detection and background synchronization of folder and metadata modifications executed by external companion software (such as RapidRAW or external file managers).
+- **"Entire Archive" Flat Overview (`LibraryLeftSidebar.tsx`):**
+  - One-click toggle in the folder sidebar displaying all photos across all archive folders in a unified flat grid.
+- **Interactive Onboarding Tour & Revamped Help System (`TourWelcomePrompt.tsx`, `HelpPopover.tsx`):**
+  - Interactive visual walkthrough for new users explaining ingestion, culling flags, filmstrip controls, and inspector features.
+  - Redesigned in-app help popover and shortcut cheatsheet reflecting all new keyboard bindings.
+
+### Changed & Improved
+- **Safety Separation for Collection Items:** Clear, differentiated action dialog when deleting images inside a collection: non-destructively *Remove from Collection* vs. permanently *Delete from Disk*.
+- **Splitter Ergonomics:** Expanded invisible hover and grab zones (7px) for sidebar dividers, eliminating cursor slipping when resizing panels.
+- **Grid Layout Stability:** Eliminated subpixel jitter and layout oscillation during dynamic sidebar resizing and window adjustment.
+
 ## [0.3.7-beta] - 2026-09-18
 
 Major feature release introducing GEO Part 1 (universal geotagging & intelligent coordinate editor), folder management with native context menus and permanent deletion protection for network shares / NAS, native View menu navigation, live transfer rate throughput diagnostics, in-app update checks, and instant workspace cleanup scripts.
