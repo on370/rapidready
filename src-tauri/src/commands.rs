@@ -1500,6 +1500,28 @@ pub fn cancel_collection_export(state: tauri::State<'_, CollectionExportState>) 
     Ok(())
 }
 
+#[tauri::command]
+pub async fn warm_thumbnail_cache(
+    paths: Vec<String>,
+    scale: u32,
+    token: u64,
+) -> Result<(), String> {
+    rapidready_core::thumbnail::WARMUP_TOKEN.store(token, std::sync::atomic::Ordering::SeqCst);
+    tauri::async_runtime::spawn_blocking(move || {
+        rapidready_core::thumbnail::warm_thumbnail_cache_sync(&paths, scale, token);
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn cancel_warmup_cache() -> Result<(), String> {
+    rapidready_core::thumbnail::cancel_warmup_cache();
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

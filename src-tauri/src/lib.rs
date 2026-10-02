@@ -261,7 +261,9 @@ pub fn run() {
             commands::sort_collection_by_exif,
             commands::prune_from_all_collections,
             commands::export_collection,
-            commands::cancel_collection_export
+            commands::cancel_collection_export,
+            commands::warm_thumbnail_cache,
+            commands::cancel_warmup_cache
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

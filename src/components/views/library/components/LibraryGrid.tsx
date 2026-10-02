@@ -1,10 +1,12 @@
 import React, { useRef, useState, useEffect, useLayoutEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { invoke } from '@tauri-apps/api/core';
 import { useLibraryStore, LibraryImage } from '../../../../stores/libraryStore';
 import { useLibraryUIStore } from '../../../../stores/libraryUIStore';
 import { useCollectionsStore } from '../../../../stores/collectionsStore';
 import { GridThumbnailItem } from './GridThumbnailItem';
+import { loadedThumbnailCache } from '../utils/thumbnailCache';
 
 export interface LibraryGridProps {
   displayedImages: LibraryImage[];
@@ -85,6 +87,13 @@ export const LibraryGrid = React.memo(function LibraryGrid({
   const setGridScrollTop = useLibraryUIStore((s) => s.setGridScrollTop);
   const setGridColumns = useLibraryUIStore((s) => s.setGridColumns);
   const gridContainerRef = useRef<HTMLDivElement>(null);
+
+  // Sprint 1: Speculative RAM Viewport Caching refs
+  const lastScrollTopRef = useRef<number>(0);
+  const scrollDirectionRef = useRef<'down' | 'up'>('down');
+  const warmupTokenRef = useRef<number>(0);
+  const warmupTimerRef = useRef<number | null>(null);
+  const scale = gridThumbnailSize <= 130 ? 0 : gridThumbnailSize > 220 ? 2 : 1;
 
   // Drag and Drop reordering state (active only when in collection view)
   const [dragOverPath, setDragOverPath] = useState<string | null>(null);
@@ -378,6 +387,97 @@ export const LibraryGrid = React.memo(function LibraryGrid({
     }
   }, [activeImageIndex, viewMode, numColumns, itemHeight, gap, displayedImages.length, setGridScrollTop]);
 
+  // Sprint 1: Speculative RAM Viewport Caching
+  // Debounce 150ms after scroll settles to warm up thumbnails in scroll direction
+  useEffect(() => {
+    if (viewMode !== 'grid' || displayedImages.length === 0) return;
+
+    if (rowVirtualizer.isScrolling) {
+      // Scrolling in progress - invalidate active warmup job immediately
+      warmupTokenRef.current = Date.now();
+      if (warmupTimerRef.current !== null) {
+        window.clearTimeout(warmupTimerRef.current);
+        warmupTimerRef.current = null;
+      }
+      invoke('cancel_warmup_cache').catch(() => {});
+      return;
+    }
+
+    // 150ms idle debounce
+    warmupTimerRef.current = window.setTimeout(() => {
+      warmupTimerRef.current = null;
+      const virtualItems = rowVirtualizer.getVirtualItems();
+      if (virtualItems.length === 0) return;
+
+      const firstRowIndex = virtualItems[0].index;
+      const lastRowIndex = virtualItems[virtualItems.length - 1].index;
+
+      const isScrollingDown = scrollDirectionRef.current === 'down';
+
+      // Lookahead rows:
+      // In scroll direction: +3 rows
+      // Against scroll direction: -1 row
+      const targetRowIndices: number[] = [];
+
+      if (isScrollingDown) {
+        // Forward rows (+3 rows ahead downwards)
+        for (let r = lastRowIndex + 1; r <= lastRowIndex + 3 && r < rowCount; r++) {
+          targetRowIndices.push(r);
+        }
+        // Backward buffer (-1 row behind upwards)
+        if (firstRowIndex > 0) {
+          targetRowIndices.push(firstRowIndex - 1);
+        }
+      } else {
+        // Forward rows (-3 rows ahead upwards)
+        for (let r = firstRowIndex - 1; r >= Math.max(0, firstRowIndex - 3); r--) {
+          targetRowIndices.push(r);
+        }
+        // Backward buffer (+1 row behind downwards)
+        if (lastRowIndex + 1 < rowCount) {
+          targetRowIndices.push(lastRowIndex + 1);
+        }
+      }
+
+      // Collect images in target rows
+      const pathsToWarm: string[] = [];
+      for (const r of targetRowIndices) {
+        const startIndex = r * numColumns;
+        const endIndex = Math.min(displayedImages.length, startIndex + numColumns);
+        for (let i = startIndex; i < endIndex; i++) {
+          const img = displayedImages[i];
+          if (!img) continue;
+          const cacheKey = `${img.path}:${img.culling?.orientation || 1}:${scale}`;
+          if (!loadedThumbnailCache.has(cacheKey)) {
+            pathsToWarm.push(img.path);
+          }
+        }
+      }
+
+      if (pathsToWarm.length === 0) return;
+
+      const token = Date.now();
+      warmupTokenRef.current = token;
+
+      invoke('warm_thumbnail_cache', { paths: pathsToWarm, scale, token }).catch(() => {});
+    }, 150);
+
+    return () => {
+      if (warmupTimerRef.current !== null) {
+        window.clearTimeout(warmupTimerRef.current);
+        warmupTimerRef.current = null;
+      }
+    };
+  }, [
+    rowVirtualizer.isScrolling,
+    viewMode,
+    displayedImages,
+    numColumns,
+    rowCount,
+    scale,
+    rowVirtualizer,
+  ]);
+
   return (
     <div 
       ref={gridContainerRef} 
@@ -389,7 +489,23 @@ export const LibraryGrid = React.memo(function LibraryGrid({
         }
       }}
       onScroll={(e) => {
-        setGridScrollTop(e.currentTarget.scrollTop);
+        const currentScrollTop = e.currentTarget.scrollTop;
+        if (currentScrollTop > lastScrollTopRef.current) {
+          scrollDirectionRef.current = 'down';
+        } else if (currentScrollTop < lastScrollTopRef.current) {
+          scrollDirectionRef.current = 'up';
+        }
+        lastScrollTopRef.current = currentScrollTop;
+
+        // Invalidate active background warmup immediately on movement
+        warmupTokenRef.current = Date.now();
+        if (warmupTimerRef.current !== null) {
+          window.clearTimeout(warmupTimerRef.current);
+          warmupTimerRef.current = null;
+        }
+        invoke('cancel_warmup_cache').catch(() => {});
+
+        setGridScrollTop(currentScrollTop);
       }}
       onContextMenu={(e) => {
         if (e.target === e.currentTarget) e.preventDefault();

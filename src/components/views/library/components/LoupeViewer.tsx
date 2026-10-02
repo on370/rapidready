@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Film, Info, Camera } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
@@ -34,6 +34,23 @@ export const LoupeViewer = React.memo(function LoupeViewer({
   const setShowFilmstrip = useLibraryUIStore((s) => s.setShowFilmstrip);
 
   const [debouncedActiveIndex, setDebouncedActiveIndex] = useState(activeImageIndex);
+  const prevActiveIndexRef = useRef(activeImageIndex);
+  const directionRef = useRef<'next' | 'prev'>('next');
+  const warmupTokenRef = useRef<number>(0);
+
+  // Track flip direction (prev vs next) and preempt any active warmup on immediate movement
+  useEffect(() => {
+    if (activeImageIndex > prevActiveIndexRef.current) {
+      directionRef.current = 'next';
+    } else if (activeImageIndex < prevActiveIndexRef.current) {
+      directionRef.current = 'prev';
+    }
+    prevActiveIndexRef.current = activeImageIndex;
+
+    // Immediately preempt running warmup job in Rust
+    warmupTokenRef.current = Date.now();
+    invoke('cancel_warmup_cache').catch(() => {});
+  }, [activeImageIndex]);
 
   // Debounce preloading slightly (120ms) so rapid key repeat skips intermediate frames,
   // but normal human culling rhythm (~300-800ms) preloads immediately into RAM cache
@@ -43,6 +60,61 @@ export const LoupeViewer = React.memo(function LoupeViewer({
     }, 120);
     return () => clearTimeout(timer);
   }, [activeImageIndex]);
+
+  // Sprint 1: Directional RAM Viewport Caching in Loupe View
+  // Proactively preloads +3 to +5 images (Scale 2 and Full-Res Embedded Preview) directly in Rust background thread
+  useEffect(() => {
+    if (debouncedActiveIndex !== activeImageIndex || displayedImages.length === 0) return;
+
+    const token = Date.now();
+    warmupTokenRef.current = token;
+
+    const isNext = directionRef.current === 'next';
+    const targetIndices: number[] = [];
+
+    if (isNext) {
+      // Look ahead +1 to +5 in forward direction
+      for (let offset = 1; offset <= 5; offset++) {
+        const idx = activeImageIndex + offset;
+        if (idx < displayedImages.length) {
+          targetIndices.push(idx);
+        }
+      }
+      // Backward buffer of 1 image
+      if (activeImageIndex > 0) {
+        targetIndices.push(activeImageIndex - 1);
+      }
+    } else {
+      // Look ahead -1 to -5 in backward direction
+      for (let offset = 1; offset <= 5; offset++) {
+        const idx = activeImageIndex - offset;
+        if (idx >= 0) {
+          targetIndices.push(idx);
+        }
+      }
+      // Forward buffer of 1 image
+      if (activeImageIndex < displayedImages.length - 1) {
+        targetIndices.push(activeImageIndex + 1);
+      }
+    }
+
+    const paths = targetIndices.map((i) => displayedImages[i]?.path).filter(Boolean);
+    if (paths.length === 0) return;
+
+    // 1. Warm Scale 2 (720px preview) for instant visual feedback on flip
+    invoke('warm_thumbnail_cache', { paths, scale: 2, token })
+      .then(() => {
+        // 2. Warm Full-Res Preview (scale: 100) right after
+        if (warmupTokenRef.current === token) {
+          return invoke('warm_thumbnail_cache', { paths, scale: 100, token });
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      warmupTokenRef.current = Date.now();
+    };
+  }, [debouncedActiveIndex, activeImageIndex, displayedImages]);
 
   // Lazy-load metadata for active image if needed
   useEffect(() => {
@@ -119,40 +191,6 @@ export const LoupeViewer = React.memo(function LoupeViewer({
                 <Film className="w-3.5 h-3.5 text-accent" />
                 <span className="text-xs font-semibold tracking-wide text-white/95">Video · Poster Frame</span>
               </div>
-            )}
-            
-            {/* Preload Previous and Next preview & full-res images into RAM when navigation pauses */}
-            {debouncedActiveIndex === activeImageIndex && (
-              <>
-                {debouncedActiveIndex > 0 && (
-                  <>
-                    <img 
-                      src={getRrImageUrl(displayedImages[debouncedActiveIndex - 1].path, false, displayedImages[debouncedActiveIndex - 1].culling?.orientation, 2)} 
-                      className="hidden" 
-                      alt="" 
-                    />
-                    <img 
-                      src={getRrImageUrl(displayedImages[debouncedActiveIndex - 1].path, true, displayedImages[debouncedActiveIndex - 1].culling?.orientation)} 
-                      className="hidden" 
-                      alt="" 
-                    />
-                  </>
-                )}
-                {debouncedActiveIndex < displayedImages.length - 1 && (
-                  <>
-                    <img 
-                      src={getRrImageUrl(displayedImages[debouncedActiveIndex + 1].path, false, displayedImages[debouncedActiveIndex + 1].culling?.orientation, 2)} 
-                      className="hidden" 
-                      alt="" 
-                    />
-                    <img 
-                      src={getRrImageUrl(displayedImages[debouncedActiveIndex + 1].path, true, displayedImages[debouncedActiveIndex + 1].culling?.orientation)} 
-                      className="hidden" 
-                      alt="" 
-                    />
-                  </>
-                )}
-              </>
             )}
           </>
         ) : null}

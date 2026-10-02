@@ -1,12 +1,19 @@
 use std::path::Path;
 use std::io::{BufReader, Cursor, Read, Seek, SeekFrom};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::num::NonZeroUsize;
 use std::sync::LazyLock;
 use image::{ImageFormat, RgbaImage};
 use thumb_rs::{get_thumbnail, ThumbnailScale};
 use anyhow::{Context, Result};
 use lru::LruCache;
+
+pub static WARMUP_TOKEN: AtomicU64 = AtomicU64::new(0);
+
+pub fn cancel_warmup_cache() {
+    WARMUP_TOKEN.fetch_add(1, Ordering::SeqCst);
+}
 
 // In-memory LRU cache holding up to 10,000 thumbnail/preview JPEGs (~200MB RAM)
 // Provides instantaneous ~0.01ms responses on repeat requests or grid scrolls
@@ -572,10 +579,86 @@ pub fn get_max_preview_jpeg(path: &Path) -> Result<Vec<u8>> {
     get_max_preview_jpeg_with_orient(path, None)
 }
 
+pub fn is_thumbnail_cached(path: &Path, scale: u32, target_orient: Option<u32>) -> bool {
+    let resolved_orient = target_orient.or_else(|| get_effective_orientation(path));
+    let mtime = std::fs::metadata(path).and_then(|m| m.modified()).ok();
+    let cache_key = if scale >= 100 {
+        format!("{}:fullres:{}:{:?}", path.to_string_lossy(), resolved_orient.unwrap_or(1), mtime)
+    } else {
+        format!("{}:{}:{}:{:?}", path.to_string_lossy(), scale, resolved_orient.unwrap_or(1), mtime)
+    };
+    if let Ok(cache) = THUMBNAIL_CACHE.lock() {
+        cache.contains(&cache_key)
+    } else {
+        false
+    }
+}
+
+pub fn get_thumbnail_bytes(path: &Path, scale: u32, target_orient: Option<u32>) -> Result<Vec<u8>> {
+    if scale >= 100 {
+        get_max_preview_jpeg_with_orient(path, target_orient)
+    } else {
+        get_preview_jpeg_with_orient(path, scale, target_orient)
+    }
+}
+
+pub fn warm_thumbnail_cache_with_token(
+    paths: &[String],
+    scale: u32,
+    token: u64,
+    token_atomic: &AtomicU64,
+) -> usize {
+    let mut processed = 0;
+    for path_str in paths {
+        if token_atomic.load(Ordering::SeqCst) != token {
+            break;
+        }
+        let path = Path::new(path_str);
+        if !is_thumbnail_cached(path, scale, None) {
+            let _ = get_thumbnail_bytes(path, scale, None);
+            std::thread::yield_now();
+        }
+        processed += 1;
+    }
+    processed
+}
+
+pub fn warm_thumbnail_cache_sync(paths: &[String], scale: u32, token: u64) -> usize {
+    warm_thumbnail_cache_with_token(paths, scale, token, &WARMUP_TOKEN)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::fs::File;
+
+    #[test]
+    fn test_warmup_token_cancellation() {
+        let test_token_atomic = AtomicU64::new(12345);
+        let token = 12345;
+
+        let paths: Vec<String> = (0..50).map(|i| format!("/nonexistent/photo_{}.jpg", i)).collect();
+
+        // Invalidate token
+        test_token_atomic.store(54321, Ordering::SeqCst);
+
+        let processed = warm_thumbnail_cache_with_token(&paths, 1, token, &test_token_atomic);
+        assert_eq!(processed, 0, "Warmup must abort immediately when token does not match");
+    }
+
+    #[test]
+    fn test_warmup_token_active() {
+        let test_token_atomic = AtomicU64::new(99999);
+        let token = 99999;
+
+        let paths: Vec<String> = vec![
+            "/nonexistent/photo_a.jpg".to_string(),
+            "/nonexistent/photo_b.jpg".to_string(),
+        ];
+
+        let processed = warm_thumbnail_cache_with_token(&paths, 1, token, &test_token_atomic);
+        assert_eq!(processed, 2, "Warmup should process items while token matches");
+    }
 
     #[test]
     fn test_find_companion_jpeg() {
