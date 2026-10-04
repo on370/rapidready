@@ -817,6 +817,8 @@ export function LibraryCenter({
             />
           </div>
         )}
+        {/* Phase 2 & 3: Non-blocking Progressive Scan Banner */}
+        <ArchiveScanBanner />
       </div>
 
       {/* Custom Context Menu */}
@@ -851,9 +853,6 @@ export function LibraryCenter({
 
       {/* Phase 1: Connecting Overlay (debounced >300ms, cancelable) */}
       <ArchiveConnectingOverlay />
-
-      {/* Phase 2 & 3: Non-blocking Progressive Scan Banner */}
-      <ArchiveScanBanner />
     </div>
   );
 }

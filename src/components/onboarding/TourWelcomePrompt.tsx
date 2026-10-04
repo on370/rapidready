@@ -8,6 +8,11 @@ export function TourWelcomePrompt() {
 
   if (!isPromptOpen || !promptType) return null;
 
+  // Do not render prompt if a critical modal (e.g. AboutModal) is open
+  if (typeof document !== 'undefined' && document.querySelector('[data-modal="about"]')) {
+    return null;
+  }
+
   const isNewFeatures = promptType === 'new-features';
 
   return (

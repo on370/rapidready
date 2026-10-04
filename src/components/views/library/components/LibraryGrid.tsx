@@ -2,11 +2,11 @@ import React, { useRef, useState, useEffect, useLayoutEffect, useMemo } from 're
 import { useTranslation } from 'react-i18next';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { useLibraryStore, LibraryImage } from '../../../../stores/libraryStore';
 import { useLibraryUIStore } from '../../../../stores/libraryUIStore';
 import { useCollectionsStore } from '../../../../stores/collectionsStore';
 import { GridThumbnailItem } from './GridThumbnailItem';
-import { loadedThumbnailCache } from '../utils/thumbnailCache';
 
 export interface LibraryGridProps {
   displayedImages: LibraryImage[];
@@ -86,14 +86,47 @@ export const LibraryGrid = React.memo(function LibraryGrid({
   const gridThumbnailSize = useLibraryUIStore((s) => s.gridThumbnailSize);
   const setGridScrollTop = useLibraryUIStore((s) => s.setGridScrollTop);
   const setGridColumns = useLibraryUIStore((s) => s.setGridColumns);
+  const scanState = useLibraryStore((s) => s.scanState);
   const gridContainerRef = useRef<HTMLDivElement>(null);
 
-  // Sprint 1: Speculative RAM Viewport Caching refs
+  // Sprint 1: Speculative RAM Viewport Caching refs & buffer counts
+  const [topCount, setTopCount] = useState<number>(0);
+  const [bottomCount, setBottomCount] = useState<number>(0);
   const lastScrollTopRef = useRef<number>(0);
   const scrollDirectionRef = useRef<'down' | 'up'>('down');
   const warmupTokenRef = useRef<number>(0);
+  const warmupActiveRef = useRef<boolean>(false);
   const warmupTimerRef = useRef<number | null>(null);
   const scale = gridThumbnailSize <= 130 ? 0 : gridThumbnailSize > 220 ? 2 : 1;
+
+  // Listen for background warmup progress events from Rust
+  useEffect(() => {
+    const unlistenPromise = listen<{
+      token: number;
+      tag: string;
+      current: number;
+      total: number;
+    }>('warmup-progress', (event) => {
+      if (event.payload.token !== warmupTokenRef.current) return;
+      if (event.payload.tag === 'grid-top') {
+        setTopCount(event.payload.current);
+      } else if (event.payload.tag === 'grid-bottom') {
+        setBottomCount(event.payload.current);
+      }
+    });
+
+    return () => {
+      unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, []);
+
+  // Clear buffer counts when leaving grid view
+  useEffect(() => {
+    if (viewMode !== 'grid') {
+      setTopCount(0);
+      setBottomCount(0);
+    }
+  }, [viewMode]);
 
   // Drag and Drop reordering state (active only when in collection view)
   const [dragOverPath, setDragOverPath] = useState<string | null>(null);
@@ -390,16 +423,22 @@ export const LibraryGrid = React.memo(function LibraryGrid({
   // Sprint 1: Speculative RAM Viewport Caching
   // Debounce 150ms after scroll settles to warm up thumbnails in scroll direction
   useEffect(() => {
-    if (viewMode !== 'grid' || displayedImages.length === 0) return;
+    // Absoluter Schutz: Niemals spekulatives Warmup während eines aktiven Scans!
+    if (viewMode !== 'grid' || displayedImages.length === 0 || scanState === 'scanning' || scanState === 'connecting') return;
 
     if (rowVirtualizer.isScrolling) {
-      // Scrolling in progress - invalidate active warmup job immediately
-      warmupTokenRef.current = Date.now();
+      // Scrolling in progress - invalidate active warmup job immediately and clear buffer counts
+      setTopCount((c) => (c === 0 ? c : 0));
+      setBottomCount((c) => (c === 0 ? c : 0));
+      if (warmupActiveRef.current) {
+        warmupActiveRef.current = false;
+        warmupTokenRef.current = Date.now();
+        invoke('cancel_warmup_cache').catch(() => {});
+      }
       if (warmupTimerRef.current !== null) {
         window.clearTimeout(warmupTimerRef.current);
         warmupTimerRef.current = null;
       }
-      invoke('cancel_warmup_cache').catch(() => {});
       return;
     }
 
@@ -417,49 +456,68 @@ export const LibraryGrid = React.memo(function LibraryGrid({
       // Lookahead rows:
       // In scroll direction: +3 rows
       // Against scroll direction: -1 row
-      const targetRowIndices: number[] = [];
+      const topRowIndices: number[] = [];
+      const bottomRowIndices: number[] = [];
 
       if (isScrollingDown) {
         // Forward rows (+3 rows ahead downwards)
         for (let r = lastRowIndex + 1; r <= lastRowIndex + 3 && r < rowCount; r++) {
-          targetRowIndices.push(r);
+          bottomRowIndices.push(r);
         }
         // Backward buffer (-1 row behind upwards)
         if (firstRowIndex > 0) {
-          targetRowIndices.push(firstRowIndex - 1);
+          topRowIndices.push(firstRowIndex - 1);
         }
       } else {
         // Forward rows (-3 rows ahead upwards)
         for (let r = firstRowIndex - 1; r >= Math.max(0, firstRowIndex - 3); r--) {
-          targetRowIndices.push(r);
+          topRowIndices.push(r);
         }
         // Backward buffer (+1 row behind downwards)
         if (lastRowIndex + 1 < rowCount) {
-          targetRowIndices.push(lastRowIndex + 1);
+          bottomRowIndices.push(lastRowIndex + 1);
         }
       }
 
       // Collect images in target rows
-      const pathsToWarm: string[] = [];
-      for (const r of targetRowIndices) {
+      const topPaths: string[] = [];
+      for (const r of topRowIndices) {
         const startIndex = r * numColumns;
         const endIndex = Math.min(displayedImages.length, startIndex + numColumns);
         for (let i = startIndex; i < endIndex; i++) {
           const img = displayedImages[i];
-          if (!img) continue;
-          const cacheKey = `${img.path}:${img.culling?.orientation || 1}:${scale}`;
-          if (!loadedThumbnailCache.has(cacheKey)) {
-            pathsToWarm.push(img.path);
-          }
+          if (img) topPaths.push(img.path);
         }
       }
 
-      if (pathsToWarm.length === 0) return;
+      const bottomPaths: string[] = [];
+      for (const r of bottomRowIndices) {
+        const startIndex = r * numColumns;
+        const endIndex = Math.min(displayedImages.length, startIndex + numColumns);
+        for (let i = startIndex; i < endIndex; i++) {
+          const img = displayedImages[i];
+          if (img) bottomPaths.push(img.path);
+        }
+      }
+
+      if (topPaths.length === 0 && bottomPaths.length === 0) return;
 
       const token = Date.now();
       warmupTokenRef.current = token;
+      warmupActiveRef.current = true;
 
-      invoke('warm_thumbnail_cache', { paths: pathsToWarm, scale, token }).catch(() => {});
+      Promise.all([
+        topPaths.length > 0
+          ? invoke('warm_thumbnail_cache', { paths: topPaths, scale, token, tag: 'grid-top' })
+          : Promise.resolve(0),
+        bottomPaths.length > 0
+          ? invoke('warm_thumbnail_cache', { paths: bottomPaths, scale, token, tag: 'grid-bottom' })
+          : Promise.resolve(0),
+      ])
+        .catch(() => {})
+        .finally(() => {
+          warmupActiveRef.current = false;
+        });
     }, 150);
 
     return () => {
@@ -471,18 +529,19 @@ export const LibraryGrid = React.memo(function LibraryGrid({
   }, [
     rowVirtualizer.isScrolling,
     viewMode,
-    displayedImages,
+    displayedImages.length,
     numColumns,
     rowCount,
     scale,
-    rowVirtualizer,
+    scanState,
   ]);
 
   return (
-    <div 
-      ref={gridContainerRef} 
-      style={{ scrollbarGutter: 'stable' }}
-      className="flex-1 overflow-y-auto overflow-x-hidden p-6 relative [scrollbar-gutter:stable]"
+    <div className="relative flex-1 min-h-0 flex flex-col overflow-hidden">
+      <div 
+        ref={gridContainerRef} 
+        style={{ scrollbarGutter: 'stable' }}
+        className="flex-1 overflow-y-auto overflow-x-hidden p-6 relative [scrollbar-gutter:stable]"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           onClearSelection?.();
@@ -497,13 +556,19 @@ export const LibraryGrid = React.memo(function LibraryGrid({
         }
         lastScrollTopRef.current = currentScrollTop;
 
-        // Invalidate active background warmup immediately on movement
-        warmupTokenRef.current = Date.now();
+        // Invalidate active background warmup only when warmup is active; never during scan
+        const isScanning = scanState === 'scanning' || scanState === 'connecting';
+        if (!isScanning && warmupActiveRef.current) {
+          warmupActiveRef.current = false;
+          warmupTokenRef.current = Date.now();
+          invoke('cancel_warmup_cache').catch(() => {});
+        }
         if (warmupTimerRef.current !== null) {
           window.clearTimeout(warmupTimerRef.current);
           warmupTimerRef.current = null;
         }
-        invoke('cancel_warmup_cache').catch(() => {});
+        setTopCount((c) => (c === 0 ? c : 0));
+        setBottomCount((c) => (c === 0 ? c : 0));
 
         setGridScrollTop(currentScrollTop);
       }}
@@ -590,6 +655,29 @@ export const LibraryGrid = React.memo(function LibraryGrid({
               </div>
             );
           })}
+        </div>
+      )}
+      </div>
+
+      {/* Top RAM Cache Buffer Bubble */}
+      {topCount > 0 && (
+        <div 
+          className="absolute top-3 left-1/2 -translate-x-1/2 z-30 pointer-events-none flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-black/60 backdrop-blur-md border border-white/15 text-[11px] font-mono text-white/90 shadow-lg select-none transition-opacity duration-200"
+          title={`${topCount} ${topCount === 1 ? 'Bild' : 'Bilder'} oberhalb im RAM-Cache`}
+        >
+          <span className="text-[9px] text-accent">▲</span>
+          <span>{topCount}</span>
+        </div>
+      )}
+
+      {/* Bottom RAM Cache Buffer Bubble */}
+      {bottomCount > 0 && (
+        <div 
+          className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 pointer-events-none flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-black/60 backdrop-blur-md border border-white/15 text-[11px] font-mono text-white/90 shadow-lg select-none transition-opacity duration-200"
+          title={`${bottomCount} ${bottomCount === 1 ? 'Bild' : 'Bilder'} unterhalb im RAM-Cache`}
+        >
+          <span className="text-[9px] text-accent">▼</span>
+          <span>{bottomCount}</span>
         </div>
       )}
     </div>

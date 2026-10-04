@@ -1500,20 +1500,48 @@ pub fn cancel_collection_export(state: tauri::State<'_, CollectionExportState>) 
     Ok(())
 }
 
+#[derive(Clone, Serialize)]
+pub struct WarmupProgressPayload {
+    pub token: u64,
+    pub tag: String,
+    pub current: usize,
+    pub total: usize,
+}
+
 #[tauri::command]
 pub async fn warm_thumbnail_cache(
+    app: AppHandle,
     paths: Vec<String>,
     scale: u32,
     token: u64,
-) -> Result<(), String> {
+    tag: Option<String>,
+) -> Result<usize, String> {
     rapidready_core::thumbnail::WARMUP_TOKEN.store(token, std::sync::atomic::Ordering::SeqCst);
-    tauri::async_runtime::spawn_blocking(move || {
-        rapidready_core::thumbnail::warm_thumbnail_cache_sync(&paths, scale, token);
+    let app_clone = app.clone();
+    let tag_clone = tag.clone();
+
+    let processed = tauri::async_runtime::spawn_blocking(move || {
+        rapidready_core::thumbnail::warm_thumbnail_cache_with_progress(
+            &paths,
+            scale,
+            token,
+            &rapidready_core::thumbnail::WARMUP_TOKEN,
+            |current, total| {
+                if let Some(ref t) = tag_clone {
+                    let _ = app_clone.emit("warmup-progress", WarmupProgressPayload {
+                        token,
+                        tag: t.clone(),
+                        current,
+                        total,
+                    });
+                }
+            },
+        )
     })
     .await
     .map_err(|e| e.to_string())?;
 
-    Ok(())
+    Ok(processed)
 }
 
 #[tauri::command]

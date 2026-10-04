@@ -602,13 +602,34 @@ pub fn get_thumbnail_bytes(path: &Path, scale: u32, target_orient: Option<u32>) 
     }
 }
 
-pub fn warm_thumbnail_cache_with_token(
+pub fn warm_thumbnail_cache_with_progress<F>(
     paths: &[String],
     scale: u32,
     token: u64,
     token_atomic: &AtomicU64,
-) -> usize {
+    mut on_progress: F,
+) -> usize
+where
+    F: FnMut(usize, usize),
+{
+    let total = paths.len();
+    if total == 0 {
+        return 0;
+    }
+
+    let mut cached_count = 0;
+    for path_str in paths {
+        let path = Path::new(path_str);
+        if is_thumbnail_cached(path, scale, None) {
+            cached_count += 1;
+        }
+    }
+    on_progress(cached_count, total);
+
     let mut processed = 0;
+    let mut last_reported = cached_count;
+    let mut last_report_time = std::time::Instant::now();
+
     for path_str in paths {
         if token_atomic.load(Ordering::SeqCst) != token {
             break;
@@ -617,10 +638,34 @@ pub fn warm_thumbnail_cache_with_token(
         if !is_thumbnail_cached(path, scale, None) {
             let _ = get_thumbnail_bytes(path, scale, None);
             std::thread::yield_now();
+            cached_count += 1;
+
+            // Throttle progress events: emit at least every 5 items or 100ms, or when finished
+            if cached_count - last_reported >= 5
+                || last_report_time.elapsed() >= std::time::Duration::from_millis(100)
+                || cached_count == total
+            {
+                on_progress(cached_count, total);
+                last_reported = cached_count;
+                last_report_time = std::time::Instant::now();
+            }
         }
         processed += 1;
     }
+
+    if cached_count != last_reported {
+        on_progress(cached_count, total);
+    }
     processed
+}
+
+pub fn warm_thumbnail_cache_with_token(
+    paths: &[String],
+    scale: u32,
+    token: u64,
+    token_atomic: &AtomicU64,
+) -> usize {
+    warm_thumbnail_cache_with_progress(paths, scale, token, token_atomic, |_, _| {})
 }
 
 pub fn warm_thumbnail_cache_sync(paths: &[String], scale: u32, token: u64) -> usize {

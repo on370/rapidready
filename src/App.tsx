@@ -194,8 +194,9 @@ function App() {
           store.setIsLoading(false);
           return;
         }
-        if (store.scanState === 'stopped') {
-          return;
+        if (store.scanState === 'stopped' && !event.payload.is_complete) {
+          // Neuer Scan läuft trotz vorherigem 'stopped': Status reaktivieren
+          store.setScanState('scanning');
         }
         store.setScanProgress(event.payload);
         if (event.payload.is_complete) {

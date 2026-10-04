@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Film, Info, Camera } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { LibraryImage, useLibraryStore } from '../../../../stores/libraryStore';
 import { useLibraryUIStore } from '../../../../stores/libraryUIStore';
 import { ZoomableImage } from '../ZoomableImage';
@@ -32,11 +33,38 @@ export const LoupeViewer = React.memo(function LoupeViewer({
   const { t } = useTranslation('library');
   const showFilmstrip = useLibraryUIStore((s) => s.showFilmstrip);
   const setShowFilmstrip = useLibraryUIStore((s) => s.setShowFilmstrip);
+  const loupeScale = useLibraryUIStore((s) => s.loupeScale);
+  const scanState = useLibraryStore((s) => s.scanState);
+  const isZoomed = loupeScale > 0;
+
+  const [leftCount, setLeftCount] = useState<number>(0);
+  const [rightCount, setRightCount] = useState<number>(0);
 
   const [debouncedActiveIndex, setDebouncedActiveIndex] = useState(activeImageIndex);
   const prevActiveIndexRef = useRef(activeImageIndex);
   const directionRef = useRef<'next' | 'prev'>('next');
   const warmupTokenRef = useRef<number>(0);
+
+  // Listen for background warmup progress events from Rust
+  useEffect(() => {
+    const unlistenPromise = listen<{
+      token: number;
+      tag: string;
+      current: number;
+      total: number;
+    }>('warmup-progress', (event) => {
+      if (event.payload.token !== warmupTokenRef.current) return;
+      if (event.payload.tag === 'loupe-left') {
+        setLeftCount(event.payload.current);
+      } else if (event.payload.tag === 'loupe-right') {
+        setRightCount(event.payload.current);
+      }
+    });
+
+    return () => {
+      unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, []);
 
   // Track flip direction (prev vs next) and preempt any active warmup on immediate movement
   useEffect(() => {
@@ -47,9 +75,11 @@ export const LoupeViewer = React.memo(function LoupeViewer({
     }
     prevActiveIndexRef.current = activeImageIndex;
 
-    // Immediately preempt running warmup job in Rust
+    // Immediately preempt running warmup job in Rust and clear buffer counts
     warmupTokenRef.current = Date.now();
     invoke('cancel_warmup_cache').catch(() => {});
+    setLeftCount(0);
+    setRightCount(0);
   }, [activeImageIndex]);
 
   // Debounce preloading slightly (120ms) so rapid key repeat skips intermediate frames,
@@ -64,49 +94,59 @@ export const LoupeViewer = React.memo(function LoupeViewer({
   // Sprint 1: Directional RAM Viewport Caching in Loupe View
   // Proactively preloads +3 to +5 images (Scale 2 and Full-Res Embedded Preview) directly in Rust background thread
   useEffect(() => {
-    if (debouncedActiveIndex !== activeImageIndex || displayedImages.length === 0) return;
+    // Absoluter Schutz: Niemals spekulatives Warmup während eines aktiven Scans!
+    if (debouncedActiveIndex !== activeImageIndex || displayedImages.length === 0 || scanState === 'scanning' || scanState === 'connecting') return;
 
     const token = Date.now();
     warmupTokenRef.current = token;
 
     const isNext = directionRef.current === 'next';
-    const targetIndices: number[] = [];
+    const leftPaths: string[] = [];
+    const rightPaths: string[] = [];
 
     if (isNext) {
       // Look ahead +1 to +5 in forward direction
       for (let offset = 1; offset <= 5; offset++) {
         const idx = activeImageIndex + offset;
         if (idx < displayedImages.length) {
-          targetIndices.push(idx);
+          rightPaths.push(displayedImages[idx].path);
         }
       }
       // Backward buffer of 1 image
       if (activeImageIndex > 0) {
-        targetIndices.push(activeImageIndex - 1);
+        leftPaths.push(displayedImages[activeImageIndex - 1].path);
       }
     } else {
       // Look ahead -1 to -5 in backward direction
       for (let offset = 1; offset <= 5; offset++) {
         const idx = activeImageIndex - offset;
         if (idx >= 0) {
-          targetIndices.push(idx);
+          leftPaths.push(displayedImages[idx].path);
         }
       }
       // Forward buffer of 1 image
       if (activeImageIndex < displayedImages.length - 1) {
-        targetIndices.push(activeImageIndex + 1);
+        rightPaths.push(displayedImages[activeImageIndex + 1].path);
       }
     }
 
-    const paths = targetIndices.map((i) => displayedImages[i]?.path).filter(Boolean);
-    if (paths.length === 0) return;
+    if (leftPaths.length === 0 && rightPaths.length === 0) return;
 
-    // 1. Warm Scale 2 (720px preview) for instant visual feedback on flip
-    invoke('warm_thumbnail_cache', { paths, scale: 2, token })
+    const primaryPaths = isNext ? rightPaths : leftPaths;
+
+    // 1. Warm Scale 2 (720px preview) concurrently for both directions
+    Promise.all([
+      leftPaths.length > 0
+        ? invoke('warm_thumbnail_cache', { paths: leftPaths, scale: 2, token, tag: 'loupe-left' })
+        : Promise.resolve(0),
+      rightPaths.length > 0
+        ? invoke('warm_thumbnail_cache', { paths: rightPaths, scale: 2, token, tag: 'loupe-right' })
+        : Promise.resolve(0),
+    ])
       .then(() => {
-        // 2. Warm Full-Res Preview (scale: 100) right after
-        if (warmupTokenRef.current === token) {
-          return invoke('warm_thumbnail_cache', { paths, scale: 100, token });
+        // 2. Warm Full-Res Preview (scale: 100) right after for primary direction
+        if (warmupTokenRef.current === token && primaryPaths.length > 0) {
+          return invoke('warm_thumbnail_cache', { paths: primaryPaths, scale: 100, token });
         }
       })
       .catch(() => {});
@@ -114,7 +154,7 @@ export const LoupeViewer = React.memo(function LoupeViewer({
     return () => {
       warmupTokenRef.current = Date.now();
     };
-  }, [debouncedActiveIndex, activeImageIndex, displayedImages]);
+  }, [debouncedActiveIndex, activeImageIndex, displayedImages, scanState]);
 
   // Lazy-load metadata for active image if needed
   useEffect(() => {
@@ -195,6 +235,28 @@ export const LoupeViewer = React.memo(function LoupeViewer({
           </>
         ) : null}
         {activeImage?.culling.flag === -1 && <div className="absolute inset-0 bg-danger/15 pointer-events-none z-20" />}
+
+        {/* Directional RAM Cache Buffer Bubbles */}
+        {leftCount > 0 && activeImageIndex > 0 && (
+          <div 
+            className="absolute bottom-3 left-6 z-30 pointer-events-none flex items-center gap-1 px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-md border border-white/15 text-[11px] font-mono text-white/90 shadow-lg select-none transition-opacity duration-200"
+            title={`${leftCount} ${leftCount === 1 ? 'Bild' : 'Bilder'} im RAM-Cache`}
+          >
+            <span className="text-[9px] text-accent">◀</span>
+            <span>{leftCount}</span>
+          </div>
+        )}
+
+        {rightCount > 0 && activeImageIndex < displayedImages.length - 1 && (
+          <div 
+            className="absolute bottom-3 z-30 pointer-events-none flex items-center gap-1 px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-md border border-white/15 text-[11px] font-mono text-white/90 shadow-lg select-none transition-all duration-200"
+            style={{ right: isZoomed ? '11.5rem' : '1.5rem' }}
+            title={`${rightCount} ${rightCount === 1 ? 'Bild' : 'Bilder'} im RAM-Cache`}
+          >
+            <span>{rightCount}</span>
+            <span className="text-[9px] text-accent">▶</span>
+          </div>
+        )}
       </div>
 
       {/* Filmstrip Bar */}

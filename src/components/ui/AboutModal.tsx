@@ -7,16 +7,8 @@ import appLogo from '../../assets/RapidReady-icon.png';
 import buildInfo from '../../build-info.json';
 
 export function AboutModal() {
-  const [isOpen, setIsOpen] = useState(true); // Open as splashscreen on startup
+  const [isOpen, setIsOpen] = useState(false);
   const { t } = useTranslation('settings');
-
-  // Auto-dismiss splashscreen after 2.5 seconds on app launch
-  useEffect(() => {
-    const splashTimer = setTimeout(() => {
-      setIsOpen(false);
-    }, 2500);
-    return () => clearTimeout(splashTimer);
-  }, []);
 
   useEffect(() => {
     const unlisten = listen('toggle-about-modal', () => {
@@ -47,7 +39,8 @@ export function AboutModal() {
 
   return (
     <div 
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+      data-modal="about"
+      className="fixed inset-0 z-[9990] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
       onClick={() => setIsOpen(false)}
     >
       <div 
