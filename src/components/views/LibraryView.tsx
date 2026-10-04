@@ -91,9 +91,9 @@ export function LibraryView() {
           className="relative w-px flex-shrink-0 group cursor-col-resize z-20 select-none"
           onMouseDown={(e) => { e.preventDefault(); setIsDraggingLeft(true); }}
         >
-          {/* 7px hit-area & subtle RapidRAW hover track */}
+          {/* 7px hit-area & subtle RapidRAW hover track (extends exclusively to the right to leave sidebar scrollbar free) */}
           <div 
-            className={`absolute inset-y-0 -left-[3px] -right-[3px] transition-colors rounded-[1px] group-hover:bg-white/[0.08] ${
+            className={`absolute inset-y-0 left-0 -right-[6px] transition-colors rounded-[1px] group-hover:bg-white/[0.08] ${
               isDraggingLeft ? 'bg-white/[0.15]' : ''
             }`}
           />
@@ -119,9 +119,9 @@ export function LibraryView() {
               className="relative w-px flex-shrink-0 group cursor-col-resize z-20 select-none"
               onMouseDown={(e) => { e.preventDefault(); setIsDraggingRight(true); }}
             >
-              {/* 7px hit-area & subtle RapidRAW hover track */}
+              {/* 7px hit-area & subtle RapidRAW hover track (extends exclusively to the right to leave grid scrollbar free) */}
               <div 
-                className={`absolute inset-y-0 -left-[3px] -right-[3px] transition-colors rounded-[1px] group-hover:bg-white/[0.08] ${
+                className={`absolute inset-y-0 left-0 -right-[6px] transition-colors rounded-[1px] group-hover:bg-white/[0.08] ${
                   isDraggingRight ? 'bg-white/[0.15]' : ''
                 }`}
               />

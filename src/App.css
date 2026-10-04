@@ -47,10 +47,23 @@ select option {
   color: #e8e8ec;
 }
 
-::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--color-app-border-hover); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #444; }
+::-webkit-scrollbar-thumb {
+  background-color: var(--color-app-border-hover);
+  border-radius: 9999px;
+  border: 1.5px solid transparent;
+  background-clip: padding-box;
+  transition: background-color 0.15s;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.4);
+  border: 0px solid transparent;
+}
+::-webkit-scrollbar-thumb:active {
+  background-color: rgba(255, 255, 255, 0.6);
+  border: 0px solid transparent;
+}
 
 /* ── Custom Title Bar (macOS style) ─────────────────── */
 .title-bar { -webkit-app-region: drag; user-select: none; }
