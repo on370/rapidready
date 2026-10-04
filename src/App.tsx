@@ -177,6 +177,38 @@ function App() {
 
   // Real-time synchronization for archive directory scanning (chunks & progress)
   useEffect(() => {
+    let pendingFiles: LibraryImage[] = [];
+    let pendingDirs: string[] = [];
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastFlushTime = 0;
+
+    const flushChunkBuffer = () => {
+      if (flushTimer !== null) {
+        clearTimeout(flushTimer);
+        flushTimer = null;
+      }
+      if (pendingFiles.length === 0 && pendingDirs.length === 0) {
+        return;
+      }
+
+      const filesToFlush = pendingFiles;
+      const dirsToFlush = pendingDirs;
+      pendingFiles = [];
+      pendingDirs = [];
+      lastFlushTime = Date.now();
+
+      const store = useLibraryStore.getState();
+      if (dirsToFlush.length > 0) {
+        store.addDiscoveredFolders(dirsToFlush);
+      }
+      if (filesToFlush.length > 0 || dirsToFlush.length > 0) {
+        store.appendImageChunk(filesToFlush, dirsToFlush);
+      }
+      if (store.scanState === 'connecting' || store.scanState === 'idle') {
+        store.setScanState('scanning');
+      }
+    };
+
     const unlistenScanProgress = listen<ArchiveScanProgress>(
       "archive_scan_progress",
       (event) => {
@@ -185,6 +217,7 @@ function App() {
           return;
         }
         if (event.payload.is_cancelled) {
+          flushChunkBuffer();
           store.setScanProgress(event.payload);
           if (store.images.length > 0 || event.payload.files_found > 0) {
             store.setScanState('stopped');
@@ -200,6 +233,7 @@ function App() {
         }
         store.setScanProgress(event.payload);
         if (event.payload.is_complete) {
+          flushChunkBuffer();
           if (store.scanState === 'scanning' && store.images.length >= 100) {
             store.setScanState('completed');
             store.setIsLoading(false);
@@ -213,6 +247,7 @@ function App() {
             store.setIsLoading(false);
           }
         } else if (event.payload.is_paused) {
+          flushChunkBuffer();
           store.setScanState('paused');
         } else if (store.scanState === 'connecting' || store.scanState === 'idle') {
           store.setScanState('scanning');
@@ -230,17 +265,36 @@ function App() {
         if (store.activeScanId !== null && scanId !== undefined && scanId !== store.activeScanId) {
           return;
         }
-        if (dirs && dirs.length > 0) {
-          store.addDiscoveredFolders(dirs);
+
+        if (files && files.length > 0) {
+          pendingFiles.push(...files);
         }
-        store.appendImageChunk(files, dirs);
+        if (dirs && dirs.length > 0) {
+          pendingDirs.push(...dirs);
+        }
+
         if (store.scanState === 'connecting' || store.scanState === 'idle') {
           store.setScanState('scanning');
+        }
+
+        const now = Date.now();
+        // Pace flush to at most once every 200ms (or on large backlog >= 1500) to keep the main JS thread responsive
+        if (now - lastFlushTime >= 200 || pendingFiles.length >= 1500) {
+          flushChunkBuffer();
+        } else if (flushTimer === null) {
+          const delay = Math.max(16, 200 - (now - lastFlushTime));
+          flushTimer = setTimeout(() => {
+            flushChunkBuffer();
+          }, delay);
         }
       }
     );
 
     return () => {
+      if (flushTimer !== null) {
+        clearTimeout(flushTimer);
+      }
+      flushChunkBuffer();
       unlistenScanProgress.then((unlisten) => unlisten());
       unlistenScanChunk.then((unlisten) => unlisten());
     };

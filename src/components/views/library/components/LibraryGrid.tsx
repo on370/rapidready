@@ -281,10 +281,30 @@ export const LibraryGrid = React.memo(function LibraryGrid({
     count: rowCount,
     getScrollElement: () => gridContainerRef.current,
     estimateSize: () => itemHeight,
+    getItemKey: (index) => {
+      const firstImg = displayedImages[index * numColumns];
+      return firstImg ? firstImg.path : index;
+    },
     gap,
     overscan: adaptiveOverscan,
     isScrollingResetDelay: 100,
   });
+
+  // When scan completes or final sorted images commit, force virtualizer to remeasure and re-sync
+  // immediately so all rows reflect final sorted order without requiring manual scrolling
+  const prevScanStateRef = useRef(scanState);
+  const prevDisplayedImagesRef = useRef(displayedImages);
+  useLayoutEffect(() => {
+    const wasScanning = prevScanStateRef.current === 'scanning' || prevScanStateRef.current === 'connecting';
+    const isNowDone = scanState === 'completed' || scanState === 'idle';
+    const imagesChangedWhileDone = isNowDone && prevDisplayedImagesRef.current !== displayedImages;
+
+    if ((wasScanning && isNowDone) || imagesChangedWhileDone) {
+      rowVirtualizer.measure();
+    }
+    prevScanStateRef.current = scanState;
+    prevDisplayedImagesRef.current = displayedImages;
+  }, [scanState, displayedImages, rowVirtualizer]);
 
   // On initial mount of the app, restore saved scroll position if any
   const hasInitialScrolledRef = useRef(false);
