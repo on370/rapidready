@@ -99,7 +99,7 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
             if let Some(field) = iso_tag {
                 let iso = field.display_value().to_string().trim().to_string();
                 if !iso.is_empty() {
-                    meta.iso = Some(iso);
+                    meta.iso = Some(clean_iso(&iso));
                 }
             }
 
@@ -107,12 +107,7 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
             if let Some(field) = exif.get_field(exif::Tag::FNumber, exif::In::PRIMARY) {
                 let f_str = field.display_value().to_string().trim().to_string();
                 if !f_str.is_empty() {
-                    let formatted = if f_str.starts_with("f/") {
-                        f_str
-                    } else {
-                        format!("f/{}", f_str)
-                    };
-                    meta.aperture = Some(formatted);
+                    meta.aperture = Some(clean_aperture(&f_str));
                 }
             }
 
@@ -120,12 +115,7 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
             if let Some(field) = exif.get_field(exif::Tag::ExposureTime, exif::In::PRIMARY) {
                 let exp_str = field.display_value().to_string().trim().to_string();
                 if !exp_str.is_empty() {
-                    let formatted = if exp_str.ends_with('s') {
-                        exp_str
-                    } else {
-                        format!("{}s", exp_str)
-                    };
-                    meta.shutter = Some(formatted);
+                    meta.shutter = Some(clean_shutter_speed(&exp_str));
                 }
             }
 
@@ -133,7 +123,7 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
             if let Some(field) = exif.get_field(exif::Tag::FocalLength, exif::In::PRIMARY) {
                 let fl = field.display_value().with_unit(&exif).to_string();
                 if !fl.is_empty() {
-                    meta.focal_length = Some(fl);
+                    meta.focal_length = Some(clean_focal_length(&fl));
                 }
             }
 
@@ -239,6 +229,123 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
     }
 
     meta
+}
+
+/// Formats a raw shutter speed/exposure time string into a clean photography representation (e.g. "1/500s", "1/2.5s", "2s", "30s").
+/// Prevents ridiculous floating point decimals like "1/513.765947654489709870987".
+pub fn clean_shutter_speed(exp_str: &str) -> String {
+    let trimmed = exp_str.trim().trim_end_matches('s').trim_end_matches('"').trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    if let Some(rest) = trimmed.strip_prefix("1/") {
+        if let Ok(denom) = rest.parse::<f64>() {
+            if denom <= 0.0 {
+                return format!("{}s", trimmed);
+            }
+            if denom >= 10.0 {
+                return format!("1/{}s", denom.round() as i64);
+            } else if (denom - denom.round()).abs() < 0.05 {
+                return format!("1/{}s", denom.round() as i64);
+            } else if denom >= 1.0 {
+                let formatted = format!("{:.1}", denom);
+                let clean = formatted.trim_end_matches(".0");
+                return format!("1/{}s", clean);
+            } else {
+                let secs = 1.0 / denom;
+                if (secs - secs.round()).abs() < 0.05 {
+                    return format!("{}s", secs.round() as i64);
+                } else {
+                    return format!("{:.1}s", secs);
+                }
+            }
+        }
+    } else if let Ok(val) = trimmed.parse::<f64>() {
+        if val <= 0.0 {
+            return format!("{}s", trimmed);
+        }
+        if val < 1.0 {
+            let denom = 1.0 / val;
+            if denom >= 10.0 {
+                return format!("1/{}s", denom.round() as i64);
+            } else if (denom - denom.round()).abs() < 0.05 {
+                return format!("1/{}s", denom.round() as i64);
+            } else {
+                let formatted = format!("{:.1}", denom);
+                let clean = formatted.trim_end_matches(".0");
+                return format!("1/{}s", clean);
+            }
+        } else {
+            if (val - val.round()).abs() < 0.05 {
+                return format!("{}s", val.round() as i64);
+            } else {
+                return format!("{:.1}s", val);
+            }
+        }
+    }
+
+    if trimmed.ends_with('s') {
+        trimmed.to_string()
+    } else {
+        format!("{}s", trimmed)
+    }
+}
+
+/// Formats an aperture value cleanly (e.g. "f/2.8", "f/1.4", "f/4", "f/11").
+pub fn clean_aperture(f_str: &str) -> String {
+    let trimmed = f_str.trim().trim_start_matches("f/").trim_start_matches("F/").trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    if let Ok(val) = trimmed.parse::<f64>() {
+        if val <= 0.0 {
+            return format!("f/{}", trimmed);
+        }
+        if val >= 10.0 && (val - val.round()).abs() < 0.1 {
+            return format!("f/{}", val.round() as i64);
+        } else if (val * 10.0).round() % 10.0 == 0.0 {
+            return format!("f/{}", val.round() as i64);
+        } else {
+            return format!("f/{:.1}", val);
+        }
+    }
+
+    if f_str.starts_with("f/") || f_str.starts_with("F/") {
+        f_str.to_string()
+    } else {
+        format!("f/{}", f_str)
+    }
+}
+
+/// Formats a focal length cleanly (e.g. "24 mm", "50 mm", "70.5 mm").
+pub fn clean_focal_length(fl_str: &str) -> String {
+    let trimmed = fl_str.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    let num_part = trimmed.trim_end_matches("mm").trim_end_matches("MM").trim();
+    if let Ok(val) = num_part.parse::<f64>() {
+        if (val - val.round()).abs() < 0.05 {
+            return format!("{} mm", val.round() as i64);
+        } else {
+            return format!("{:.1} mm", val);
+        }
+    }
+    trimmed.to_string()
+}
+
+/// Formats an ISO value cleanly (e.g. "100", "3200").
+pub fn clean_iso(iso_str: &str) -> String {
+    let trimmed = iso_str.trim().trim_start_matches("ISO").trim_start_matches("iso").trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    if let Ok(val) = trimmed.parse::<f64>() {
+        return format!("{}", val.round() as i64);
+    }
+    trimmed.to_string()
 }
 
 fn rational_to_f64(r: &exif::Rational) -> Option<f64> {
@@ -470,5 +577,44 @@ mod tests {
         assert_eq!(meta.altitude, Some(520.0));
 
         let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_clean_shutter_speed() {
+        assert_eq!(clean_shutter_speed("1/513.765947654489709870987"), "1/514s");
+        assert_eq!(clean_shutter_speed("1/513.765947654489709870987s"), "1/514s");
+        assert_eq!(clean_shutter_speed("1/500"), "1/500s");
+        assert_eq!(clean_shutter_speed("1/500s"), "1/500s");
+        assert_eq!(clean_shutter_speed("1/2.5"), "1/2.5s");
+        assert_eq!(clean_shutter_speed("1/4"), "1/4s");
+        assert_eq!(clean_shutter_speed("0.002"), "1/500s");
+        assert_eq!(clean_shutter_speed("0.5"), "1/2s");
+        assert_eq!(clean_shutter_speed("1"), "1s");
+        assert_eq!(clean_shutter_speed("2.5"), "2.5s");
+        assert_eq!(clean_shutter_speed("30"), "30s");
+    }
+
+    #[test]
+    fn test_clean_aperture() {
+        assert_eq!(clean_aperture("2.80000001"), "f/2.8");
+        assert_eq!(clean_aperture("f/2.80000001"), "f/2.8");
+        assert_eq!(clean_aperture("f/1.4"), "f/1.4");
+        assert_eq!(clean_aperture("4.0"), "f/4");
+        assert_eq!(clean_aperture("f/11.0"), "f/11");
+        assert_eq!(clean_aperture("22"), "f/22");
+    }
+
+    #[test]
+    fn test_clean_focal_length() {
+        assert_eq!(clean_focal_length("24.0 mm"), "24 mm");
+        assert_eq!(clean_focal_length("24.12345 mm"), "24.1 mm");
+        assert_eq!(clean_focal_length("50mm"), "50 mm");
+    }
+
+    #[test]
+    fn test_clean_iso() {
+        assert_eq!(clean_iso("100"), "100");
+        assert_eq!(clean_iso("100.0"), "100");
+        assert_eq!(clean_iso("ISO 400"), "400");
     }
 }

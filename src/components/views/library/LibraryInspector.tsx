@@ -16,6 +16,7 @@ import { useSettingsStore } from "../../../stores/settingsStore";
 import { parseCoordinates, formatDms, formatDd, ParseGpsResult } from "../../../utils/geo";
 import { useCollectionsStore, findAlbumById } from "../../../stores/collectionsStore";
 import { FocusPeakingOverlay } from "./components/FocusPeakingOverlay";
+import { formatShutterSpeed, formatAperture, formatIso } from "../../../utils/formatMetadata";
 
 interface LibraryInspectorProps {
   close: () => void;
@@ -144,6 +145,10 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
     if (found) return found;
     return images.find(img => selectedPaths.has(img.path));
   }, [selectedPaths, scopedImages, activeImageIndex, images]);
+
+  const formattedIso = useMemo(() => formatIso(activeImage?.iso), [activeImage?.iso]);
+  const formattedAperture = useMemo(() => formatAperture(activeImage?.aperture), [activeImage?.aperture]);
+  const formattedShutter = useMemo(() => formatShutterSpeed(activeImage?.shutter), [activeImage?.shutter]);
 
   const { focusPeakingEnabled, toggleFocusPeaking } = useLibraryUIStore();
   const inspectorImageRef = useRef<HTMLImageElement | null>(null);
@@ -1101,17 +1106,23 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
                     </p>
                   </div>
                   <div className="grid grid-cols-3 gap-2 pt-1 border-t border-app-border/40">
-                    <div>
+                    <div className="min-w-0">
                       <span className="text-txt-tertiary block text-[10px]">{t('inspector.iso')}</span>
-                      <p className="text-txt-primary font-mono font-medium">{activeImage.iso ? `ISO ${activeImage.iso}` : '—'}</p>
+                      <p className="text-txt-primary font-mono font-medium truncate" title={formattedIso || undefined}>
+                        {formattedIso || '—'}
+                      </p>
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <span className="text-txt-tertiary block text-[10px]">{t('inspector.aperture')}</span>
-                      <p className="text-txt-primary font-mono font-medium">{activeImage.aperture || '—'}</p>
+                      <p className="text-txt-primary font-mono font-medium truncate" title={formattedAperture || undefined}>
+                        {formattedAperture || '—'}
+                      </p>
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <span className="text-txt-tertiary block text-[10px]">{t('inspector.shutter')}</span>
-                      <p className="text-txt-primary font-mono font-medium">{activeImage.shutter || '—'}</p>
+                      <p className="text-txt-primary font-mono font-medium truncate" title={formattedShutter || undefined}>
+                        {formattedShutter || '—'}
+                      </p>
                     </div>
                   </div>
                 </div>
