@@ -640,3 +640,38 @@
        - **Audio Format:** Sample rate (48 kHz) and bit depth (24-bit LPCM, AAC).
   - **Ergonomic Inspector UI Architecture:**
     - Dedicated collapsible section: *"Erweiterte EXIF-Daten & Technische Details"* in `LibraryInspector.tsx`, keeping the main exposure and file info cards clean while offering instant drill-down on demand.
+- [ ] **Inspector Live-Histogram & Preview Viewport Switcher:**
+  - **Context & Goal:**
+    Photographers require rapid luminance and RGB exposure evaluation directly within the Inspector sidebar without needing to open the full Loupe view or switch to an external RAW developer.
+  - **UI Placement & Toggle Architecture:**
+    - In the header of the *Vorschau / Preview* card (`LibraryInspector.tsx`), place a dedicated **Histogramm-Umschalter** (`BarChart2` / `Activity` Icon) immediately to the right of the Focus-Peaking-Button (`ScanEye`).
+    - Tooltip: *"Histogramm anzeigen (H)"* / *"Toggle Histogram"* with active toggle state (`bg-accent/20 text-accent ring-1 ring-accent/40`).
+  - **Display Modes in the Preview Box:**
+    - **Mode 1 (HUD Overlay):** Halbtransparentes RGB/Luminanz-Histogramm eingeblendet über der bestehenden Bildvorschau.
+    - **Mode 2 (Vollbild-Ersatz / Swap):** Vollflächige Umschaltung des Vorschaukastens auf ein detailliertes 256-Kanal-RGB- und Helligkeits-Histogramm inklusive Beschneidungswarnungen (Clipping-Indikatoren für abgesoffene Tiefen und ausgefressene Lichter).
+  - **Performance:**
+    - Client-seitige Berechnung via Canvas/WebGL oder Rust Thumbnail-Sampler in unter 5 ms direkt aus dem gecachten Vorschau-JPEG.
+
+---
+
+### Milestone: Library-Scoped Collections & Collection Lifecycle Management
+- [ ] **Library-Scoped Collections & Lifecycle-Management für temporäre Locations (Konzept 1 + Konzept 2):**
+  - **Problemstellung & Kontext:**
+    - Bisher wurden Sammlungen zentral und global in `<app_data_dir>/albums/albums.json` abgelegt, während `libraryStore` nur Bilder der aktuell geöffneten Library (`rootPath`) im Speicher hält.
+    - Dies führte beim Wechsel der Library zu massiver Verwirrung: Sammlungen aus anderen Bibliotheken blieben in der Sidebar sichtbar (z. B. mit Zähler `(45)`), zeigten im Grid jedoch 0 Fotos (leere Ansicht).
+    - Bei temporären Locations (*„Beliebigen Ordner öffnen / Durchsuchen“*) droht beim Wechsel entweder Datenmüll (verwaiste tote Sammlungen) oder unbemerkter Datenverlust investierter Kurationsarbeit.
+  - **Säule 1: Dezentrale Speicherung pro Library (Konzept 1):**
+    - **Speicherort:** Sammlungen werden nicht mehr global, sondern dezentral im jeweiligen Bibliotheks-Stammverzeichnis unter `<rootPath>/.rapidready/collections.json` gespeichert (vollständige Parität zum `.rrdata`-Sidecar-Prinzip).
+    - **Portabilität:** Sammlungen reisen automatisch mit der Festplatte / dem Archivordner mit, wenn Datenträger an andere Rechner angeschlossen oder im Team weitergegeben werden.
+    - **Strikter UI-Scope:** In der linken Sidebar werden *ausschließlich* die Sammlungen der aktuell geladenen Library angezeigt. Beim Wechsel von Library A zu Library B verschwinden die Sammlungen von A aus der Sidebar und die Sammlungen von B werden geladen. Keine toten Alben, keine leeren Grids, saubere und aufgeräumte Sidebar.
+  - **Säule 2: Schutzdialog beim Verlassen temporärer Locations (Konzept 2):**
+    - Wurde ein Ordner ad-hoc als temporäre Location geöffnet (`browseTemp`) und hat die Anwenderin darin Sammlungen angelegt, erkennt RapidReady beim Verlassen (Bibliothekswechsel, Hinzufügen einer neuen Library oder Schließen): *Temporäre Location enthält kuratierte Sammlungen*.
+    - Ein verbindlicher, modaler Bestätigungsdialog verhindert versehentlichen Datenverlust:
+      - **Titel:** *„Sammlungen in temporärem Ordner behalten?“*
+      - **Beschreibung:** *„Du hast im temporären Ordner ‚{Ordnername}‘ {N} Sammlungen angelegt. Möchtest du diesen Ordner als feste Bibliothek speichern, damit deine Sammlungen dauerhaft erhalten bleiben?“*
+      - **Option 1 (`[ Als Bibliothek speichern ]`):** Befördert den temporären Ordner automatisch in die festen `locations` (`settingsStore.locations`). Die Sammlungen bleiben in `<rootPath>/.rapidready/collections.json` persistent gespeichert und sind jederzeit über das Bibliotheks-Dropdown wieder erreichbar.
+      - **Option 2 (`[ Sammlungen verwerfen ]`):** Verwirft die angelegten Sammlungen dieses temporären Ordners (z. B. wenn sie nur für einen schnellen Einweg-Export dienten) und führt den Bibliothekswechsel durch.
+      - **Option 3 (`[ Abbrechen ]`):** Bricht den Bibliothekswechsel ab und bleibt im aktuellen Arbeitszustand.
+    - **Migration bestehender Alben:** Beim ersten Start mit der neuen Architektur prüft RapidReady die bestehende globale `albums.json` und migriert vorhandene Sammlungen anhand ihrer Bildpfade automatisch in die zugehörigen `.rapidready/collections.json`-Dateien der jeweiligen Bibliotheken.
+
+

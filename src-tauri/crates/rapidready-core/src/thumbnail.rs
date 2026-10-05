@@ -21,10 +21,13 @@ static THUMBNAIL_CACHE: LazyLock<Mutex<LruCache<String, Vec<u8>>>> = LazyLock::n
     Mutex::new(LruCache::new(NonZeroUsize::new(10000).unwrap()))
 });
 
+pub const RAW_EXTENSIONS: &[&str] = &[
+    "cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2", "pef", "3fr", "x3f", "nrw", "rwl", "fff", "iiq", "crw", "erf",
+];
+
 pub fn find_companion_jpeg(raw_path: &Path) -> Option<std::path::PathBuf> {
     let ext = raw_path.extension().and_then(|e| e.to_str())?.to_lowercase();
-    let raw_exts = ["cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2", "pef", "3fr", "x3f", "nrw", "rwl", "fff", "iiq", "crw", "erf"];
-    if !raw_exts.contains(&ext.as_str()) {
+    if !RAW_EXTENSIONS.contains(&ext.as_str()) {
         return None;
     }
     for candidate in &["jpg", "JPG", "jpeg", "JPEG"] {
@@ -155,6 +158,13 @@ pub fn inject_orientation_into_jpeg(jpeg_bytes: &[u8], orient: u16) -> Vec<u8> {
 }
 
 pub fn extract_largest_embedded_jpeg(path: &Path, target_orient: Option<u32>) -> Option<Vec<u8>> {
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+    // Only RAW containers embed full-resolution preview JPEGs. Standard raster images (JPEG, PNG, WebP)
+    // must never be scanned for embedded streams (which would extract HDR gainmaps, motion photo clips, or thumbnails).
+    if !RAW_EXTENSIONS.contains(&ext.as_str()) {
+        return None;
+    }
+
     let mut file = std::fs::File::open(path).ok()?;
     let metadata = file.metadata().ok()?;
     let file_len = metadata.len() as usize;
@@ -171,7 +181,7 @@ pub fn extract_largest_embedded_jpeg(path: &Path, target_orient: Option<u32>) ->
     while pos + 3 <= data.len() {
         if let Some(offset) = data[pos..].windows(3).position(|w| w == pattern) {
             let start = pos + offset;
-            let search_limit = (start + 65536).min(data.len());
+            let search_limit = (start + 524288).min(data.len());
             let mut sof_pos = start + 2;
             let mut dims = None;
             while sof_pos + 8 < search_limit {
@@ -511,6 +521,21 @@ pub fn get_max_preview_jpeg_with_orient(path: &Path, explicit_orient: Option<u32
         if let Some(cached) = cache.get(&cache_key) {
             return Ok(cached.clone());
         }
+    }
+
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+    if ext == "jpg" || ext == "jpeg" {
+        let bytes = std::fs::read(path).context("Failed to read JPEG")?;
+        let eff_orient = target_orient.unwrap_or(1);
+        let out_bytes = if eff_orient != 1 {
+            inject_orientation_into_jpeg(&bytes, eff_orient as u16)
+        } else {
+            bytes
+        };
+        if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
+            cache.put(cache_key, out_bytes.clone());
+        }
+        return Ok(out_bytes);
     }
 
     // 1. Fast path: Extract largest embedded full-res JPEG directly from RAW container

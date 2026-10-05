@@ -81,6 +81,52 @@ pub fn inject_or_update_exif_date(jpeg_bytes: &[u8], date: NaiveDateTime) -> Vec
     result
 }
 
+/// Extracts all APP2 ICC_PROFILE segments from JPEG bytes.
+pub fn extract_icc_profile_segments(bytes: &[u8]) -> Vec<Vec<u8>> {
+    let mut segments = Vec::new();
+    if bytes.len() < 4 || bytes[0] != 0xFF || bytes[1] != 0xD8 {
+        return segments;
+    }
+    let mut pos = 2;
+    while pos + 4 <= bytes.len() {
+        if bytes[pos] != 0xFF {
+            break;
+        }
+        let marker = bytes[pos + 1];
+        if marker == 0xD9 || marker == 0xDA {
+            break;
+        }
+        let len = u16::from_be_bytes([bytes[pos + 2], bytes[pos + 3]]) as usize;
+        let next_pos = pos + 2 + len;
+        if next_pos > bytes.len() {
+            break;
+        }
+        if marker == 0xE2 && len >= 14 {
+            let payload = &bytes[pos + 4..next_pos];
+            if payload.starts_with(b"ICC_PROFILE\0") {
+                segments.push(bytes[pos..next_pos].to_vec());
+            }
+        }
+        pos = next_pos;
+    }
+    segments
+}
+
+/// Injects APP segments directly after the SOI marker (0xFF, 0xD8).
+pub fn inject_app_segments(jpeg_bytes: &[u8], segments: &[Vec<u8>]) -> Vec<u8> {
+    if segments.is_empty() || jpeg_bytes.len() < 2 || jpeg_bytes[0] != 0xFF || jpeg_bytes[1] != 0xD8 {
+        return jpeg_bytes.to_vec();
+    }
+    let extra_len: usize = segments.iter().map(|s| s.len()).sum();
+    let mut out = Vec::with_capacity(jpeg_bytes.len() + extra_len);
+    out.extend_from_slice(&jpeg_bytes[..2]); // SOI
+    for seg in segments {
+        out.extend_from_slice(seg);
+    }
+    out.extend_from_slice(&jpeg_bytes[2..]);
+    out
+}
+
 /// Builds a minimal, 100% compliant APP1 EXIF segment containing DateTime and DateTimeOriginal tags.
 fn build_minimal_app1_exif(date_str: &str) -> Vec<u8> {
     let mut tiff = Vec::with_capacity(76);
@@ -248,15 +294,23 @@ where
             let mut jpeg_bytes = if is_jpeg && options.resize_mode == ExportResizeMode::Original {
                 fs::read(src_path).context("Failed to read JPEG")?
             } else {
-                // Decode preview or image
-                let raw_or_img_bytes = crate::thumbnail::get_max_preview_jpeg(src_path)
-                    .or_else(|_| fs::read(src_path))
-                    .context("Failed to obtain image data for export")?;
+                let raw_or_img_bytes = if is_jpeg || ["png", "webp", "tif", "tiff", "bmp"].contains(&ext.as_str()) {
+                    fs::read(src_path).context("Failed to read image file")?
+                } else {
+                    crate::thumbnail::get_max_preview_jpeg(src_path)
+                        .or_else(|_| fs::read(src_path))
+                        .context("Failed to obtain image data for export")?
+                };
 
                 let dynamic_img = image::load_from_memory(&raw_or_img_bytes)
                     .context("Failed to decode image")?;
 
-                let processed_img = resize_image(dynamic_img, &options.resize_mode);
+                // Apply effective orientation (sidecar rotation or EXIF orientation)
+                let eff_orient = crate::thumbnail::get_effective_orientation(src_path);
+                let deg = crate::thumbnail::orientation_to_degrees(eff_orient.unwrap_or(1));
+                let oriented_img = crate::thumbnail::rotate_by_degrees(dynamic_img, deg);
+
+                let processed_img = resize_image(oriented_img, &options.resize_mode);
 
                 let mut encoded_buf = Vec::new();
                 let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(
@@ -266,7 +320,14 @@ where
                 encoder
                     .encode_image(&processed_img)
                     .context("Failed to encode JPEG")?;
-                encoded_buf
+
+                // Preserve original ICC profile (e.g. Display P3) if present in source
+                let icc_segments = extract_icc_profile_segments(&raw_or_img_bytes);
+                if !icc_segments.is_empty() {
+                    inject_app_segments(&encoded_buf, &icc_segments)
+                } else {
+                    encoded_buf
+                }
             };
 
             if should_synthesize {
@@ -390,4 +451,68 @@ mod tests {
 
         let _ = fs::remove_dir_all(&temp_dir);
     }
+
+    #[test]
+    fn test_export_pixel_jpeg_fix() {
+        let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let workspace_root = manifest_dir.parent().unwrap().parent().unwrap().parent().unwrap().parent().unwrap();
+        let pixel_path1 = workspace_root.join("testdata/JPG-Problem/original/PXL_20260314_095652377.jpg");
+        let pixel_path2 = workspace_root.join("testdata/JPG-Problem/original/PXL_20260314_100314694.jpg");
+        if !pixel_path1.exists() || !pixel_path2.exists() {
+            return;
+        }
+
+        let temp_dir = std::env::temp_dir().join(format!("rr_pixel_test_{}", std::process::id()));
+        let _ = fs::create_dir_all(&temp_dir);
+
+        let opts = CollectionExportOptions {
+            album_id: "pixel_test".into(),
+            destination_dir: temp_dir.to_str().unwrap().into(),
+            filename_prefix: "Test_".into(),
+            digits: 3,
+            preserve_original_name: false,
+            resize_mode: ExportResizeMode::LongEdge(2048),
+            jpeg_quality: 90,
+            synthesize_exif_dates: true,
+            is_sequential: true,
+        };
+
+        let count = run_collection_export(
+            &[
+                pixel_path1.to_str().unwrap().to_string(),
+                pixel_path2.to_str().unwrap().to_string(),
+            ],
+            &opts,
+            Arc::new(AtomicBool::new(false)),
+            |_| {},
+        ).unwrap();
+
+        assert_eq!(count, 2);
+
+        // File 1 (Landscape: original 4080x3072 -> resized to 2048x1542)
+        let exported_file1 = temp_dir.join("Test_001.jpg");
+        assert!(exported_file1.exists());
+        let bytes1 = fs::read(&exported_file1).unwrap();
+        let dyn_img1 = image::load_from_memory(&bytes1).unwrap();
+        assert_eq!(dyn_img1.width(), 2048, "Landscape width must be 2048");
+        assert_eq!(dyn_img1.height(), 1542, "Landscape height must be 1542");
+
+        // Verify ICC profile was preserved
+        let icc1 = extract_icc_profile_segments(&bytes1);
+        assert!(!icc1.is_empty(), "Must preserve Display P3 ICC profile");
+
+        // File 2 (Portrait: original 3072x4080 -> resized to 1542x2048)
+        let exported_file2 = temp_dir.join("Test_002.jpg");
+        assert!(exported_file2.exists());
+        let bytes2 = fs::read(&exported_file2).unwrap();
+        let dyn_img2 = image::load_from_memory(&bytes2).unwrap();
+        assert_eq!(dyn_img2.width(), 1542, "Portrait width must be 1542");
+        assert_eq!(dyn_img2.height(), 2048, "Portrait height must be 2048");
+
+        let icc2 = extract_icc_profile_segments(&bytes2);
+        assert!(!icc2.is_empty(), "Must preserve Display P3 ICC profile");
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
 }
+
