@@ -16,6 +16,11 @@ export interface LibraryImage {
   name: string;
   size: number;
   date: string | null;
+  date_modified?: string | null;
+  width?: number | null;
+  height?: number | null;
+  exposure_bias?: string | null;
+  focal_length?: string | null;
   camera: string | null;
   lens: string | null;
   iso: string | null;

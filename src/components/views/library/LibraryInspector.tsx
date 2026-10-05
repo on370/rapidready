@@ -16,7 +16,10 @@ import { useSettingsStore } from "../../../stores/settingsStore";
 import { parseCoordinates, formatDms, formatDd, ParseGpsResult } from "../../../utils/geo";
 import { useCollectionsStore, findAlbumById } from "../../../stores/collectionsStore";
 import { FocusPeakingOverlay } from "./components/FocusPeakingOverlay";
-import { formatShutterSpeed, formatAperture, formatIso } from "../../../utils/formatMetadata";
+import { 
+  formatShutterSpeed, formatAperture, formatIso, formatFocalLength,
+  formatExposureBias, formatDimensions, formatDisplayDate, areDatesDifferent 
+} from "../../../utils/formatMetadata";
 
 interface LibraryInspectorProps {
   close: () => void;
@@ -149,6 +152,18 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
   const formattedIso = useMemo(() => formatIso(activeImage?.iso), [activeImage?.iso]);
   const formattedAperture = useMemo(() => formatAperture(activeImage?.aperture), [activeImage?.aperture]);
   const formattedShutter = useMemo(() => formatShutterSpeed(activeImage?.shutter), [activeImage?.shutter]);
+  const formattedEv = useMemo(() => formatExposureBias(activeImage?.exposure_bias), [activeImage?.exposure_bias]);
+  const formattedFocalLength = useMemo(() => formatFocalLength(activeImage?.focal_length), [activeImage?.focal_length]);
+
+  const dimensionsInfo = useMemo(() => {
+    return formatDimensions(activeImage?.width, activeImage?.height, activeImage?.culling?.orientation);
+  }, [activeImage?.width, activeImage?.height, activeImage?.culling?.orientation]);
+
+  const formattedCaptureDate = useMemo(() => formatDisplayDate(activeImage?.date), [activeImage?.date]);
+  const formattedModifiedDate = useMemo(() => formatDisplayDate(activeImage?.date_modified), [activeImage?.date_modified]);
+  const hasDifferentModifiedDate = useMemo(() => {
+    return areDatesDifferent(activeImage?.date, activeImage?.date_modified);
+  }, [activeImage?.date, activeImage?.date_modified]);
 
   const { focusPeakingEnabled, toggleFocusPeaking } = useLibraryUIStore();
   const inspectorImageRef = useRef<HTMLImageElement | null>(null);
@@ -179,15 +194,20 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
   // Lazy-load detailed EXIF metadata when an image is selected
   useEffect(() => {
     if (!activeImage) return;
-    if (activeImage.camera === undefined || activeImage.is_monochrome_preview === undefined) {
+    if (activeImage.camera === undefined || activeImage.is_monochrome_preview === undefined || activeImage.exposure_bias === undefined) {
       let isMounted = true;
       invoke<{
         date: string | null;
+        date_modified?: string | null;
         camera: string | null;
         lens: string | null;
         iso: string | null;
         aperture: string | null;
         shutter: string | null;
+        focal_length?: string | null;
+        exposure_bias?: string | null;
+        width?: number | null;
+        height?: number | null;
         is_raw?: boolean;
         is_monochrome_sensor?: boolean;
         is_monochrome_preview?: boolean;
@@ -203,7 +223,12 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
               iso: meta.iso || null,
               aperture: meta.aperture || null,
               shutter: meta.shutter || null,
+              focal_length: meta.focal_length || null,
+              exposure_bias: meta.exposure_bias || null,
+              width: meta.width ?? null,
+              height: meta.height ?? null,
               date: meta.date || activeImage.date,
+              date_modified: meta.date_modified ?? null,
               is_raw: meta.is_raw ?? activeImage.is_raw,
               is_monochrome_sensor: meta.is_monochrome_sensor ?? false,
               is_monochrome_preview: meta.is_monochrome_preview ?? false,
@@ -1046,16 +1071,37 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
               {!isCollapsed('fileInfo') && (
                 <>
                   <div className="grid grid-cols-2 gap-2 text-[11px]">
-                    <div>
+                    <div className="min-w-0">
+                      <span className="text-txt-tertiary block text-[10px]">{t('inspector.dimensions', 'Dimensionen')}</span>
+                      <p className="text-txt-primary font-medium truncate" title={dimensionsInfo?.fullSummary || '—'}>
+                        {dimensionsInfo ? (
+                          <>
+                            {dimensionsInfo.dimensions}{' '}
+                            <span className="text-txt-tertiary font-normal text-[10px]">· {dimensionsInfo.megapixels}</span>
+                          </>
+                        ) : (
+                          '—'
+                        )}
+                      </p>
+                    </div>
+                    <div className="min-w-0">
                       <span className="text-txt-tertiary block text-[10px]">{t('inspector.size')}</span>
                       <p className="text-txt-primary font-medium">{(activeImage.size / (1024 * 1024)).toFixed(2)} MB</p>
                     </div>
-                    <div>
-                      <span className="text-txt-tertiary block text-[10px]">{t('inspector.date')}</span>
-                      <p className="text-txt-primary font-medium truncate" title={activeImage.date || '—'}>
-                        {activeImage.date ? activeImage.date.replace('T', ' ').substring(0, 19) : '—'}
+                    <div className={hasDifferentModifiedDate ? "min-w-0" : "min-w-0 col-span-2"}>
+                      <span className="text-txt-tertiary block text-[10px]">{t('inspector.dateCaptured', 'Aufnahme')}</span>
+                      <p className="text-txt-primary font-medium truncate" title={formattedCaptureDate || '—'}>
+                        {formattedCaptureDate || '—'}
                       </p>
                     </div>
+                    {hasDifferentModifiedDate && (
+                      <div className="min-w-0">
+                        <span className="text-txt-tertiary block text-[10px]">{t('inspector.dateModified', 'Geändert')}</span>
+                        <p className="text-txt-primary font-medium truncate text-amber-300/90" title={formattedModifiedDate || '—'}>
+                          {formattedModifiedDate || '—'}
+                        </p>
+                      </div>
+                    )}
                   </div>
                   <div className="pt-1 border-t border-app-border/40">
                     <span className="text-txt-tertiary block text-[10px]">{t('inspector.path')}</span>
@@ -1103,25 +1149,34 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
                     <span className="text-txt-tertiary block text-[10px]">{t('inspector.lens')}</span>
                     <p className="text-txt-primary font-medium truncate" title={activeImage.lens || '—'}>
                       {activeImage.lens || '—'}
+                      {formattedFocalLength && !activeImage.lens?.includes(formattedFocalLength) && (
+                        <span className="text-txt-tertiary font-mono text-[10px] ml-1.5 font-normal">({formattedFocalLength})</span>
+                      )}
                     </p>
                   </div>
-                  <div className="grid grid-cols-3 gap-2 pt-1 border-t border-app-border/40">
+                  <div className="grid grid-cols-4 gap-1.5 pt-1 border-t border-app-border/40">
                     <div className="min-w-0">
                       <span className="text-txt-tertiary block text-[10px]">{t('inspector.iso')}</span>
-                      <p className="text-txt-primary font-mono font-medium truncate" title={formattedIso || undefined}>
+                      <p className="text-txt-primary font-mono font-medium truncate text-xs" title={formattedIso || undefined}>
                         {formattedIso || '—'}
                       </p>
                     </div>
                     <div className="min-w-0">
                       <span className="text-txt-tertiary block text-[10px]">{t('inspector.aperture')}</span>
-                      <p className="text-txt-primary font-mono font-medium truncate" title={formattedAperture || undefined}>
+                      <p className="text-txt-primary font-mono font-medium truncate text-xs" title={formattedAperture || undefined}>
                         {formattedAperture || '—'}
                       </p>
                     </div>
                     <div className="min-w-0">
                       <span className="text-txt-tertiary block text-[10px]">{t('inspector.shutter')}</span>
-                      <p className="text-txt-primary font-mono font-medium truncate" title={formattedShutter || undefined}>
+                      <p className="text-txt-primary font-mono font-medium truncate text-xs" title={formattedShutter || undefined}>
                         {formattedShutter || '—'}
+                      </p>
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-txt-tertiary block text-[10px]">{t('inspector.ev', 'EV')}</span>
+                      <p className="text-txt-primary font-mono font-medium truncate text-xs" title={formattedEv || undefined}>
+                        {formattedEv || '—'}
                       </p>
                     </div>
                   </div>

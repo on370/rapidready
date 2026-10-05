@@ -7,12 +7,16 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ImageMetadata {
     pub date: Option<NaiveDateTime>,
+    pub date_modified: Option<NaiveDateTime>,
     pub camera: Option<String>,
     pub lens: Option<String>,
     pub iso: Option<String>,
     pub aperture: Option<String>,
     pub shutter: Option<String>,
     pub focal_length: Option<String>,
+    pub exposure_bias: Option<String>,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
     pub is_raw: bool,
     #[serde(default)]
     pub is_video: bool,
@@ -49,53 +53,65 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
     let mut meta = ImageMetadata::default();
 
     // Single-pass: Open file ONCE and extract date + EXIF tags simultaneously
-    let mut exif_date = None;
+    let mut exif_capture_date = None;
+    let mut exif_modify_date = None;
     if let Ok(file) = File::open(path) {
         let mut bufreader = std::io::BufReader::new(&file);
         let exifreader = exif::Reader::new();
         
         if let Ok(exif) = exifreader.read_from_container(&mut bufreader) {
-            // 1. Date extraction from EXIF
-            let tags_to_try = [
-                exif::Tag::DateTimeOriginal,
-                exif::Tag::DateTimeDigitized,
-                exif::Tag::DateTime,
-                exif::Tag::GPSDateStamp,
-            ];
-            for tag in tags_to_try {
-                if let Some(field) = exif.get_field(tag, exif::In::PRIMARY) {
-                    if let exif::Value::Ascii(ref vec) = field.value {
-                        if let Some(val) = vec.first() {
-                            if let Ok(dt_str) = std::str::from_utf8(val) {
-                                if let Ok(dt) = NaiveDateTime::parse_from_str(dt_str.trim(), "%Y:%m:%d %H:%M:%S") {
-                                    exif_date = Some(dt);
-                                    break;
-                                }
-                            }
+            let parse_date_str = |dt_str: &str| -> Option<NaiveDateTime> {
+                let trimmed = dt_str.trim();
+                NaiveDateTime::parse_from_str(trimmed, "%Y:%m:%d %H:%M:%S")
+                    .or_else(|_| NaiveDateTime::parse_from_str(trimmed, "%Y-%m-%d %H:%M:%S"))
+                    .or_else(|_| NaiveDateTime::parse_from_str(trimmed, "%Y:%m:%d %H:%M"))
+                    .ok()
+            };
+            let parse_field_date = |f: &exif::Field| -> Option<NaiveDateTime> {
+                if let exif::Value::Ascii(ref vec) = f.value {
+                    if let Some(val) = vec.first() {
+                        if let Ok(s) = std::str::from_utf8(val) {
+                            return parse_date_str(s);
                         }
+                    }
+                }
+                None
+            };
+
+            // 1. Capture Date (DateTimeOriginal / DateTimeDigitized)
+            for tag in [exif::Tag::DateTimeOriginal, exif::Tag::DateTimeDigitized] {
+                if let Some(f) = exif.fields().find(|f| f.tag == tag) {
+                    if let Some(dt) = parse_field_date(f) {
+                        exif_capture_date = Some(dt);
+                        break;
                     }
                 }
             }
 
-            // 2. Camera Model
-            if let Some(field) = exif.get_field(exif::Tag::Model, exif::In::PRIMARY) {
+            // 2. Modify Date (DateTime tag 0x0132)
+            if let Some(f) = exif.fields().find(|f| f.tag == exif::Tag::DateTime) {
+                exif_modify_date = parse_field_date(f);
+            }
+
+            // 3. Camera Model
+            if let Some(field) = exif.fields().find(|f| f.tag == exif::Tag::Model) {
                 let model = field.display_value().to_string().trim().trim_matches('"').to_string();
                 if !model.is_empty() {
                     meta.camera = Some(model);
                 }
             }
 
-            // 3. Lens Model
-            if let Some(field) = exif.get_field(exif::Tag::LensModel, exif::In::PRIMARY) {
+            // 4. Lens Model
+            if let Some(field) = exif.fields().find(|f| f.tag == exif::Tag::LensModel) {
                 let lens = field.display_value().to_string().trim().trim_matches('"').to_string();
                 if !lens.is_empty() {
                     meta.lens = Some(lens);
                 }
             }
 
-            // 4. ISO
-            let iso_tag = exif.get_field(exif::Tag::PhotographicSensitivity, exif::In::PRIMARY)
-                .or_else(|| exif.get_field(exif::Tag::ISOSpeed, exif::In::PRIMARY));
+            // 5. ISO
+            let iso_tag = exif.fields().find(|f| f.tag == exif::Tag::PhotographicSensitivity)
+                .or_else(|| exif.fields().find(|f| f.tag == exif::Tag::ISOSpeed));
             if let Some(field) = iso_tag {
                 let iso = field.display_value().to_string().trim().to_string();
                 if !iso.is_empty() {
@@ -103,36 +119,82 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
                 }
             }
 
-            // 5. Aperture (FNumber)
-            if let Some(field) = exif.get_field(exif::Tag::FNumber, exif::In::PRIMARY) {
+            // 6. Aperture (FNumber)
+            if let Some(field) = exif.fields().find(|f| f.tag == exif::Tag::FNumber) {
                 let f_str = field.display_value().to_string().trim().to_string();
                 if !f_str.is_empty() {
                     meta.aperture = Some(clean_aperture(&f_str));
                 }
             }
 
-            // 6. Shutter Speed (ExposureTime)
-            if let Some(field) = exif.get_field(exif::Tag::ExposureTime, exif::In::PRIMARY) {
+            // 7. Shutter Speed (ExposureTime)
+            if let Some(field) = exif.fields().find(|f| f.tag == exif::Tag::ExposureTime) {
                 let exp_str = field.display_value().to_string().trim().to_string();
                 if !exp_str.is_empty() {
                     meta.shutter = Some(clean_shutter_speed(&exp_str));
                 }
             }
 
-            // 7. Focal Length
-            if let Some(field) = exif.get_field(exif::Tag::FocalLength, exif::In::PRIMARY) {
+            // 8. Exposure Bias Value (Exposure compensation in EV)
+            if let Some(field) = exif.fields().find(|f| f.tag == exif::Tag::ExposureBiasValue) {
+                let ev_num = match field.value {
+                    exif::Value::SRational(ref vec) => {
+                        vec.first().and_then(|r| if r.denom != 0 { Some(r.num as f64 / r.denom as f64) } else { None })
+                    }
+                    exif::Value::Rational(ref vec) => {
+                        vec.first().and_then(|r| if r.denom != 0 { Some(r.num as f64 / r.denom as f64) } else { None })
+                    }
+                    _ => None,
+                };
+                if let Some(ev) = ev_num {
+                    meta.exposure_bias = Some(clean_exposure_bias(&format!("{:.4}", ev)));
+                } else {
+                    let disp = field.display_value().to_string();
+                    if !disp.is_empty() {
+                        meta.exposure_bias = Some(clean_exposure_bias(&disp));
+                    }
+                }
+            }
+
+            // 9. Focal Length
+            if let Some(field) = exif.fields().find(|f| f.tag == exif::Tag::FocalLength) {
                 let fl = field.display_value().with_unit(&exif).to_string();
                 if !fl.is_empty() {
                     meta.focal_length = Some(clean_focal_length(&fl));
                 }
             }
 
-            // 8. Monochrome Sensor Check via EXIF PhotometricInterpretation & CFAPattern
-            if let Some(field) = exif.get_field(exif::Tag::PhotometricInterpretation, exif::In::PRIMARY) {
+            // 10. Dimensions (PixelXDimension / PixelYDimension or ImageWidth / ImageLength)
+            let max_w = exif
+                .fields()
+                .filter(|f| f.tag == exif::Tag::PixelXDimension || f.tag == exif::Tag::ImageWidth)
+                .filter_map(|f| f.value.get_uint(0))
+                .max();
+            let max_h = exif
+                .fields()
+                .filter(|f| f.tag == exif::Tag::PixelYDimension || f.tag == exif::Tag::ImageLength)
+                .filter_map(|f| f.value.get_uint(0))
+                .max();
+
+            let mut width = max_w;
+            let mut height = max_h;
+
+            if width.is_none() || height.is_none() || width.unwrap_or(0) < 300 {
+                if let Ok((img_w, img_h)) = image::image_dimensions(path) {
+                    width = Some(img_w);
+                    height = Some(img_h);
+                }
+            }
+
+            meta.width = width;
+            meta.height = height;
+
+            // 11. Monochrome Sensor Check via EXIF PhotometricInterpretation & CFAPattern
+            if let Some(field) = exif.fields().find(|f| f.tag == exif::Tag::PhotometricInterpretation) {
                 if let Some(val) = field.value.get_uint(0) {
                     // 0 = WhiteIsZero, 1 = BlackIsZero (Standard Grayscale/Monochrome sensor)
                     // 32803 = CFA (Color Filter Array)
-                    let has_cfa = exif.get_field(exif::Tag::CFAPattern, exif::In::PRIMARY).is_some();
+                    let has_cfa = exif.fields().any(|f| f.tag == exif::Tag::CFAPattern);
                     if (val == 0 || val == 1) && !has_cfa {
                         meta.is_monochrome_sensor = true;
                     }
@@ -221,11 +283,20 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
         meta.is_monochrome_preview = true;
     }
 
-    if let Some(d) = exif_date {
+    let fs_modified = std::fs::metadata(path).ok().and_then(|m| m.modified().ok()).map(|sys_time| {
+        let dt: chrono::DateTime<chrono::Utc> = sys_time.into();
+        dt.naive_local()
+    });
+
+    if let Some(d) = exif_capture_date {
         meta.date = Some(d);
+        meta.date_modified = exif_modify_date.or(fs_modified);
+    } else if let Some(m_date) = exif_modify_date {
+        meta.date = Some(m_date);
+        meta.date_modified = fs_modified;
     } else {
-        // Fallback to filename/fs timestamp only if EXIF didn't have a date
         meta.date = crate::date_resolver::get_creation_date(path).ok();
+        meta.date_modified = fs_modified;
     }
 
     meta
@@ -346,6 +417,61 @@ pub fn clean_iso(iso_str: &str) -> String {
         return format!("{}", val.round() as i64);
     }
     trimmed.to_string()
+}
+
+/// Formats an exposure bias / compensation value cleanly (e.g. "±0.0 EV", "+0.7 EV", "-1.3 EV", "+1.0 EV").
+pub fn clean_exposure_bias(raw: &str) -> String {
+    let trimmed = raw.trim().trim_end_matches("EV").trim_end_matches("ev").trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    // Direct match for already formatted zero indicators
+    if trimmed == "±0.0" || trimmed == "±0" || trimmed == "+/-0.0" || trimmed == "+/- 0.0" || trimmed == "+-0.0" {
+        return "±0.0 EV".to_string();
+    }
+
+    let val: Option<f64> = if let Some((num_str, denom_str)) = trimmed.split_once('/') {
+        let num_clean = num_str.trim().trim_start_matches('+');
+        let denom_clean = denom_str.trim().trim_start_matches('+');
+        if let (Ok(num), Ok(denom)) = (num_clean.parse::<f64>(), denom_clean.parse::<f64>()) {
+            if denom != 0.0 {
+                Some(num / denom)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    } else {
+        let num_clean = trimmed
+            .trim_start_matches('±')
+            .trim_start_matches("+/-")
+            .trim_start_matches("+ / -")
+            .trim_start_matches('+')
+            .trim();
+        num_clean.parse::<f64>().ok()
+    };
+
+    if let Some(ev) = val {
+        if ev.abs() < 0.05 {
+            "±0.0 EV".to_string()
+        } else if ev > 0.0 {
+            format!("+{:.1} EV", ev)
+        } else {
+            format!("{:.1} EV", ev)
+        }
+    } else {
+        if trimmed.starts_with('±') {
+            format!("{} EV", trimmed)
+        } else if trimmed.starts_with('+') || trimmed.starts_with('-') {
+            format!("{} EV", trimmed)
+        } else if trimmed == "0" {
+            "±0.0 EV".to_string()
+        } else {
+            format!("+{} EV", trimmed)
+        }
+    }
 }
 
 fn rational_to_f64(r: &exif::Rational) -> Option<f64> {
@@ -616,5 +742,28 @@ mod tests {
         assert_eq!(clean_iso("100"), "100");
         assert_eq!(clean_iso("100.0"), "100");
         assert_eq!(clean_iso("ISO 400"), "400");
+    }
+
+    #[test]
+    fn test_clean_exposure_bias() {
+        assert_eq!(clean_exposure_bias("0"), "±0.0 EV");
+        assert_eq!(clean_exposure_bias("0.0"), "±0.0 EV");
+        assert_eq!(clean_exposure_bias("-0.0"), "±0.0 EV");
+        assert_eq!(clean_exposure_bias("0/1"), "±0.0 EV");
+        assert_eq!(clean_exposure_bias("0/6"), "±0.0 EV");
+        assert_eq!(clean_exposure_bias("±0.0 EV"), "±0.0 EV");
+        assert_eq!(clean_exposure_bias("+/- 0.0 EV"), "±0.0 EV");
+        assert_eq!(clean_exposure_bias("2/3"), "+0.7 EV");
+        assert_eq!(clean_exposure_bias("+1.7 EV"), "+1.7 EV");
+        assert_eq!(clean_exposure_bias("5/3"), "+1.7 EV");
+        assert_eq!(clean_exposure_bias("-1/3"), "-0.3 EV");
+        assert_eq!(clean_exposure_bias("1/2"), "+0.5 EV");
+        assert_eq!(clean_exposure_bias("-4/3"), "-1.3 EV");
+        assert_eq!(clean_exposure_bias("-5/3"), "-1.7 EV");
+        assert_eq!(clean_exposure_bias("-1.7 EV"), "-1.7 EV");
+        assert_eq!(clean_exposure_bias("1"), "+1.0 EV");
+        assert_eq!(clean_exposure_bias("-1"), "-1.0 EV");
+        assert_eq!(clean_exposure_bias("-2"), "-2.0 EV");
+        assert_eq!(clean_exposure_bias("+0.67 EV"), "+0.7 EV");
     }
 }

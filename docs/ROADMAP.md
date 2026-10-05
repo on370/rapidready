@@ -601,5 +601,42 @@
     - **No RAW Conversion Overhead:** The AI engine analyzes pre-cached 256/512px thumbnails or embedded camera sensor JPEGs already extracted by the ingest pipeline. Inference requires only 5–15 ms per photo on Apple Silicon (via CoreML / Apple Neural Engine) or modern PC hardware (DirectML / CUDA / AVX2).
     - **Idle Background Worker:** Scanning executes strictly in background threads with low OS scheduling priority. Automatically pauses during user interactions (culling, scrolling, zoom peeping, or RapidRAW handover) ensuring 100% fluid 60 FPS UI responsiveness.
 
+---
 
-
+### Milestone: Comprehensive EXIF & Technical Metadata Hub (Advanced Backlog)
+- [ ] **Extended Technical EXIF & Media Metadata Inspection:**
+  - **Context & Goal:**
+    Professional photographers, retouchers, and photo archivists rely on in-depth camera and capture metadata beyond core exposure parameters to verify shooting configurations, gear performance, color pipeline consistency, and attribution.
+  - **Backlog Scope & Catalog of Metadata Fields:**
+    1. **Shooting Parameters & Camera Configuration:**
+       - **Exposure Program (`ExposureProgram`):** Manual (M), Aperture Priority (Av/A), Shutter Priority (Tv/S), Program (P), Creative / Scene modes.
+       - **Metering Mode (`MeteringMode`):** Multi-segment / Evaluative Matrix, Center-Weighted Average, Spot, Partial.
+       - **Flash State (`Flash`):** Fired / Did not fire, TTL, fill flash, red-eye reduction, bounce flash.
+       - **White Balance (`WhiteBalance`):** Auto vs. Manual / Preset (Daylight, Shade, Tungsten, Custom Kelvin `ColorTemperature`).
+       - **35mm Equivalent Focal Length (`FocalLengthIn35mmFilm`):** Sensor crop-factor conversion (e.g. `16 mm (24 mm equiv.)` on APS-C / Micro Four Thirds / Smartphones).
+       - **Subject / Focus Distance (`SubjectDistance`):** Distance to focal plane in meters.
+    2. **Hardware, Optics & Camera Identity:**
+       - **Camera Make & Clean Model (`Make` + `Model`):** Unified camera identity (e.g. `Sony ILCE-7RM5`, `Canon EOS R5`).
+       - **Lens Specification (`LensSpecification`):** Optical range and maximum aperture specification.
+       - **Serial Numbers (`BodySerialNumber`, `LensSerialNumber`):** Hardware inventory tracking and rental/theft verification.
+       - **Shutter Actuation Count (`ImageNumber` / MakerNotes):** Total lifetime shutter activations recorded at capture time.
+       - **Firmware & Creation Software (`Software`):** Camera firmware version or raw processing converter signature.
+    3. **Color, Sensor & Bit Depth Pipeline:**
+       - **Color Space (`ColorSpace`):** sRGB, Adobe RGB, ProPhoto RGB, Display P3, Uncalibrated.
+       - **Bit Depth (`BitsPerSample`):** 14-bit RAW, 12-bit RAW, 10-bit HEIF, 8-bit JPEG.
+       - **Compression Profile (`Compression`):** Lossless compressed, uncompressed, lossy compressed.
+    4. **IPTC, Rights & Editorial Metadata:**
+       - **Creator / Artist (`Artist` / `Creator`):** Photographer byline.
+       - **Copyright Notice (`Copyright`):** Copyright ownership notice.
+       - **Image Description & Headline (`ImageDescription` / `Title`):** Caption and title metadata.
+    5. **Advanced Spatial & Motion Geodata:**
+       - **Compass Heading (`GPSImgDirection`):** Direction the camera was pointed at exposure (degrees + cardinal direction).
+       - **Capture Speed (`GPSSpeed`):** Vehicle/aircraft speed at capture time.
+       - **GPS Atomic Clock (`GPSDateStamp` + `GPSTimeStamp`):** UTC satellite time verification.
+    6. **Video Clip Technical Metadata:**
+       - **Duration:** Formatted playback duration (`mm:ss`).
+       - **Framerate:** Exact capture rate (`23.976 fps`, `24 fps`, `25 fps`, `50 fps`, `59.94 fps`, `120 fps`).
+       - **Video Codec & Bitrate:** Apple ProRes, H.265 (HEVC), H.264 (AVC), AV1.
+       - **Audio Format:** Sample rate (48 kHz) and bit depth (24-bit LPCM, AAC).
+  - **Ergonomic Inspector UI Architecture:**
+    - Dedicated collapsible section: *"Erweiterte EXIF-Daten & Technische Details"* in `LibraryInspector.tsx`, keeping the main exposure and file info cards clean while offering instant drill-down on demand.
