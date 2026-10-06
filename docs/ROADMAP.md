@@ -654,24 +654,31 @@
 
 ---
 
-### Milestone: Library-Scoped Collections & Collection Lifecycle Management
-- [ ] **Library-Scoped Collections & Lifecycle-Management für temporäre Locations (Konzept 1 + Konzept 2):**
+### Milestone: Library-Scoped Collections & Native RapidRAW Parity (Weg B)
+- [x] **Library-Scoped Collections mit 100% RapidRAW-Synchronisation & Lifecycle-Schutzdialog (Weg B):**
   - **Problemstellung & Kontext:**
-    - Bisher wurden Sammlungen zentral und global in `<app_data_dir>/albums/albums.json` abgelegt, während `libraryStore` nur Bilder der aktuell geöffneten Library (`rootPath`) im Speicher hält.
-    - Dies führte beim Wechsel der Library zu massiver Verwirrung: Sammlungen aus anderen Bibliotheken blieben in der Sidebar sichtbar (z. B. mit Zähler `(45)`), zeigten im Grid jedoch 0 Fotos (leere Ansicht).
+    - Sammlungen (`albums.json`) werden zentral und global in `<app_data_dir>/albums/albums.json` abgelegt und bidirektional mit RapidRAW synchronisiert.
+    - Da `libraryStore` jedoch immer nur Bilder der aktuell geöffneten Library (`rootPath`) im Speicher hält, führte dies beim Wechsel der Library zu massiver Verwirrung: Sammlungen aus anderen Bibliotheken blieben in der Sidebar sichtbar (z. B. mit Zähler `(45)`), zeigten im Grid jedoch 0 Fotos (leere Ansicht).
     - Bei temporären Locations (*„Beliebigen Ordner öffnen / Durchsuchen“*) droht beim Wechsel entweder Datenmüll (verwaiste tote Sammlungen) oder unbemerkter Datenverlust investierter Kurationsarbeit.
-  - **Säule 1: Dezentrale Speicherung pro Library (Konzept 1):**
-    - **Speicherort:** Sammlungen werden nicht mehr global, sondern dezentral im jeweiligen Bibliotheks-Stammverzeichnis unter `<rootPath>/.rapidready/collections.json` gespeichert (vollständige Parität zum `.rrdata`-Sidecar-Prinzip).
-    - **Portabilität:** Sammlungen reisen automatisch mit der Festplatte / dem Archivordner mit, wenn Datenträger an andere Rechner angeschlossen oder im Team weitergegeben werden.
-    - **Strikter UI-Scope:** In der linken Sidebar werden *ausschließlich* die Sammlungen der aktuell geladenen Library angezeigt. Beim Wechsel von Library A zu Library B verschwinden die Sammlungen von A aus der Sidebar und die Sammlungen von B werden geladen. Keine toten Alben, keine leeren Grids, saubere und aufgeräumte Sidebar.
-  - **Säule 2: Schutzdialog beim Verlassen temporärer Locations (Konzept 2):**
+  - **Säule 1: Volle RapidRAW-Parität & Zentraler Master-Storage:**
+    - Das zentrale Dateiformat und die Datei `<app_data_dir>/albums/albums.json` bleiben erhalten.
+    - Die bewährte, atomare LWW-Synchronisation mit RapidRAWs `io.github.CyberTimon.RapidRAW/albums/albums.json` bleibt unverändert und stabil: keine komplexen Multi-File-Merges, keine Formatbrüche, kein Risiko für die Interoperabilität mit RapidRAW.
+  - **Säule 2: Intelligenter UI-Scope in RapidReady (Sidebar-Filterung):**
+    - **Bibliotheks-Zugehörigkeit:**
+      - Beim Erstellen einer Sammlung in RapidReady wird ihr optional ein `libraryRoot`-Attribut zugeordnet (abwärtskompatibel im `AlbumItem`-Schema, von RapidRAW ignoriert).
+      - Alternativ/ergänzend wird die Zugehörigkeit dynamisch über die enthaltenen Bildpfade ermittelt (`path.startsWith(currentRoot)`).
+    - **Strikte Filterung in der Sidebar:**
+      - In der linken Sidebar werden *ausschließlich die Sammlungen angezeigt, die zur aktuell aktiven Library gehören* (oder die in der aktuellen Session leer in dieser Library erstellt wurden).
+      - Sammlungen anderer Bibliotheken werden ausgeblendet.
+      - **Ergebnis:** Das Problem „Zähler sagt 45, Grid zeigt 0“ ist vollständig behoben! Man klickt nie mehr auf eine leere Collection; jede sichtbare Collection zeigt verlässlich ihre Bilder im Grid.
+  - **Säule 3: Schutzdialog beim Verlassen temporärer Locations (Konzept 2):**
     - Wurde ein Ordner ad-hoc als temporäre Location geöffnet (`browseTemp`) und hat die Anwenderin darin Sammlungen angelegt, erkennt RapidReady beim Verlassen (Bibliothekswechsel, Hinzufügen einer neuen Library oder Schließen): *Temporäre Location enthält kuratierte Sammlungen*.
     - Ein verbindlicher, modaler Bestätigungsdialog verhindert versehentlichen Datenverlust:
       - **Titel:** *„Sammlungen in temporärem Ordner behalten?“*
       - **Beschreibung:** *„Du hast im temporären Ordner ‚{Ordnername}‘ {N} Sammlungen angelegt. Möchtest du diesen Ordner als feste Bibliothek speichern, damit deine Sammlungen dauerhaft erhalten bleiben?“*
-      - **Option 1 (`[ Als Bibliothek speichern ]`):** Befördert den temporären Ordner automatisch in die festen `locations` (`settingsStore.locations`). Die Sammlungen bleiben in `<rootPath>/.rapidready/collections.json` persistent gespeichert und sind jederzeit über das Bibliotheks-Dropdown wieder erreichbar.
-      - **Option 2 (`[ Sammlungen verwerfen ]`):** Verwirft die angelegten Sammlungen dieses temporären Ordners (z. B. wenn sie nur für einen schnellen Einweg-Export dienten) und führt den Bibliothekswechsel durch.
+      - **Option 1 (`[ Als Bibliothek speichern ]`):** Befördert den temporären Ordner automatisch in die festen `locations` (`settingsStore.locations`). Die Sammlungen bleiben mit diesem Bibliotheks-Scope verknüpft und sind jederzeit über das Bibliotheks-Dropdown wieder erreichbar.
+      - **Option 2 (`[ Sammlungen verwerfen ]`):** Bereinigt die angelegten Sammlungen dieses temporären Ordners aus `albums.json` (z. B. wenn sie nur für einen schnellen Einweg-Export dienten) und führt den Bibliothekswechsel durch.
       - **Option 3 (`[ Abbrechen ]`):** Bricht den Bibliothekswechsel ab und bleibt im aktuellen Arbeitszustand.
-    - **Migration bestehender Alben:** Beim ersten Start mit der neuen Architektur prüft RapidReady die bestehende globale `albums.json` und migriert vorhandene Sammlungen anhand ihrer Bildpfade automatisch in die zugehörigen `.rapidready/collections.json`-Dateien der jeweiligen Bibliotheken.
+
 
 

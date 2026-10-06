@@ -260,6 +260,7 @@ pub fn run() {
             commands::delete_collection_item,
             commands::sort_collection_by_exif,
             commands::prune_from_all_collections,
+            commands::prune_collections_by_library,
             commands::export_collection,
             commands::cancel_collection_export,
             commands::warm_thumbnail_cache,

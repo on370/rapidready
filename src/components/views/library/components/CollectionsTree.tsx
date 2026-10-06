@@ -16,7 +16,8 @@ import {
   useCollectionsStore,
   AlbumItem,
   Album,
-  getAlbumImageCount,
+  filterCollectionsForLibrary,
+  getAlbumImageCountForLibrary,
 } from '../../../../stores/collectionsStore';
 import { useLibraryStore } from '../../../../stores/libraryStore';
 import { useToastStore } from '../../../../stores/toastStore';
@@ -43,6 +44,11 @@ export const CollectionsTree = forwardRef<CollectionsTreeRef, CollectionsTreePro
       addToCollection,
       openExportModal,
     } = useCollectionsStore();
+    const rootPath = useLibraryStore((s) => s.rootPath);
+
+    const visibleTree = React.useMemo(() => {
+      return filterCollectionsForLibrary(collectionsTree, rootPath);
+    }, [collectionsTree, rootPath]);
 
     const [contextMenu, setContextMenu] = useState<{
       x: number;
@@ -147,9 +153,9 @@ export const CollectionsTree = forwardRef<CollectionsTreeRef, CollectionsTreePro
 
     try {
       if (activeModal.type === 'create_album') {
-        await createCollection(inputName.trim(), activeModal.parentId || null, false);
+        await createCollection(inputName.trim(), activeModal.parentId || null, false, undefined, rootPath);
       } else if (activeModal.type === 'create_group') {
-        await createCollection(inputName.trim(), activeModal.parentId || null, true);
+        await createCollection(inputName.trim(), activeModal.parentId || null, true, undefined, rootPath);
       } else if (activeModal.type === 'rename' && activeModal.targetItem) {
         await renameCollection(activeModal.targetItem.id, inputName.trim());
       }
@@ -163,7 +169,7 @@ export const CollectionsTree = forwardRef<CollectionsTreeRef, CollectionsTreePro
   const renderNode = (item: AlbumItem, depth = 0) => {
     if (item.type === 'group') {
       const isExpanded = expandedGroups.has(item.id);
-      const count = getAlbumImageCount(item);
+      const count = getAlbumImageCountForLibrary(item, rootPath);
 
       return (
         <div key={item.id} className="flex flex-col">
@@ -213,7 +219,7 @@ export const CollectionsTree = forwardRef<CollectionsTreeRef, CollectionsTreePro
     // Single Album
     const isSelected = activeCollectionId === item.id;
     const isDragOver = dragOverAlbumId === item.id;
-    const count = item.images ? item.images.length : 0;
+    const count = getAlbumImageCountForLibrary(item, rootPath);
 
     return (
       <div
@@ -271,12 +277,12 @@ export const CollectionsTree = forwardRef<CollectionsTreeRef, CollectionsTreePro
 
   return (
     <div className="flex flex-col space-y-0.5">
-      {collectionsTree.length === 0 ? (
+      {visibleTree.length === 0 ? (
         <div className="px-2 py-1.5 text-xs text-txt-tertiary italic">
           {t('collections.noCollectionsYet', 'Keine Sammlungen angelegt')}
         </div>
       ) : (
-        collectionsTree.map((item) => renderNode(item, 0))
+        visibleTree.map((item) => renderNode(item, 0))
       )}
 
       {/* Context Menu */}

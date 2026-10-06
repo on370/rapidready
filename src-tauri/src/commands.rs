@@ -12,6 +12,7 @@ use rapidready_core::collections::{
     sort_collection_by_exif as core_sort_collection_by_exif,
     prune_paths_from_all_collections as core_prune_paths_from_all_collections,
     prune_folder_from_all_collections as core_prune_folder_from_all_collections,
+    prune_collections_by_library as core_prune_collections_by_library,
 };
 use rapidready_core::collection_export::{
     CollectionExportOptions, run_collection_export,
@@ -1405,6 +1406,7 @@ pub async fn create_collection_item(
     name: String,
     is_group: bool,
     icon: Option<String>,
+    library_root: Option<String>,
 ) -> Result<Vec<AlbumItem>, String> {
     let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let mut tree = core_load_collections(&app_dir)?;
@@ -1414,9 +1416,9 @@ pub async fn create_collection_item(
         .as_millis();
     let id = format!("album-{}", now);
     let new_item = if is_group {
-        AlbumItem::Group { id, name, icon, children: Vec::new() }
+        AlbumItem::Group { id, name, icon, library_root, children: Vec::new() }
     } else {
-        AlbumItem::Album { id, name, icon, images: Vec::new() }
+        AlbumItem::Album { id, name, icon, library_root, images: Vec::new() }
     };
     core_create_collection_item(&mut tree, parent_id.as_deref(), new_item);
     core_save_collections(tree.clone(), &app_dir)?;
@@ -1448,6 +1450,16 @@ pub async fn sort_collection_by_exif(app: AppHandle, target_id: String) -> Resul
     let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let mut tree = core_load_collections(&app_dir)?;
     if core_sort_collection_by_exif(&mut tree, &target_id) {
+        core_save_collections(tree.clone(), &app_dir)?;
+    }
+    Ok(tree)
+}
+
+#[tauri::command]
+pub async fn prune_collections_by_library(app: AppHandle, library_root: String) -> Result<Vec<AlbumItem>, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let mut tree = core_load_collections(&app_dir)?;
+    if core_prune_collections_by_library(&mut tree, &library_root) {
         core_save_collections(tree.clone(), &app_dir)?;
     }
     Ok(tree)

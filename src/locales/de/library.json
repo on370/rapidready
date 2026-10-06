@@ -298,7 +298,13 @@
     "newCollection": "Neue Sammlung...",
     "newCollectionName": "Name der Sammlung...",
     "create": "Erstellen",
-    "cancel": "Abbrechen"
+    "cancel": "Abbrechen",
+    "tempLocationModalTitle": "Sammlungen in temporärem Ordner behalten?",
+    "tempLocationModalDesc_one": "Du hast im temporären Ordner „{{name}}“ 1 Sammlung angelegt. Möchtest du diesen Ordner als feste Bibliothek speichern, damit deine Sammlungen dauerhaft erhalten bleiben?",
+    "tempLocationModalDesc_other": "Du hast im temporären Ordner „{{name}}“ {{count}} Sammlungen angelegt. Möchtest du diesen Ordner als feste Bibliothek speichern, damit deine Sammlungen dauerhaft erhalten bleiben?",
+    "saveAsLocation": "Als Bibliothek speichern",
+    "discardCollections": "Sammlungen verwerfen",
+    "savedAsLocationSuccess": "„{{name}}“ als Bibliothek gespeichert."
   },
   "exportModal": {
     "title": "Sammlung exportieren",

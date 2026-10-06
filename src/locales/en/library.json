@@ -298,7 +298,13 @@
     "newCollection": "New Collection...",
     "newCollectionName": "Collection name...",
     "create": "Create",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "tempLocationModalTitle": "Keep collections from temporary folder?",
+    "tempLocationModalDesc_one": "You created 1 collection in the temporary folder \"{{name}}\". Would you like to save this folder as a library location so your collections are preserved permanently?",
+    "tempLocationModalDesc_other": "You created {{count}} collections in the temporary folder \"{{name}}\". Would you like to save this folder as a library location so your collections are preserved permanently?",
+    "saveAsLocation": "Save as Library",
+    "discardCollections": "Discard Collections",
+    "savedAsLocationSuccess": "\"{{name}}\" saved as library location."
   },
   "exportModal": {
     "title": "Export Collection",

@@ -9,12 +9,16 @@ pub enum AlbumItem {
         id: String,
         name: String,
         icon: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none", rename = "libraryRoot")]
+        library_root: Option<String>,
         images: Vec<String>,
     },
     Group {
         id: String,
         name: String,
         icon: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none", rename = "libraryRoot")]
+        library_root: Option<String>,
         children: Vec<AlbumItem>,
     },
 }
@@ -38,6 +42,13 @@ impl AlbumItem {
         match self {
             AlbumItem::Album { icon, .. } => icon.as_deref(),
             AlbumItem::Group { icon, .. } => icon.as_deref(),
+        }
+    }
+
+    pub fn library_root(&self) -> Option<&str> {
+        match self {
+            AlbumItem::Album { library_root, .. } => library_root.as_deref(),
+            AlbumItem::Group { library_root, .. } => library_root.as_deref(),
         }
     }
 }
@@ -306,6 +317,78 @@ pub fn prune_folder_from_all_collections(tree: &mut [AlbumItem], folder_path: &s
     modified
 }
 
+/// Prunes (removes) any albums and groups from the tree that belong to the specified library_root.
+/// An album belongs to library_root if its library_root matches or if all its images belong to library_root.
+/// A group belongs to library_root if its library_root matches.
+/// Returns true if tree was modified.
+pub fn prune_collections_by_library(tree: &mut Vec<AlbumItem>, library_root: &str) -> bool {
+    let norm_lib = normalize_path_for_cmp(library_root);
+    let prefix = if norm_lib.ends_with('/') {
+        norm_lib.clone()
+    } else {
+        format!("{}/", norm_lib)
+    };
+
+    fn prune_items(items: &mut Vec<AlbumItem>, norm_lib: &str, prefix: &str) -> bool {
+        let mut modified = false;
+        items.retain_mut(|item| {
+            match item {
+                AlbumItem::Album { library_root, images, .. } => {
+                    let matches_root = library_root
+                        .as_deref()
+                        .map(|r| normalize_path_for_cmp(r) == norm_lib)
+                        .unwrap_or(false);
+
+                    let matches_images = !images.is_empty() && images.iter().all(|img| {
+                        let norm = normalize_path_for_cmp(img);
+                        norm.starts_with(prefix) || norm == norm_lib
+                    });
+
+                    if matches_root || matches_images {
+                        modified = true;
+                        false // remove album
+                    } else {
+                        // In case of mixed images, prune images that belong to this library
+                        let initial_len = images.len();
+                        images.retain(|img| {
+                            let norm = normalize_path_for_cmp(img);
+                            !norm.starts_with(prefix) && norm != norm_lib
+                        });
+                        if images.len() != initial_len {
+                            modified = true;
+                        }
+                        true
+                    }
+                }
+                AlbumItem::Group { library_root, children, .. } => {
+                    let matches_root = library_root
+                        .as_deref()
+                        .map(|r| normalize_path_for_cmp(r) == norm_lib)
+                        .unwrap_or(false);
+
+                    if matches_root {
+                        modified = true;
+                        false // remove entire group
+                    } else {
+                        let child_modified = prune_items(children, norm_lib, prefix);
+                        if child_modified {
+                            modified = true;
+                        }
+                        true
+                    }
+                }
+            }
+        });
+        modified
+    }
+
+    let modified = prune_items(tree, &norm_lib, &prefix);
+    if modified {
+        sort_album_tree(tree);
+    }
+    modified
+}
+
 /// Reorders the images array of an album. Returns true if modified.
 pub fn reorder_collection_images(tree: &mut [AlbumItem], target_id: &str, new_order: &[String]) -> bool {
     for item in tree.iter_mut() {
@@ -440,17 +523,20 @@ mod tests {
                 id: "a1".into(),
                 name: "Zebra".into(),
                 icon: None,
+                library_root: None,
                 images: vec!["img1.jpg".into(), "img2.jpg".into()],
             },
             AlbumItem::Group {
                 id: "g1".into(),
                 name: "Vacation".into(),
                 icon: None,
+                library_root: None,
                 children: vec![
                     AlbumItem::Album {
                         id: "a2".into(),
                         name: "Beach".into(),
                         icon: None,
+                        library_root: None,
                         images: vec![],
                     }
                 ],
@@ -497,6 +583,7 @@ mod tests {
                 id: "a1".into(),
                 name: "CrossPlatform".into(),
                 icon: None,
+                library_root: None,
                 images: vec!["C:/Photos/image1.jpg".into()],
             }
         ];
@@ -521,6 +608,7 @@ mod tests {
                 id: "a1".into(),
                 name: "Album1".into(),
                 icon: None,
+                library_root: None,
                 images: vec![
                     "C:/Photos/2026/img1.jpg".into(),
                     "C:/Photos/2026/img2.jpg".into(),
@@ -531,11 +619,13 @@ mod tests {
                 id: "g1".into(),
                 name: "Group1".into(),
                 icon: None,
+                library_root: None,
                 children: vec![
                     AlbumItem::Album {
                         id: "a2".into(),
                         name: "Album2".into(),
                         icon: None,
+                        library_root: None,
                         images: vec![
                             "C:\\Photos\\2026\\img1.jpg".into(),
                             "C:/Photos/standalone.jpg".into(),
@@ -561,5 +651,56 @@ mod tests {
         if let AlbumItem::Album { images, .. } = &tree[0] {
             assert_eq!(images, &["C:/Photos/other.jpg"]);
         }
+    }
+
+    #[test]
+    fn test_library_root_serde_and_prune() {
+        // 1. Deserializing legacy/RapidRAW JSON without libraryRoot field
+        let legacy_json = r#"[
+            {"type":"album","id":"a1","name":"Legacy","icon":null,"images":["/Volumes/Lib1/img.jpg"]},
+            {"type":"group","id":"g1","name":"Group","icon":null,"children":[]}
+        ]"#;
+        let mut items: Vec<AlbumItem> = serde_json::from_str(legacy_json).unwrap();
+        assert_eq!(items[0].library_root(), None);
+        assert_eq!(items[1].library_root(), None);
+
+        // 2. Serializing item with library_root skips if None, serializes if Some
+        let serialized_none = serde_json::to_string(&items[0]).unwrap();
+        assert!(!serialized_none.contains("libraryRoot"));
+
+        let with_root = AlbumItem::Album {
+            id: "a2".into(),
+            name: "TempAlbum".into(),
+            icon: None,
+            library_root: Some("/Volumes/Temp".into()),
+            images: vec!["/Volumes/Temp/shot1.jpg".into()],
+        };
+        let serialized_some = serde_json::to_string(&with_root).unwrap();
+        assert!(serialized_some.contains(r#""libraryRoot":"/Volumes/Temp""#));
+
+        // 3. Pruning by library root
+        let mut full_tree = vec![
+            items.remove(0), // a1: /Volumes/Lib1
+            with_root,       // a2: /Volumes/Temp
+            AlbumItem::Album {
+                id: "a3".into(),
+                name: "EmptyTemp".into(),
+                icon: None,
+                library_root: Some("/Volumes/Temp".into()),
+                images: vec![],
+            },
+            AlbumItem::Group {
+                id: "g_temp".into(),
+                name: "TempGroup".into(),
+                icon: None,
+                library_root: Some("/Volumes/Temp".into()),
+                children: vec![],
+            },
+        ];
+
+        assert!(prune_collections_by_library(&mut full_tree, "/Volumes/Temp"));
+        // Only a1 should remain!
+        assert_eq!(full_tree.len(), 1);
+        assert_eq!(full_tree[0].id(), "a1");
     }
 }

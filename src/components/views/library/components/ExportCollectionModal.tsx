@@ -253,6 +253,7 @@ export function ExportCollectionModal() {
             ref={setScrollEl}
             className="flex-1 min-h-0 overflow-y-auto p-5 space-y-3.5 text-xs pr-3 scroll-smooth"
           >
+          <fieldset disabled={isExporting} className="border-0 p-0 m-0 min-w-0 space-y-3.5 disabled:opacity-60 transition-opacity">
           {/* Card 1: Target Folder */}
           <div className="p-3.5 bg-app-card rounded-lg border border-app-border flex flex-col gap-2">
             <div className="flex items-center justify-between">
@@ -268,15 +269,16 @@ export function ExportCollectionModal() {
               <input
                 type="text"
                 readOnly
+                disabled={isExporting}
                 value={destinationDir}
                 placeholder={t('exportModal.destDirPlaceholder', 'Ordner auf Festplatte oder USB-Stick auswählen...')}
-                className="flex-1 px-3 py-1.5 bg-app-panel border border-app-border rounded-lg text-txt-primary text-xs truncate focus:outline-none focus:border-accent"
+                className="flex-1 px-3 py-1.5 bg-app-panel border border-app-border rounded-lg text-txt-primary text-xs truncate focus:outline-none focus:border-accent disabled:opacity-60 disabled:cursor-not-allowed"
               />
               <button
                 type="button"
                 onClick={handlePickDirectory}
                 disabled={isExporting}
-                className="px-3.5 py-1.5 bg-app-panel hover:bg-app-hover border border-app-border rounded-lg text-txt-primary font-medium text-xs transition-colors cursor-pointer flex-shrink-0"
+                className="px-3.5 py-1.5 bg-app-panel hover:bg-app-hover border border-app-border rounded-lg text-txt-primary font-medium text-xs transition-colors flex-shrink-0 cursor-pointer disabled:cursor-not-allowed disabled:pointer-events-none disabled:opacity-50"
               >
                 {t('exportModal.browse', 'Durchsuchen...')}
               </button>
@@ -285,13 +287,13 @@ export function ExportCollectionModal() {
 
           {/* Card 2: Sequential Mode & Filenames */}
           <div className="p-3.5 bg-app-card rounded-lg border border-app-border flex flex-col gap-3">
-            <label className="flex items-start gap-2.5 cursor-pointer select-none">
+            <label className={`flex items-start gap-2.5 select-none ${isExporting ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
               <input
                 type="checkbox"
                 checked={isSequential}
                 onChange={(e) => setIsSequential(e.target.checked)}
                 disabled={isExporting}
-                className="mt-0.5 rounded accent-accent cursor-pointer"
+                className={`mt-0.5 rounded accent-accent ${isExporting ? 'cursor-not-allowed' : 'cursor-pointer'}`}
               />
               <div className="flex flex-col">
                 <span className="font-semibold text-txt-primary text-xs">
@@ -320,7 +322,7 @@ export function ExportCollectionModal() {
                       onChange={(e) => setFilenamePrefix(e.target.value)}
                       disabled={isExporting}
                       placeholder="z. B. Fotobuch_"
-                      className="w-full px-3 py-1.5 bg-app-panel border border-app-border rounded-lg text-txt-primary focus:outline-none focus:border-accent text-xs font-mono"
+                      className="w-full px-3 py-1.5 bg-app-panel border border-app-border rounded-lg text-txt-primary focus:outline-none focus:border-accent text-xs font-mono disabled:opacity-60 disabled:cursor-not-allowed"
                     />
                   </div>
                   <div className="flex flex-col gap-1">
@@ -337,13 +339,13 @@ export function ExportCollectionModal() {
                 </div>
 
                 {/* Preserve Original Name Checkbox */}
-                <label className="flex items-center gap-2.5 cursor-pointer select-none text-txt-secondary text-[11px]">
+                <label className={`flex items-center gap-2.5 select-none text-txt-secondary text-[11px] ${isExporting ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
                   <input
                     type="checkbox"
                     checked={preserveOriginalName}
                     onChange={(e) => setPreserveOriginalName(e.target.checked)}
                     disabled={isExporting}
-                    className="rounded accent-accent cursor-pointer"
+                    className={`rounded accent-accent ${isExporting ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                   />
                   <span>
                     {t(
@@ -354,14 +356,14 @@ export function ExportCollectionModal() {
                 </label>
 
                 {/* Synthetic EXIF Date Checkbox */}
-                <div className="p-2.5 bg-accent/10 border border-accent/25 rounded-lg flex flex-col gap-1">
-                  <label className="flex items-center gap-2.5 cursor-pointer select-none font-semibold text-txt-primary text-xs">
+                <div className={`p-2.5 bg-accent/10 border border-accent/25 rounded-lg flex flex-col gap-1 ${isExporting ? 'opacity-60' : ''}`}>
+                  <label className={`flex items-center gap-2.5 select-none font-semibold text-txt-primary text-xs ${isExporting ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
                     <input
                       type="checkbox"
                       checked={synthesizeExifDates}
                       onChange={(e) => setSynthesizeExifDates(e.target.checked)}
                       disabled={isExporting}
-                      className="rounded accent-accent cursor-pointer"
+                      className={`rounded accent-accent ${isExporting ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                     />
                     <span>{t('exportModal.synthesizeExif', 'Lineare EXIF-Aufnahmedaten erzeugen (+10s pro Foto)')}</span>
                   </label>
@@ -397,7 +399,7 @@ export function ExportCollectionModal() {
                     onChange={(e) => setFilenamePrefix(e.target.value)}
                     disabled={isExporting}
                     placeholder={t('exportModal.prefixPlaceholder', 'leer lassen für unveränderte Dateinamen')}
-                    className="px-3 py-1.5 bg-app-panel border border-app-border rounded-lg text-txt-primary focus:outline-none focus:border-accent text-xs font-mono"
+                    className="px-3 py-1.5 bg-app-panel border border-app-border rounded-lg text-txt-primary focus:outline-none focus:border-accent text-xs font-mono disabled:opacity-60 disabled:cursor-not-allowed"
                   />
                 </div>
 
@@ -436,7 +438,7 @@ export function ExportCollectionModal() {
                 value={sizePreset}
                 onChange={(e) => setSizePreset(e.target.value as any)}
                 disabled={isExporting}
-                className="px-3 py-2 bg-app-panel border border-app-border rounded-lg text-txt-primary focus:outline-none focus:border-accent text-xs cursor-pointer"
+                className={`px-3 py-2 bg-app-panel border border-app-border rounded-lg text-txt-primary focus:outline-none focus:border-accent text-xs disabled:opacity-60 disabled:cursor-not-allowed ${isExporting ? 'cursor-not-allowed' : 'cursor-pointer'}`}
               >
                 <option value="original">{t('exportModal.presetOriginal', 'Volle Auflösung / Original (Verlustfreie Kopie, ideal für Druck/Fotobuch)')}</option>
                 <option value="4k">{t('exportModal.preset4k', '4K Ultra HD (3840px lange Kante – TV-Shows & 4K-Displays)')}</option>
@@ -455,18 +457,20 @@ export function ExportCollectionModal() {
                       <label className="text-[10px] text-txt-secondary font-semibold">Max. Breite (px)</label>
                       <input
                         type="number"
+                        disabled={isExporting}
                         value={customWidth}
                         onChange={(e) => setCustomWidth(Math.max(100, parseInt(e.target.value) || 100))}
-                        className="w-full px-2.5 py-1.5 bg-app-panel border border-app-border rounded-lg text-txt-primary text-xs focus:outline-none focus:border-accent"
+                        className="w-full px-2.5 py-1.5 bg-app-panel border border-app-border rounded-lg text-txt-primary text-xs focus:outline-none focus:border-accent disabled:opacity-60 disabled:cursor-not-allowed"
                       />
                     </div>
                     <div className="flex flex-col gap-1">
                       <label className="text-[10px] text-txt-secondary font-semibold">Max. Höhe (px)</label>
                       <input
                         type="number"
+                        disabled={isExporting}
                         value={customHeight}
                         onChange={(e) => setCustomHeight(Math.max(100, parseInt(e.target.value) || 100))}
-                        className="w-full px-2.5 py-1.5 bg-app-panel border border-app-border rounded-lg text-txt-primary text-xs focus:outline-none focus:border-accent"
+                        className="w-full px-2.5 py-1.5 bg-app-panel border border-app-border rounded-lg text-txt-primary text-xs focus:outline-none focus:border-accent disabled:opacity-60 disabled:cursor-not-allowed"
                       />
                     </div>
                   </div>
@@ -480,14 +484,16 @@ export function ExportCollectionModal() {
                     type="range"
                     min="60"
                     max="100"
+                    disabled={isExporting}
                     value={jpegQuality}
                     onChange={(e) => setJpegQuality(parseInt(e.target.value))}
-                    className="accent-accent cursor-pointer w-full"
+                    className={`accent-accent w-full disabled:opacity-50 disabled:cursor-not-allowed ${isExporting ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                   />
                 </div>
               </div>
             )}
           </div>
+          </fieldset>
 
           {/* Progress Indicator (when exporting) */}
           {isExporting && (
@@ -514,8 +520,8 @@ export function ExportCollectionModal() {
           )}
         </div>
 
-          {/* Floating Scroll Indicator Overlay (like in ImportSourceStep) */}
-          {canScrollDown && (
+          {/* Floating Scroll Indicator Overlay (hidden when exporting) */}
+          {canScrollDown && !isExporting && (
             <>
               <div className="absolute bottom-0 left-0 right-0 h-14 bg-gradient-to-t from-[#151518] via-[#151518]/85 to-transparent pointer-events-none z-10" />
               <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 animate-in fade-in zoom-in-90 duration-150">

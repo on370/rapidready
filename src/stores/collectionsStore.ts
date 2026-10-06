@@ -9,6 +9,7 @@ export interface Album {
   id: string;
   name: string;
   icon?: string;
+  libraryRoot?: string;
   images: string[];
 }
 
@@ -17,6 +18,7 @@ export interface AlbumGroup {
   id: string;
   name: string;
   icon?: string;
+  libraryRoot?: string;
   children: AlbumItem[];
 }
 
@@ -62,12 +64,13 @@ interface CollectionsStore {
   loadCollections: () => Promise<void>;
   selectCollection: (id: string | null, name?: string | null) => void;
   toggleGroup: (id: string) => void;
-  createCollection: (name: string, parentId?: string | null, isGroup?: boolean, icon?: string) => Promise<AlbumItem | null>;
+  createCollection: (name: string, parentId?: string | null, isGroup?: boolean, icon?: string, libraryRoot?: string | null) => Promise<AlbumItem | null>;
   renameCollection: (id: string, newName: string) => Promise<void>;
   deleteCollection: (id: string) => Promise<void>;
   addToCollection: (albumId: string, paths: string[]) => Promise<void>;
   removeFromCollection: (albumId: string, paths: string[]) => Promise<void>;
   pruneDeletedPaths: (deletedPaths: string[]) => void;
+  pruneCollectionsByLibrary: (libraryRoot: string) => Promise<void>;
   reorderImages: (albumId: string, newOrder: string[]) => Promise<void>;
   sortCollectionByExif: (albumId: string) => Promise<void>;
 
@@ -120,13 +123,14 @@ export const useCollectionsStore = create<CollectionsStore>((set, get) => ({
     });
   },
 
-  createCollection: async (name: string, parentId: string | null = null, isGroup = false, icon?: string) => {
+  createCollection: async (name: string, parentId: string | null = null, isGroup = false, icon?: string, libraryRoot?: string | null) => {
     try {
       const updatedTree = await invoke<AlbumItem[]>('create_collection_item', {
         parentId,
         name,
         isGroup,
         icon: icon || null,
+        libraryRoot: libraryRoot || null,
       });
       set({ collectionsTree: updatedTree });
       const findByName = (items: AlbumItem[]): AlbumItem | null => {
@@ -222,6 +226,18 @@ export const useCollectionsStore = create<CollectionsStore>((set, get) => ({
       });
     };
     set((state) => ({ collectionsTree: pruneNode(state.collectionsTree) }));
+  },
+
+  pruneCollectionsByLibrary: async (libraryRoot: string) => {
+    try {
+      const updatedTree = await invoke<AlbumItem[]>('prune_collections_by_library', {
+        libraryRoot,
+      });
+      set({ collectionsTree: updatedTree });
+    } catch (err) {
+      console.error('Failed to prune collections by library:', err);
+      throw err;
+    }
   },
 
   reorderImages: async (albumId: string, newOrder: string[]) => {
@@ -343,3 +359,127 @@ export function findAlbumsContainingPaths(
   search(tree);
   return result;
 }
+
+// Determines if an album or group belongs to the specified library root
+export function isAlbumInLibrary(item: AlbumItem, rootPath: string | null): boolean {
+  if (!rootPath) return true;
+  const normRoot = normalizePath(rootPath);
+  const prefix = normRoot.endsWith('/') ? normRoot : normRoot + '/';
+
+  if (item.type === 'album') {
+    // 1. Explicit libraryRoot assignment
+    if (item.libraryRoot) {
+      return normalizePath(item.libraryRoot) === normRoot;
+    }
+    // 2. Dynamic check from image paths
+    if (item.images && item.images.length > 0) {
+      return item.images.some((img) => {
+        const norm = normalizePath(img);
+        return norm.startsWith(prefix) || norm === normRoot;
+      });
+    }
+    // 3. Empty album without libraryRoot (unassigned from RapidRAW): show so user can populate
+    return true;
+  }
+
+  if (item.type === 'group') {
+    if (item.libraryRoot && normalizePath(item.libraryRoot) === normRoot) {
+      return true;
+    }
+    if (item.children && item.children.length > 0) {
+      return item.children.some((child) => isAlbumInLibrary(child, rootPath));
+    }
+    // Empty group without libraryRoot
+    return !item.libraryRoot;
+  }
+
+  return true;
+}
+
+// Filters the collections tree to only items belonging to the current library
+export function filterCollectionsForLibrary(items: AlbumItem[], rootPath: string | null): AlbumItem[] {
+  if (!rootPath) return items;
+  const normRoot = normalizePath(rootPath);
+
+  const result: AlbumItem[] = [];
+
+  for (const item of items) {
+    if (item.type === 'album') {
+      if (isAlbumInLibrary(item, rootPath)) {
+        result.push(item);
+      }
+    } else if (item.type === 'group') {
+      const filteredChildren = filterCollectionsForLibrary(item.children || [], rootPath);
+      const isGroupRootMatch = item.libraryRoot && normalizePath(item.libraryRoot) === normRoot;
+      const isUnassignedEmpty = !item.libraryRoot && (!item.children || item.children.length === 0);
+
+      if (filteredChildren.length > 0 || isGroupRootMatch || isUnassignedEmpty) {
+        result.push({
+          ...item,
+          children: filteredChildren,
+        });
+      }
+    }
+  }
+
+  return result;
+}
+
+// Counts images in an AlbumItem that belong to the specified library
+export function getAlbumImageCountForLibrary(item: AlbumItem, rootPath: string | null): number {
+  if (!rootPath) return getAlbumImageCount(item);
+  const normRoot = normalizePath(rootPath);
+  const prefix = normRoot.endsWith('/') ? normRoot : normRoot + '/';
+
+  if (item.type === 'album') {
+    if (!item.images || item.images.length === 0) return 0;
+    let count = 0;
+    for (const img of item.images) {
+      const norm = normalizePath(img);
+      if (norm.startsWith(prefix) || norm === normRoot) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  if (item.type === 'group' && item.children) {
+    return item.children.reduce((acc, child) => acc + getAlbumImageCountForLibrary(child, rootPath), 0);
+  }
+
+  return 0;
+}
+
+// Counts collections (albums and groups) in the tree belonging to the specified library path
+export function countCollectionsInLibrary(items: AlbumItem[], libraryPath: string): number {
+  const normLib = normalizePath(libraryPath);
+  const prefix = normLib.endsWith('/') ? normLib : normLib + '/';
+  let count = 0;
+
+  function walk(nodes: AlbumItem[]) {
+    for (const node of nodes) {
+      if (node.type === 'album') {
+        const matchesRoot = node.libraryRoot && normalizePath(node.libraryRoot) === normLib;
+        const matchesImages = node.images && node.images.length > 0 && node.images.some((img) => {
+          const norm = normalizePath(img);
+          return norm.startsWith(prefix) || norm === normLib;
+        });
+        if (matchesRoot || matchesImages) {
+          count++;
+        }
+      } else if (node.type === 'group') {
+        const matchesRoot = node.libraryRoot && normalizePath(node.libraryRoot) === normLib;
+        if (matchesRoot) {
+          count++;
+        }
+        if (node.children) {
+          walk(node.children);
+        }
+      }
+    }
+  }
+
+  walk(items);
+  return count;
+}
+

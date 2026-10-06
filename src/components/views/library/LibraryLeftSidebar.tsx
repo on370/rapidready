@@ -13,7 +13,8 @@ import { LastImportContextMenu } from "./components/LastImportContextMenu";
 import { NewFolderModal } from "./components/NewFolderModal";
 import { RenameFolderModal } from "./components/RenameFolderModal";
 import { CollectionsTree, CollectionsTreeRef } from "./components/CollectionsTree";
-import { useCollectionsStore, findAlbumById } from "../../../stores/collectionsStore";
+import { TempLocationCollectionsModal } from "./components/TempLocationCollectionsModal";
+import { useCollectionsStore, findAlbumById, countCollectionsInLibrary } from "../../../stores/collectionsStore";
 
 // Folder Tree node definition (folders only, no leaf file clutter)
 export type TreeNode = {
@@ -354,6 +355,7 @@ export function LibraryLeftSidebar() {
   const collectionsTree = useCollectionsStore((s) => s.collectionsTree);
   const addToCollection = useCollectionsStore((s) => s.addToCollection);
   const createCollection = useCollectionsStore((s) => s.createCollection);
+  const pruneCollectionsByLibrary = useCollectionsStore((s) => s.pruneCollectionsByLibrary);
 
   const normRoot = rootPath ? normalizePath(rootPath) : null;
   const isSubfolderSelected = useMemo(() => {
@@ -404,6 +406,48 @@ export function LibraryLeftSidebar() {
     await loadArchive(path, false);
   };
 
+  const [tempLocationDialog, setTempLocationDialog] = useState<{
+    isOpen: boolean;
+    tempPath: string;
+    targetPath: string;
+    folderName: string;
+    collectionsCount: number;
+  } | null>(null);
+
+  const handleSaveTempAsLocation = () => {
+    if (!tempLocationDialog) return;
+    const { tempPath, targetPath, folderName } = tempLocationDialog;
+    addLocation({
+      id: Date.now().toString(),
+      name: folderName,
+      path: tempPath,
+    });
+    useToastStore.getState().showSuccess(
+      t('collections.savedAsLocationSuccess', {
+        name: folderName,
+        defaultValue: `„${folderName}“ als Bibliothek gespeichert.`,
+      })
+    );
+    setTempLocationDialog(null);
+    loadFolder(targetPath);
+  };
+
+  const handleDiscardTempCollections = async () => {
+    if (!tempLocationDialog) return;
+    const { tempPath, targetPath } = tempLocationDialog;
+    try {
+      await pruneCollectionsByLibrary(tempPath);
+    } catch (err) {
+      console.error('Failed to discard temp collections:', err);
+    }
+    setTempLocationDialog(null);
+    loadFolder(targetPath);
+  };
+
+  const handleCancelTempDialog = () => {
+    setTempLocationDialog(null);
+  };
+
   const handleFolderChange = async (newPath: string) => {
     if (rootPath && normalizePath(newPath) === normalizePath(rootPath)) {
       return;
@@ -443,6 +487,25 @@ export function LibraryLeftSidebar() {
 
       // User confirmed: cancel active scan
       cancelScan();
+    }
+
+    // Guard against leaving temporary locations with curated collections
+    const isCurrentTemp = Boolean(
+      rootPath && !locations.some((loc) => normalizePath(loc.path) === normalizePath(rootPath))
+    );
+    const tempCollectionsCount =
+      rootPath && isCurrentTemp ? countCollectionsInLibrary(collectionsTree, rootPath) : 0;
+
+    if (rootPath && isCurrentTemp && tempCollectionsCount > 0) {
+      const currentFolderName = normalizeSlash(rootPath).split('/').pop() || rootPath;
+      setTempLocationDialog({
+        isOpen: true,
+        tempPath: rootPath,
+        targetPath: newPath,
+        folderName: currentFolderName,
+        collectionsCount: tempCollectionsCount,
+      });
+      return;
     }
 
     loadFolder(newPath);
@@ -1431,6 +1494,18 @@ export function LibraryLeftSidebar() {
           onClose={() => setLastImportMenu(null)}
           onAddToCollection={handleAddToCollectionFromLastImport}
           onCreateCollectionAndAdd={handleCreateCollectionAndAddFromLastImport}
+        />
+      )}
+
+      {/* Temporary Location Collections Protection Modal */}
+      {tempLocationDialog && (
+        <TempLocationCollectionsModal
+          isOpen={tempLocationDialog.isOpen}
+          folderName={tempLocationDialog.folderName}
+          collectionsCount={tempLocationDialog.collectionsCount}
+          onSaveAsLocation={handleSaveTempAsLocation}
+          onDiscardCollections={handleDiscardTempCollections}
+          onCancel={handleCancelTempDialog}
         />
       )}
     </div>
