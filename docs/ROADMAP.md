@@ -16,6 +16,55 @@
 
 ## 🚀 Released Milestones
 
+### Released in `v0.4.5` (Build `0106`)
+- [x] **Speculative RAM Viewport Caching & Live Visual Buffer Badges (`v0.4.5` / Build `0106`):**
+  - Proactive background preloading of neighboring thumbnails in Grid (+3 rows ahead / -1 row behind) and Loupe views (+1 to +5 flip direction) directly in the Rust threadpool (`spawn_blocking`).
+  - Prewarms both Scale 2 (720px preview) and Full-Res Previews (scale 100) concurrently.
+  - Floating dark-glassmorphism count badges (`▲ top / ▼ bottom` in Grid view; `◀ left / ▶ right` in Loupe view) displaying the number of in-memory cached frames.
+  - Atomic cancellation tokens (`WARMUP_TOKEN`) instantly abort running preloads on user scroll or navigation to preserve 100% UI responsiveness.
+- [x] **High-Speed Archive Scan Throttling & Ingest Event-Loop Protection (`v0.4.5` / Build `0106`):**
+  - Batched chunk ingestion during active scans: buffers high-frequency chunk events from Rust and throttles store updates (max once every 200ms or 500 images) to eliminate event-loop starvation and UI freezing on fast NVMe SSDs and APFS volumes.
+  - Decoupled floating scan banner counter (`files_found` / live throughput) counting continuously and smoothly without stuttering.
+  - Enforced strict state guards ensuring speculative cache preloading never runs during active archive scanning (`scanning` / `connecting`).
+  - Restored 100% deterministic alphabetical path sorting in `LibraryCenter.tsx`.
+- [x] **Comprehensive Technical EXIF & Camera Metadata Hub (`v0.4.5` / Build `0106`):**
+  - Formatted exposure parameters: clean shutter speed (`1/250s`, `2.5s`) and aperture (`f/2.8`) with decimal rounding limits.
+  - Exposure Program (Manual, Aperture Priority, Shutter Priority, Program, Scene modes).
+  - Metering Mode (Matrix/Evaluative, Center-Weighted, Spot, Partial).
+  - Flash State (fired vs. did not fire, fill flash, red-eye reduction).
+  - White Balance mode (Auto vs. Manual/Preset) & Color Temperature in Kelvin.
+  - 35mm Equivalent Focal Length (`FocalLengthIn35mmFilm`) and Subject / Focus Distance in meters.
+  - Color Space (sRGB, Adobe RGB, Display P3, Uncalibrated) and Exposure Bias / Compensation (`+0.7 EV`).
+  - Unified camera make, model, and lens model specification in `LibraryInspector.tsx`.
+- [x] **Library-Scoped Virtual Collections (Weg B) & Lifecycle Protection Dialog (`v0.4.5` / Build `0106`):**
+  - Collections are now scoped to the active library root (`libraryRoot`), ensuring sidebar album lists strictly match the active library and eliminating empty collection views when switching between locations.
+  - Seamless 100% RapidRAW interoperability: maintains central AppData `albums.json` storage and atomic Last-Write-Wins synchronization.
+  - `TempLocationCollectionsModal`: Protection dialog when navigating away from temporary locations that contain curated collections (*"Save as permanent library location"* vs. *"Discard temporary collections"* vs. *"Cancel"*).
+- [x] **Collection Export Engine Hardening: HDR Gain Map Compatibility (`v0.4.5` / Build `0106`):**
+  - Resolved export issues with photos containing embedded HDR gain maps (Apple, Adobe, and Ultra HDR / ISO 21496-1 gain map metadata) in JPEG and RAW companion exports.
+  - Refined layout and control alignment in `ExportCollectionModal.tsx`.
+- [x] **GUI Ergonomics & Splitter Handles (`v0.4.5` / Build `0106`):**
+  - Wider grip hit-targets on panel dividers (splitters) and scroll handles, preventing cursor slipping and avoiding scrollbar overlapping.
+
+### Released in `v0.4.0` (Build `00F0`)
+- [x] **Hardware-Accelerated Focus Peaking & Sharpness Inspection (`v0.4.0` / Build `00F0`):**
+  - Dual-view Focus Peaking toggle (`F` key) available in 1:1 Loupe Viewer and Inspector preview panel.
+  - darktable-inspired Difference-of-Gradients bandpass filter in WebGL shader (spatial scales $\Delta = 1\text{px}$ and $\Delta = 2\text{px}$ with $3\times3$ noise-floor threshold).
+  - 4 peaking colors (Neon Green, Vivid Red, Electric Cyan, Bright Yellow) and 3 calibrated sensitivity presets (High, Normal, Low).
+- [x] **Virtual Collections (Albums) & Custom Sequencing (`v0.4.0` / Build `00F0`):**
+  - Hierarchical album tree view in the sidebar without duplicating physical media on disk.
+  - Custom drag-and-drop sequencing in Collection view.
+  - Direct collection assignment during Import Step 2.
+- [x] **Sequential Collection Export with EXIF Injection (`v0.4.0` / Build `00F0`):**
+  - Export collection photos with sequential numbering (`001_Project.jpg`, `002_Project.jpg`) and automatic EXIF capture date / orientation injection.
+- [x] **Interactive Onboarding Tour & Revamped Help System (`v0.4.0` / Build `00F0`):**
+  - Guided interactive tour (`TourWelcomePrompt.tsx`, `TourOverlay.tsx`) introducing key workflows and shortcuts.
+  - Overhauled in-app help modal and shortcut reference.
+- [x] **Automatic Filesystem Reconciliation (`v0.4.0` / Build `00F0`):**
+  - Real-time detection and synchronization of folder/metadata changes performed by external tools (e.g. RapidRAW).
+- [x] **"Entire Archive" Flat Overview (`v0.4.0` / Build `00F0`):**
+  - One-click toggle in the folder sidebar displaying all photos across all archive folders in a unified flat grid.
+
 ### Released in `v0.3.8-beta-RC2` (Build `00DC`)
 - [x] **Import Step 1 – Native Source Scan Cancellation & Clean Reset (`v0.3.8-beta-RC2` / Build `00DC`):**
   - Added dedicated `[ ✕ Abbrechen ]` button in the active source card header next to media badges (`SD-Karte` / `Ordner`).
@@ -123,13 +172,13 @@
 ## 📌 Active Backlog & Future Milestones
 
 ### Milestone: Professional Culling Precision & Smart Ingest Ergonomics
-- [ ] **Focus Peaking & Sharpness Inspection (Grid & Loupe View):**
+- [x] **Focus Peaking & Sharpness Inspection (Grid & Loupe View) (`v0.4.0` / Build `00F0`):**
   - **Context & Goal:** Fast culling requires instantly evaluating whether focus hit the subject's eyes or focal point without continuously zooming in to 100%.
   - **Color Overlay & Zebra Patterns:** Highlight in-focus high-frequency contrast edges with configurable signal colors (e.g. Red, Blue, Green) or zebra hatching.
   - **Dual-View Availability:** Real-time edge detection overlay in Loupe view (Fit & 1:1) and optional sharpness indicators / badges in Grid view thumbnails.
   - **High-Performance Implementation:** Hardware-accelerated WebGL / Canvas shader (< 2 ms overhead) or native Rust edge filter with adjustable threshold levels (Fine / Normal / Coarse).
 
-- [ ] **Import Step 2 – Format Filter Quick Selection (Batch Toggle RAWs / JPGs):**
+- [x] **Import Step 2 – Format Filter Quick Selection (Batch Toggle RAWs / JPGs) (`v0.3.8-beta-RC2` / Build `00DA`):**
   - **Context & Goal:** When shooting dual-slot or single-slot RAW + JPG, photographers frequently want to ingest only one format (e.g. only RAWs to save disk space and offload time, or only JPGs for fast client delivery).
   - **Batch Format Toggles:** Dedicated 1-click action buttons / format pills in the Step 2 source preview toolbar (`[ Select only RAWs ]`, `[ Deselect all JPGs ]`, `[ Videos ]`).
   - **Dynamic Volume Feedback:** Instantly recalculates transfer file count, total bytes, and destination disk headroom without requiring manual folder-by-folder unchecking.
@@ -176,7 +225,7 @@
 ---
 
 ### Milestone: Virtual Collections & Native RapidRAW Album Synchronization
-- [ ] **Non-Destructive Virtual Collections & Automated RapidRAW Album Bridge:**
+- [x] **Non-Destructive Virtual Collections & Automated RapidRAW Album Bridge (`v0.4.0` / Build `00F0` & `v0.4.5` / Build `0106`):**
   - **Context & Goal:**  
     Photographers frequently organize projects, curated selections, or cross-shoot compilations (*"Best of 2026"*, *"Portfolio"*, *"Client Delivery"*) into virtual collections without copying, moving, or duplicating files on disk. As RapidReady serves as the dedicated high-speed companion for RapidRAW, collections in RapidReady must be 100% interoperable with RapidRAW albums without requiring manual import/export steps or fragile duplicate databases.
   - **Data Model Parity with RapidRAW (`AlbumItem` Schema):**
@@ -235,7 +284,7 @@
     - Context menu actions on thumbnails: *"Add to Collection..."* with nested group menus.
     - Non-destructive image removal: *"Remove from Collection"* removes the path pointer from the album without touching files on disk.
 
-- [ ] **Sequential Photobook & Web Export with Custom Sizing & Linear EXIF Timestamp Synthesis:**
+- [x] **Sequential Photobook & Web Export with Custom Sizing & Linear EXIF Timestamp Synthesis (`v0.4.0` / Build `00F0` & `v0.4.5` / Build `0106`):**
   - **Context & Goal:**
     Casual users and event photographers frequently experience broken sorting when uploading photos from multiple unsynchronized smartphones/cameras to photobook printers (CEWE, Saal Digital, Blurb), WordPress galleries, or USB drives for TV slideshows. Because cloud exports (Google/Apple Photos) dump files with arbitrary filenames or unsynced timestamps, external systems that sort alphabetically or chronologically destroy the curated narrative order. RapidReady solves this by exporting collections as clean, sequentially numbered files with optional image resizing and linear EXIF timestamp synthesis.
   - **Export Workflow & Configuration Dialog:**
@@ -287,7 +336,7 @@
          - Conversely, scanning a parent location discovers and reuses already-indexed sub-locations without re-extracting thumbnails or re-reading EXIF data.
          - Avoid separate redundant DB instances per registered location; maintain a unified, path-indexed cache store per local workstation.
 
-- [ ] **Speculative RAM Viewport Caching:**
+- [x] **Speculative RAM Viewport Caching (`v0.4.5` / Build `0106`):**
   - Prefetching neighboring thumbnails in RAM (`visible_index ± 20`) during idle pauses (> 150 ms).
   - Strict priority queuing and cancellation to prevent saturating the browser 6-socket connection limit.
 
@@ -510,7 +559,7 @@
 ---
 
 ### Milestone: Onboarding & Guided First-Time User Experience (FTUX)
-- [ ] **Interactive Guided Onboarding Tour with Dynamic Spotlight Callouts ("Wandernde Erklär-Blasen"):**
+- [x] **Interactive Guided Onboarding Tour with Dynamic Spotlight Callouts ("Wandernde Erklär-Blasen") (`v0.4.0` / Build `00F0`):**
   - **Context & Goal:**
     First-time users, photographers migrating from legacy photo managers, or users unfamiliar with modern multi-panel layouts (such as the compact left icon sidebar or non-destructive culling sidecars) benefit from an interactive, lightweight guided tour that introduces the core GUI touchpoints in under 60 seconds without overwhelming them.
   - **Best-Practice Lifecycle & Triggering Architecture:**
@@ -604,7 +653,7 @@
 ---
 
 ### Milestone: Comprehensive EXIF & Technical Metadata Hub (Advanced Backlog)
-- [ ] **Extended Technical EXIF & Media Metadata Inspection:**
+- [x] **Extended Technical EXIF & Media Metadata Inspection (`v0.4.5` / Build `0106`):**
   - **Context & Goal:**
     Professional photographers, retouchers, and photo archivists rely on in-depth camera and capture metadata beyond core exposure parameters to verify shooting configurations, gear performance, color pipeline consistency, and attribution.
   - **Backlog Scope & Catalog of Metadata Fields:**

@@ -5,6 +5,52 @@ All notable changes to RapidReady will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.5] - 2026-10-07
+
+Performance and stability release introducing speculative RAM viewport caching with live visual buffer bubbles, library-scoped virtual collections with RapidRAW parity and temporary location protection, comprehensive technical EXIF inspection in the Inspector, high-speed SSD scan throttling to eliminate event-loop starvation, and export compatibility for images with embedded HDR gain maps.
+
+### Added
+- **Speculative RAM Viewport Caching & Live Visual Buffer Indicators (`thumbnail.rs`, `LibraryGrid.tsx`, `LoupeViewer.tsx`):**
+  - **Proactive Loupe Preloading:** Lookahead preloading of +1 to +5 images in the flip direction (and 1 image backwards buffer) directly in the Rust background thread (`spawn_blocking`). Prewarms Scale 2 (720px preview) and Full-Res Preview (scale 100) concurrently.
+  - **Proactive Grid Preloading:** Lookahead preloading of +3 rows in scroll direction (and 1 row behind) during 150ms idle pauses.
+  - **Live Buffer Count Badges:** Floating dark-glassmorphism count badges indicating cached thumbnails in RAM (`▲ top / ▼ bottom` in Grid view; `◀ left / ▶ right` in Loupe view).
+  - **Zero-Latency Navigation Invalidation:** Atomic cancellation tokens (`WARMUP_TOKEN`) in Rust and frontend listeners immediately abort pending preloads when the user flips or scrolls, preserving 100% UI responsiveness.
+- **Comprehensive Technical EXIF & Camera Metadata Hub (`metadata_resolver.rs`, `formatMetadata.ts`, `LibraryInspector.tsx`):**
+  - Extended camera and exposure details card in the Inspector panel:
+    - Clean shutter speed (e.g. `1/250s`, `2.5s`) and aperture (`f/2.8`) formatting with decimal rounding limits.
+    - **Exposure Program:** Manual (M), Aperture Priority (Av/A), Shutter Priority (Tv/S), Program (P), Creative and Scene modes.
+    - **Metering Mode:** Multi-segment / Evaluative Matrix, Center-Weighted Average, Spot, Partial.
+    - **Flash State:** Fired vs. Did not fire, with fill flash and red-eye reduction detection.
+    - **White Balance & Color Temperature:** Auto vs. Manual/Preset with Kelvin color temperature.
+    - **35mm Equivalent Focal Length:** Sensor crop-factor conversion (`FocalLengthIn35mmFilm`).
+    - **Subject / Focus Distance:** Distance to focal plane in meters.
+    - **Color Space:** sRGB, Adobe RGB, Display P3, Uncalibrated.
+    - **Exposure Compensation:** EV bias indicator (e.g. `+0.7 EV`).
+    - **Camera & Lens Identity:** Unified camera make/model and optical lens specification display.
+- **Library-Scoped Virtual Collections (Weg B) & Lifecycle Protection Dialog (`collections.rs`, `collectionsStore.ts`, `TempLocationCollectionsModal.tsx`):**
+  - **Library-Scoped Sidebar Filtering:** Collections are now scoped to the active library root (`libraryRoot`), ensuring sidebar album lists strictly match the active library and eliminating empty collection views when switching between locations.
+  - **RapidRAW Central Storage Interoperability:** Maintains full compatibility with RapidRAW's central `albums.json` via atomic Last-Write-Wins (LWW) synchronization.
+  - **Temporary Location Protection Dialog:** Prompts users when navigating away from temporary locations containing curated collections, offering to save the folder as a permanent library location, discard temporary collections, or cancel the switch.
+
+### Changed & Improved
+- **High-Speed Archive Scan Throttling & Event-Loop Protection (`App.tsx`):**
+  - Batched chunk ingestion during active directory scans: buffers incoming 100-file chunks and throttles store updates (max once every 200ms or 500 images) to eliminate JavaScript main-thread starvation and UI freezing on fast NVMe SSDs and APFS volumes.
+  - Decoupled progress updates: the floating scan banner counter (`files_found` / transfer rate) updates continuously and smoothly while the grid updates in controlled batches.
+  - Automatic flushing of remaining buffered images when scanning completes.
+  - Restored 100% deterministic alphabetical path sorting in `LibraryCenter.tsx`.
+- **UI Ergonomics & Splitter Handles (`App.css`, `LibraryView.tsx`):**
+  - Expanded invisible hit-target grab zones for panel splitters and scroll handles, preventing cursor slipping and eliminating layout conflicts between scrollbars and resizers.
+- **Collection Export GUI Polish (`ExportCollectionModal.tsx`):**
+  - Refined layout and control alignment in the collection export dialog.
+
+### Fixed
+- **Collection Export HDR Gain Map Compatibility (`collection_export.rs`, `thumbnail.rs`):**
+  - Resolved an export failure and image corruption issue for photos containing embedded HDR gain maps (Apple, Adobe, and Ultra HDR / ISO 21496-1 gain map metadata) in JPEG and RAW companion files.
+- **Startup Modal Hierarchy & Z-Index Collision (`AboutModal.tsx`, `TourWelcomePrompt.tsx`):**
+  - Prevented the About modal from blocking user interaction during startup, elevated modal z-index (`z-[9990]`), and guarded onboarding prompts against modal occlusion.
+- **Scan Ingestion Cache Interference (`LibraryGrid.tsx`, `LoupeViewer.tsx`):**
+  - Enforced strict state guards ensuring speculative thumbnail warmup is completely suspended while an archive scan is active (`scanning` or `connecting`).
+
 ## [0.4.0] - 2026-09-27
 
 Major milestone release dropping the beta suffix! Introduces hardware-accelerated dual-view Focus Peaking powered by darktable's Difference-of-Gradients bandpass filter, Virtual Collections (Albums) with custom drag-and-drop sequencing and EXIF-injected export, automatic filesystem reconciliation for external editors (e.g., RapidRAW), instant background scan cancellation in the Rust core, format quick-selection pills in import preview, an interactive onboarding tour with an overhauled help system, and enhanced UI ergonomics.

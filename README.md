@@ -16,8 +16,12 @@ Even if you aren't heading into full RAW development right away, RapidReady is a
 ## 🚀 Key Features (Current & Planned)
 
 - **Blazing Fast RAW Engine:** Powered by a custom Rust backend, RapidReady extracts embedded JPEGs from CR2, CR3, ARW, and other proprietary RAW formats instantly without slow decodes.
+- **Speculative RAM Viewport Caching:** Proactive background preloading of neighboring thumbnails in Grid (+3 rows) and Loupe views (+5 images ahead) with floating visual buffer indicators (`▲/▼` and `◀/▶`) for instant, stutter-free navigation.
+- **Hardware-Accelerated Focus Peaking:** Dual-view sharpness inspection (`F` key) in Loupe and Inspector preview powered by a darktable-inspired Difference-of-Gradients bandpass filter to verify focus on fine textures and eyes instantly.
 - **Zero-Latency Culling & Viewing:** Navigate through massive folders of high-resolution RAW files in real-time. Responsive filmstrip, split folder navigation, and instant sidecar synchronization.
 - **Advanced Culling & Organization:** One-touch flags (`Pick`, `Reject`, `Unflag`), star ratings (`1`-`5`), 5 color labels (`6`-`9`), and tag management with live autocomplete.
+- **Virtual Collections (Albums) & Sequencing:** Hierarchical virtual albums without file duplication, custom drag-and-drop narrative sequencing, seamless RapidRAW album synchronization, and sequential photobook/web export with EXIF preservation.
+- **Comprehensive Technical EXIF Inspection:** Detailed exposure parameters (formatted shutter speed, aperture, ISO, exposure program, metering mode, flash state, white balance, 35mm equivalent focal length, subject distance, and color space).
 - **Folder Tree Management & Safety:** Native right-click context menu (reveal in Finder/Explorer, expand/collapse subtrees, select all, purge rejected photos, create subfolder, rename, delete) with automatic network share (NAS) permanent deletion warnings.
 - **GPS Geotagging & Location Inspection:** Fault-tolerant coordinate and map link parser (Google Maps, Apple Maps, OpenStreetMap, Geo URIs, photographic DMS, DMM, and European comma notation), live validation preview, non-destructive `.rrdata` sidecar overrides, batch assignment across multiple photos, altitude display, and 1-click external map navigation.
 - **Multi-Level Orthogonal Filtering:** Modular filter dropdowns to slice archives by picks, minimum rating, color labels, and tags in real-time.
