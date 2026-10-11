@@ -676,6 +676,32 @@ pub async fn get_cached_archive_count(
 }
 
 #[tauri::command]
+pub async fn get_disk_cache_stats() -> Result<rapidready_core::chunk_cache::CacheStats, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        if let Some(cache) = rapidready_core::chunk_cache::get_global_chunk_cache() {
+            cache.get_stats().map_err(|e| e.to_string())
+        } else {
+            Ok(rapidready_core::chunk_cache::CacheStats::default())
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn clear_disk_cache() -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        if let Some(cache) = rapidready_core::chunk_cache::get_global_chunk_cache() {
+            cache.clear_cache().map_err(|e| e.to_string())
+        } else {
+            Ok(())
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 pub async fn reconcile_archive_delta(
     app: AppHandle,
     path: String,

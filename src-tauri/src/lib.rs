@@ -33,9 +33,12 @@ pub fn run() {
 
             use tauri::Manager;
             let app_dir = app.path().app_data_dir()?;
-            let catalog = rapidready_core::archive_catalog::ArchiveCatalog::new(&app_dir)?;
+            let cache_dir = app.path().app_cache_dir()?.join("disk_cache_v1");
+            let catalog = std::sync::Arc::new(rapidready_core::archive_catalog::ArchiveCatalog::new(&app_dir)?);
+            rapidready_core::archive_catalog::init_global_catalog(catalog.clone());
+            let _ = rapidready_core::chunk_cache::init_global_chunk_cache(&cache_dir, &app_dir.join("archive_catalog.db"));
             app.manage(commands::ArchiveCatalogState {
-                catalog: std::sync::Arc::new(catalog),
+                catalog,
             });
 
             if let Some(window) = app.get_webview_window("main") {
@@ -86,7 +89,19 @@ pub fn run() {
                         None
                     }
                 });
-            
+
+            let size_param = query
+                .split('&')
+                .find(|p| p.starts_with("size="))
+                .and_then(|p| p.strip_prefix("size="))
+                .and_then(|v| v.parse::<u64>().ok());
+
+            let mtime_param = query
+                .split('&')
+                .find(|p| p.starts_with("mtime="))
+                .and_then(|p| p.strip_prefix("mtime="))
+                .and_then(|v| v.parse::<i64>().ok());
+
             let path_str = uri_path;
             
             // Clean up path
@@ -138,7 +153,7 @@ pub fn run() {
                 let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
                 
                 if ["cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2", "pef", "3fr", "x3f", "nrw", "heic", "heif", "hif", "mp4", "mov", "m4v", "avi"].contains(&ext.as_str()) {
-                    match rapidready_core::thumbnail::get_max_preview_jpeg_with_orient(path, orient_param) {
+                    match rapidready_core::thumbnail::get_max_preview_jpeg_with_orient_and_hints(path, orient_param, size_param, mtime_param) {
                         Ok(bytes) => {
                             let res = Response::builder()
                                 .header("Content-Type", "image/jpeg")
@@ -180,7 +195,7 @@ pub fn run() {
             } else {
                 1
             };
-            let res = match rapidready_core::thumbnail::get_preview_jpeg_with_orient(path, scale, orient_param) {
+            let res = match rapidready_core::thumbnail::get_preview_jpeg_with_orient_and_hints(path, scale, orient_param, size_param, mtime_param) {
                 Ok(bytes) => {
                     Response::builder()
                         .header("Content-Type", "image/jpeg")
@@ -274,7 +289,9 @@ pub fn run() {
             commands::get_cached_archive_files,
             commands::get_cached_archive_count,
             commands::reconcile_archive_delta,
-            commands::rebuild_archive_catalog
+            commands::rebuild_archive_catalog,
+            commands::get_disk_cache_stats,
+            commands::clear_disk_cache
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

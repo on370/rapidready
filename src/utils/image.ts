@@ -10,13 +10,17 @@ export function getRrImageUrl(
   path: string | undefined | null, 
   fullres = false, 
   orientation?: number | null,
-  scale?: number
+  scale?: number,
+  size?: number | null,
+  mtime?: number | null
 ): string {
   if (!path) return '';
   const params: string[] = [];
   if (fullres) params.push('fullres=true');
   if (orientation) params.push(`orient=${orientation}`);
   if (scale !== undefined) params.push(`scale=${scale}`);
+  if (size !== undefined && size !== null) params.push(`size=${size}`);
+  if (mtime !== undefined && mtime !== null) params.push(`mtime=${mtime}`);
   const queryString = params.length > 0 ? `?${params.join('&')}` : '';
 
   try {

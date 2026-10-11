@@ -335,7 +335,7 @@
 ---
 
 ### Milestone: High-Scale Cache Architecture (Large Archives & NAS Workflows)
-- [ ] **Persistent Local Disk Cache for Previews & Thumbnails (Lightroom & Picasa Model):**
+- [x] **Persistent Local Disk Cache for Previews & Thumbnails (Lightroom & Picasa Model) (Sprint 2 - Phase 2.1 & 2.2):**
   - **The Reference: Why was Google Picasa "Arrow-Fast" on Network Drives?**
     - Photographers frequently cite Picasa as the gold standard for navigating massive multi-terabyte photo libraries on slow NAS storage: Initial indexing took time, but subsequent browsing was **100% instant at 60 FPS**, even when the NAS was asleep.
     - *How Picasa achieved this:*

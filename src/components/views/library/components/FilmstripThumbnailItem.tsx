@@ -47,7 +47,7 @@ export const FilmstripThumbnailItem = React.memo(function FilmstripThumbnailItem
       }`}
     >
       <img 
-        src={getRrImageUrl(img.path, false, img.culling?.orientation, 1)} 
+        src={getRrImageUrl(img.path, false, img.culling?.orientation, 1, img.size, img.mtime)} 
         className={`w-full h-full object-contain pointer-events-none transition-opacity duration-150 ${
           loaded ? 'opacity-100' : 'opacity-0'
         }`} 
@@ -62,7 +62,7 @@ export const FilmstripThumbnailItem = React.memo(function FilmstripThumbnailItem
           if (retryCount < 2) {
             target.dataset.retryCount = String(retryCount + 1);
             setTimeout(() => {
-              const baseSrc = getRrImageUrl(img.path, false, img.culling?.orientation, 1);
+              const baseSrc = getRrImageUrl(img.path, false, img.culling?.orientation, 1, img.size, img.mtime);
               target.src = `${baseSrc}&retry=${Date.now()}`;
             }, 500 * (retryCount + 1));
           }

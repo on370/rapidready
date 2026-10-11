@@ -217,8 +217,8 @@ export const LoupeViewer = React.memo(function LoupeViewer({
         {activeImage ? (
           <>
             <ZoomableImage 
-              src={getRrImageUrl(activeImage.path, true, activeImage.culling?.orientation)} 
-              previewSrc={getRrImageUrl(activeImage.path, false, activeImage.culling?.orientation, 2)}
+              src={getRrImageUrl(activeImage.path, true, activeImage.culling?.orientation, undefined, activeImage.size, activeImage.mtime)} 
+              previewSrc={getRrImageUrl(activeImage.path, false, activeImage.culling?.orientation, 2, activeImage.size, activeImage.mtime)}
               alt={activeImage.name} 
               onContextMenu={(e) => {
                 onContextMenu(e, activeImage.path, activeImageIndex);

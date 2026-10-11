@@ -409,18 +409,117 @@ pub fn extract_raster_thumbnail(
     Some(buffer.into_inner())
 }
 
+fn record_thumbnail_cache(
+    cache_key: &str,
+    blake3_key: Option<&str>,
+    scale: u32,
+    bytes: &[u8],
+) {
+    if let Some(key) = blake3_key {
+        if let Some(chunk_cache) = crate::chunk_cache::get_global_chunk_cache() {
+            let _ = chunk_cache.write_thumbnail(key, scale, bytes);
+        }
+    }
+    if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
+        cache.put(cache_key.to_string(), bytes.to_vec());
+    }
+}
+
 pub fn get_preview_jpeg_with_orient(
     path: &Path,
     scale: u32,
     target_orient: Option<u32>,
 ) -> Result<Vec<u8>> {
+    get_preview_jpeg_with_orient_and_hints(path, scale, target_orient, None, None)
+}
+
+pub fn get_preview_jpeg_with_orient_and_hints(
+    path: &Path,
+    scale: u32,
+    target_orient: Option<u32>,
+    hint_size: Option<u64>,
+    hint_mtime: Option<i64>,
+) -> Result<Vec<u8>> {
+    // Fast path: Try resolving size, mtime, and orientation via hints or local catalog without touching NAS!
+    let fast_metadata = if let (Some(sz), Some(mt)) = (hint_size, hint_mtime) {
+        let orient = target_orient.unwrap_or(1);
+        Some((sz, mt, orient))
+    } else if let Some((cat_sz, cat_mt, cat_orient)) = crate::archive_catalog::get_catalog_metadata_hint(path) {
+        let orient = target_orient.unwrap_or(cat_orient);
+        Some((cat_sz, cat_mt, orient))
+    } else {
+        None
+    };
+
+    if let Some((fast_sz, fast_mt, fast_orient)) = fast_metadata {
+        let fast_cache_key = format!("{}:{}:{}:Some({})", path.to_string_lossy(), scale, fast_orient, fast_mt);
+        if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
+            if let Some(cached) = cache.get(&fast_cache_key) {
+                return Ok(cached.clone());
+            }
+        }
+        let blake3_key = crate::chunk_cache::compute_cache_key(
+            path,
+            fast_sz,
+            fast_mt,
+            scale,
+            fast_orient,
+        );
+        if let Some(chunk_cache) = crate::chunk_cache::get_global_chunk_cache() {
+            if let Ok(Some(bytes)) = chunk_cache.read_thumbnail(&blake3_key, scale) {
+                if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
+                    cache.put(fast_cache_key, bytes.clone());
+                }
+                return Ok(bytes);
+            }
+        }
+    }
+
+    // Slow fallback path: File was not yet cached in L2, or metadata was not known.
+    // Only now do we touch the filesystem / NAS to inspect EXIF and decode.
     let resolved_orient = target_orient.or_else(|| get_effective_orientation(path));
-    let mtime = std::fs::metadata(path).and_then(|m| m.modified()).ok();
-    let cache_key = format!("{}:{}:{}:{:?}", path.to_string_lossy(), scale, resolved_orient.unwrap_or(1), mtime);
+    let meta_res = std::fs::metadata(path);
+    let (file_size, mtime_sec, mtime_val) = match &meta_res {
+        Ok(m) => {
+            let sec = m.modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or(0);
+            (m.len(), sec, m.modified().ok())
+        }
+        Err(_) => (0, 0, None),
+    };
+    let cache_key = format!("{}:{}:{}:{:?}", path.to_string_lossy(), scale, resolved_orient.unwrap_or(1), mtime_val);
     
+    // 1. Stufe L1: In-memory LRU cache
     if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
         if let Some(cached) = cache.get(&cache_key) {
             return Ok(cached.clone());
+        }
+    }
+
+    // 2. Stufe L2: Persistenter Chunk-Cache auf NVMe
+    let blake3_key = if meta_res.is_ok() {
+        Some(crate::chunk_cache::compute_cache_key(
+            path,
+            file_size,
+            mtime_sec,
+            scale,
+            resolved_orient.unwrap_or(1),
+        ))
+    } else {
+        None
+    };
+
+    if let Some(ref key) = blake3_key {
+        if let Some(chunk_cache) = crate::chunk_cache::get_global_chunk_cache() {
+            if let Ok(Some(bytes)) = chunk_cache.read_thumbnail(key, scale) {
+                if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
+                    cache.put(cache_key, bytes.clone());
+                }
+                return Ok(bytes);
+            }
         }
     }
 
@@ -431,9 +530,7 @@ pub fn get_preview_jpeg_with_orient(
     // and network share thumbnail blocks.
     if ext == "png" || ext == "webp" {
         if let Some(raster_bytes) = extract_raster_thumbnail(path, scale, resolved_orient) {
-            if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
-                cache.put(cache_key, raster_bytes.clone());
-            }
+            record_thumbnail_cache(&cache_key, blake3_key.as_deref(), scale, &raster_bytes);
             return Ok(raster_bytes);
         }
     }
@@ -442,9 +539,7 @@ pub fn get_preview_jpeg_with_orient(
     // For scale == 0: directly use extract_embedded_thumbnail (160x120 for Sony/Canon, 720x480 for DNG).
     if scale == 0 {
         if let Some(fast_bytes) = extract_embedded_thumbnail(path, resolved_orient) {
-            if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
-                cache.put(cache_key, fast_bytes.clone());
-            }
+            record_thumbnail_cache(&cache_key, blake3_key.as_deref(), scale, &fast_bytes);
             return Ok(fast_bytes);
         }
     }
@@ -462,25 +557,19 @@ pub fn get_preview_jpeg_with_orient(
     if is_file_icon {
         // Fallback 1: Extract embedded thumbnail from RAW/DNG (720x480 or 160x120)
         if let Some(fast_bytes) = extract_embedded_thumbnail(path, resolved_orient) {
-            if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
-                cache.put(cache_key, fast_bytes.clone());
-            }
+            record_thumbnail_cache(&cache_key, blake3_key.as_deref(), scale, &fast_bytes);
             return Ok(fast_bytes);
         }
 
         // Fallback 2: Extract largest embedded JPEG directly from RAW container
         if let Some(full_bytes) = extract_largest_embedded_jpeg(path, resolved_orient) {
-            if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
-                cache.put(cache_key, full_bytes.clone());
-            }
+            record_thumbnail_cache(&cache_key, blake3_key.as_deref(), scale, &full_bytes);
             return Ok(full_bytes);
         }
 
         // Fallback 3: Standard raster images (PNG, JPG, WebP, TIFF, BMP) decoded directly in pure Rust!
         if let Some(raster_bytes) = extract_raster_thumbnail(path, scale, resolved_orient) {
-            if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
-                cache.put(cache_key, raster_bytes.clone());
-            }
+            record_thumbnail_cache(&cache_key, blake3_key.as_deref(), scale, &raster_bytes);
             return Ok(raster_bytes);
         }
     }
@@ -500,10 +589,7 @@ pub fn get_preview_jpeg_with_orient(
         .context("Failed to encode JPEG")?;
         
     let bytes = buffer.into_inner();
-    
-    if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
-        cache.put(cache_key, bytes.clone());
-    }
+    record_thumbnail_cache(&cache_key, blake3_key.as_deref(), scale, &bytes);
         
     Ok(bytes)
 }
@@ -513,13 +599,94 @@ pub fn get_preview_jpeg(path: &Path, scale: u32) -> Result<Vec<u8>> {
 }
 
 pub fn get_max_preview_jpeg_with_orient(path: &Path, explicit_orient: Option<u32>) -> Result<Vec<u8>> {
+    get_max_preview_jpeg_with_orient_and_hints(path, explicit_orient, None, None)
+}
+
+pub fn get_max_preview_jpeg_with_orient_and_hints(
+    path: &Path,
+    explicit_orient: Option<u32>,
+    hint_size: Option<u64>,
+    hint_mtime: Option<i64>,
+) -> Result<Vec<u8>> {
+    // Fast path: Try resolving size, mtime, and orientation via hints or local catalog without touching NAS!
+    let fast_metadata = if let (Some(sz), Some(mt)) = (hint_size, hint_mtime) {
+        let orient = explicit_orient.unwrap_or(1);
+        Some((sz, mt, orient))
+    } else if let Some((cat_sz, cat_mt, cat_orient)) = crate::archive_catalog::get_catalog_metadata_hint(path) {
+        let orient = explicit_orient.unwrap_or(cat_orient);
+        Some((cat_sz, cat_mt, orient))
+    } else {
+        None
+    };
+
+    if let Some((fast_sz, fast_mt, fast_orient)) = fast_metadata {
+        let fast_cache_key = format!("{}:fullres:{}:Some({})", path.to_string_lossy(), fast_orient, fast_mt);
+        if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
+            if let Some(cached) = cache.get(&fast_cache_key) {
+                return Ok(cached.clone());
+            }
+        }
+        let blake3_key = crate::chunk_cache::compute_cache_key(
+            path,
+            fast_sz,
+            fast_mt,
+            100,
+            fast_orient,
+        );
+        if let Some(chunk_cache) = crate::chunk_cache::get_global_chunk_cache() {
+            if let Ok(Some(bytes)) = chunk_cache.read_thumbnail(&blake3_key, 100) {
+                if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
+                    cache.put(fast_cache_key, bytes.clone());
+                }
+                return Ok(bytes);
+            }
+        }
+    }
+
+    // Slow fallback path
     let target_orient = explicit_orient.or_else(|| get_effective_orientation(path));
-    let mtime = std::fs::metadata(path).and_then(|m| m.modified()).ok();
-    let cache_key = format!("{}:fullres:{}:{:?}", path.to_string_lossy(), target_orient.unwrap_or(1), mtime);
+    let meta_res = std::fs::metadata(path);
+    let (file_size, mtime_sec, mtime_val) = match &meta_res {
+        Ok(m) => {
+            let sec = m.modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or(0);
+            (m.len(), sec, m.modified().ok())
+        }
+        Err(_) => (0, 0, None),
+    };
+    let cache_key = format!("{}:fullres:{}:{:?}", path.to_string_lossy(), target_orient.unwrap_or(1), mtime_val);
     
+    // 1. Stufe L1: In-memory LRU cache
     if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
         if let Some(cached) = cache.get(&cache_key) {
             return Ok(cached.clone());
+        }
+    }
+
+    // 2. Stufe L2: Persistenter Sharded Preview Cache auf NVMe (scale 100)
+    let blake3_key = if meta_res.is_ok() {
+        Some(crate::chunk_cache::compute_cache_key(
+            path,
+            file_size,
+            mtime_sec,
+            100,
+            target_orient.unwrap_or(1),
+        ))
+    } else {
+        None
+    };
+
+    if let Some(ref key) = blake3_key {
+        if let Some(chunk_cache) = crate::chunk_cache::get_global_chunk_cache() {
+            if let Ok(Some(bytes)) = chunk_cache.read_thumbnail(key, 100) {
+                if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
+                    cache.put(cache_key, bytes.clone());
+                }
+                return Ok(bytes);
+            }
         }
     }
 
@@ -532,18 +699,14 @@ pub fn get_max_preview_jpeg_with_orient(path: &Path, explicit_orient: Option<u32
         } else {
             bytes
         };
-        if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
-            cache.put(cache_key, out_bytes.clone());
-        }
+        record_thumbnail_cache(&cache_key, blake3_key.as_deref(), 100, &out_bytes);
         return Ok(out_bytes);
     }
 
     // 1. Fast path: Extract largest embedded full-res JPEG directly from RAW container
     // Provides full 20-60 MP sensor resolution in < 20ms instead of QuickLook downscaling!
     if let Some(bytes) = extract_largest_embedded_jpeg(path, target_orient) {
-        if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
-            cache.put(cache_key, bytes.clone());
-        }
+        record_thumbnail_cache(&cache_key, blake3_key.as_deref(), 100, &bytes);
         return Ok(bytes);
     }
 
@@ -581,19 +744,14 @@ pub fn get_max_preview_jpeg_with_orient(path: &Path, explicit_orient: Option<u32
             .context("Failed to encode JPEG")?;
             
         let bytes = buffer.into_inner();
-        
-        if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
-            cache.put(cache_key, bytes.clone());
-        }
+        record_thumbnail_cache(&cache_key, blake3_key.as_deref(), 100, &bytes);
             
         return Ok(bytes);
     }
 
     // Fallback: If thumb_rs could not produce a preview on Windows/macOS, extract any embedded thumbnail
     if let Some(fast_bytes) = extract_embedded_thumbnail(path, target_orient) {
-        if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
-            cache.put(cache_key, fast_bytes.clone());
-        }
+        record_thumbnail_cache(&cache_key, blake3_key.as_deref(), 100, &fast_bytes);
         return Ok(fast_bytes);
     }
 
@@ -605,18 +763,84 @@ pub fn get_max_preview_jpeg(path: &Path) -> Result<Vec<u8>> {
 }
 
 pub fn is_thumbnail_cached(path: &Path, scale: u32, target_orient: Option<u32>) -> bool {
+    is_thumbnail_cached_with_hints(path, scale, target_orient, None, None)
+}
+
+pub fn is_thumbnail_cached_with_hints(
+    path: &Path,
+    scale: u32,
+    target_orient: Option<u32>,
+    hint_size: Option<u64>,
+    hint_mtime: Option<i64>,
+) -> bool {
+    let eff_scale = if scale >= 100 { 100 } else { scale };
+    let fast_metadata = if let (Some(sz), Some(mt)) = (hint_size, hint_mtime) {
+        let orient = target_orient.unwrap_or(1);
+        Some((sz, mt, orient))
+    } else if let Some((cat_sz, cat_mt, cat_orient)) = crate::archive_catalog::get_catalog_metadata_hint(path) {
+        let orient = target_orient.unwrap_or(cat_orient);
+        Some((cat_sz, cat_mt, orient))
+    } else {
+        None
+    };
+
+    if let Some((fast_sz, fast_mt, fast_orient)) = fast_metadata {
+        let fast_cache_key = if eff_scale >= 100 {
+            format!("{}:fullres:{}:Some({})", path.to_string_lossy(), fast_orient, fast_mt)
+        } else {
+            format!("{}:{}:{}:Some({})", path.to_string_lossy(), scale, fast_orient, fast_mt)
+        };
+        if let Ok(cache) = THUMBNAIL_CACHE.lock() {
+            if cache.contains(&fast_cache_key) {
+                return true;
+            }
+        }
+        let blake3_key = crate::chunk_cache::compute_cache_key(
+            path,
+            fast_sz,
+            fast_mt,
+            eff_scale,
+            fast_orient,
+        );
+        if let Some(chunk_cache) = crate::chunk_cache::get_global_chunk_cache() {
+            if chunk_cache.has_thumbnail(&blake3_key, eff_scale) {
+                return true;
+            }
+        }
+    }
+
     let resolved_orient = target_orient.or_else(|| get_effective_orientation(path));
-    let mtime = std::fs::metadata(path).and_then(|m| m.modified()).ok();
-    let cache_key = if scale >= 100 {
+    let meta_res = std::fs::metadata(path);
+    let mtime = meta_res.as_ref().ok().and_then(|m| m.modified().ok());
+    let cache_key = if eff_scale >= 100 {
         format!("{}:fullres:{}:{:?}", path.to_string_lossy(), resolved_orient.unwrap_or(1), mtime)
     } else {
         format!("{}:{}:{}:{:?}", path.to_string_lossy(), scale, resolved_orient.unwrap_or(1), mtime)
     };
     if let Ok(cache) = THUMBNAIL_CACHE.lock() {
-        cache.contains(&cache_key)
-    } else {
-        false
+        if cache.contains(&cache_key) {
+            return true;
+        }
     }
+    if let Ok(ref meta) = meta_res {
+        let mtime_sec = mtime
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        let blake3_key = crate::chunk_cache::compute_cache_key(
+            path,
+            meta.len(),
+            mtime_sec,
+            eff_scale,
+            resolved_orient.unwrap_or(1),
+        );
+        if let Some(chunk_cache) = crate::chunk_cache::get_global_chunk_cache() {
+            if chunk_cache.has_thumbnail(&blake3_key, eff_scale) {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 pub fn get_thumbnail_bytes(path: &Path, scale: u32, target_orient: Option<u32>) -> Result<Vec<u8>> {
@@ -1096,6 +1320,57 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn test_chunk_cache_integration() {
+        let temp_dir = std::env::temp_dir().join(format!("rapidready_test_l2_cache_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let db_path = temp_dir.join("catalog.db");
+        let cache_dir = temp_dir.join("disk_cache");
+        let chunk_cache = crate::chunk_cache::init_global_chunk_cache(&cache_dir, &db_path).unwrap();
+
+        // Create a test image
+        let img_path = temp_dir.join("test_l2.png");
+        let img = image::RgbImage::from_fn(100, 100, |x, y| {
+            image::Rgb([(x * 2) as u8, (y * 2) as u8, 128])
+        });
+        img.save(&img_path).unwrap();
+
+        // Clear L1 memory cache
+        if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
+            cache.clear();
+        }
+
+        // Before generation, should not be cached
+        assert!(!is_thumbnail_cached(&img_path, 1, None));
+
+        // Generate thumbnail (writes to L1 and L2 write-through)
+        let thumb_bytes = get_preview_jpeg(&img_path, 1).expect("Thumbnail generation must succeed");
+        assert!(!thumb_bytes.is_empty());
+
+        // Now cached in L1 and L2
+        assert!(is_thumbnail_cached(&img_path, 1, None));
+
+        // Evict L1 RAM cache completely
+        if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
+            cache.clear();
+        }
+
+        // Must still be reported as cached because of L2 Chunk Cache!
+        assert!(is_thumbnail_cached(&img_path, 1, None), "L2 disk cache must report item as cached even after L1 RAM purge");
+
+        // Request again: should hit L2 and re-populate L1
+        let l2_bytes = get_preview_jpeg(&img_path, 1).expect("Must retrieve thumbnail from L2 chunk cache");
+        assert_eq!(l2_bytes, thumb_bytes, "L2 chunk cache bytes must match original thumbnail bytes");
+
+        // Verify chunk cache stats
+        let stats = chunk_cache.get_stats().expect("Must read cache stats");
+        assert!(stats.total_cached_items >= 1, "Cache stats must reflect stored thumbnail");
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }
 

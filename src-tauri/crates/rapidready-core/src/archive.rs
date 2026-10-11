@@ -20,6 +20,8 @@ pub struct ArchiveFile {
     pub is_raw: bool,
     #[serde(default)]
     pub is_video: bool,
+    #[serde(default)]
+    pub mtime: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -243,6 +245,11 @@ where
 
                     let metadata = entry.metadata().ok();
                     let size = metadata.as_ref().map(|m| m.len()).unwrap_or(0);
+                    let mtime = metadata.as_ref()
+                        .and_then(|m| m.modified().ok())
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_secs() as i64)
+                        .unwrap_or(0);
                     total_bytes += size;
                     let name = entry.file_name().to_string_lossy().into_owned();
                     let date = get_fast_creation_date(path, metadata.as_ref());
@@ -263,6 +270,7 @@ where
                         culling,
                         is_raw,
                         is_video,
+                        mtime,
                     };
 
                     current_chunk.push(item.clone());
@@ -366,6 +374,11 @@ pub fn create_archive_file(path: &Path) -> Option<ArchiveFile> {
     let is_raw = crate::metadata_resolver::is_raw_path(path);
     let is_video = crate::metadata_resolver::is_video_path(path);
     let culling = read_sidecar(path);
+    let mtime = metadata.as_ref()
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
 
     Some(ArchiveFile {
         path: path.to_string_lossy().into_owned(),
@@ -380,6 +393,7 @@ pub fn create_archive_file(path: &Path) -> Option<ArchiveFile> {
         culling,
         is_raw,
         is_video,
+        mtime,
     })
 }
 

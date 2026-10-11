@@ -101,7 +101,7 @@ export const GridThumbnailItem = React.memo(function GridThumbnailItem({
           ref={imgRef}
           draggable={false}
           decoding="async"
-          src={getRrImageUrl(img.path, false, img.culling?.orientation, scale)} 
+          src={getRrImageUrl(img.path, false, img.culling?.orientation, scale, img.size, img.mtime)} 
           className={`w-full h-full object-contain relative z-10 transition-opacity duration-150 pointer-events-none ${isCached ? 'opacity-100' : 'opacity-0'}`} 
           alt={img.name} 
           onLoad={(e) => {
@@ -121,7 +121,7 @@ export const GridThumbnailItem = React.memo(function GridThumbnailItem({
               target.dataset.retryCount = String(retryCount + 1);
               setTimeout(() => {
                 if (imgRef.current) {
-                  const baseSrc = getRrImageUrl(img.path, false, img.culling?.orientation, scale);
+                  const baseSrc = getRrImageUrl(img.path, false, img.culling?.orientation, scale, img.size, img.mtime);
                   imgRef.current.src = `${baseSrc}&retry=${Date.now()}`;
                 }
               }, 600 * (retryCount + 1));

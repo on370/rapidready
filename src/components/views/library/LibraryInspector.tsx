@@ -178,8 +178,8 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
       return;
     }
     const currentPath = activeImage.path;
-    const thumbUrl = getRrImageUrl(currentPath, false, activeImage.culling?.orientation, 1);
-    const targetFullresUrl = getRrImageUrl(currentPath, true, activeImage.culling?.orientation);
+    const thumbUrl = getRrImageUrl(currentPath, false, activeImage.culling?.orientation, 1, activeImage.size, activeImage.mtime);
+    const targetFullresUrl = getRrImageUrl(currentPath, true, activeImage.culling?.orientation, undefined, activeImage.size, activeImage.mtime);
 
     setInspectorPreviewSrc(thumbUrl);
 
@@ -698,7 +698,7 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
                   >
                     <img 
                       ref={inspectorImageRef}
-                      src={inspectorPreviewSrc || getRrImageUrl(activeImage.path, false, activeImage.culling?.orientation)} 
+                      src={inspectorPreviewSrc || getRrImageUrl(activeImage.path, false, activeImage.culling?.orientation, undefined, activeImage.size, activeImage.mtime)} 
                       alt={activeImage.name} 
                       crossOrigin="anonymous"
                       className="w-full h-full object-contain" 

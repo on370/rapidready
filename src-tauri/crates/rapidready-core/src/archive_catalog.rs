@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 use walkdir::WalkDir;
 
@@ -22,6 +22,21 @@ pub struct ArchiveDeltaResult {
     pub updated: Vec<ArchiveFile>,
     pub removed: Vec<String>,
     pub new_dirs: Vec<String>,
+}
+
+static GLOBAL_ARCHIVE_CATALOG: OnceLock<Arc<ArchiveCatalog>> = OnceLock::new();
+
+pub fn init_global_catalog(catalog: Arc<ArchiveCatalog>) {
+    let _ = GLOBAL_ARCHIVE_CATALOG.set(catalog);
+}
+
+pub fn get_global_catalog() -> Option<Arc<ArchiveCatalog>> {
+    GLOBAL_ARCHIVE_CATALOG.get().cloned()
+}
+
+pub fn get_catalog_metadata_hint(path: &Path) -> Option<(u64, i64, u32)> {
+    let catalog = get_global_catalog()?;
+    catalog.get_file_metadata_hint(path)
 }
 
 pub struct ArchiveCatalog {
@@ -155,7 +170,7 @@ impl ArchiveCatalog {
         let conn = self.conn.lock().unwrap();
 
         let mut stmt = conn.prepare(
-            "SELECT canonical_path, filename, file_size, exif_date, camera, lens, iso, aperture, shutter, is_raw, is_video, sidecar_culling_json
+            "SELECT canonical_path, filename, file_size, exif_date, camera, lens, iso, aperture, shutter, is_raw, is_video, sidecar_culling_json, mtime
              FROM archive_files
              WHERE archive_root = ?1 OR canonical_path = ?1 OR canonical_path LIKE ?2
              ORDER BY canonical_path ASC"
@@ -174,6 +189,7 @@ impl ArchiveCatalog {
             let is_raw: bool = row.get(9)?;
             let is_video: bool = row.get(10)?;
             let sidecar_json: Option<String> = row.get(11)?;
+            let mtime: i64 = row.get(12)?;
 
             let date = exif_date.and_then(|s| {
                 NaiveDateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M:%S")
@@ -199,6 +215,7 @@ impl ArchiveCatalog {
                 culling,
                 is_raw,
                 is_video,
+                mtime,
             })
         })?;
 
@@ -236,6 +253,28 @@ impl ArchiveCatalog {
             directories,
             is_fully_indexed,
         })
+    }
+
+    /// Fast indexed lookup of size, mtime, and orientation from local SQLite catalog in < 0.02 ms.
+    pub fn get_file_metadata_hint(&self, path: &Path) -> Option<(u64, i64, u32)> {
+        let norm = normalize_canonical_path(&path.to_string_lossy());
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT file_size, mtime, sidecar_culling_json FROM archive_files WHERE canonical_path = ?1"
+        ).ok()?;
+        let mut rows = stmt.query([&norm]).ok()?;
+        if let Ok(Some(row)) = rows.next() {
+            let size: i64 = row.get(0).unwrap_or(0);
+            let mtime: i64 = row.get(1).unwrap_or(0);
+            let sidecar_json: Option<String> = row.get(2).unwrap_or(None);
+            let orient = sidecar_json
+                .and_then(|s| serde_json::from_str::<CullingState>(&s).ok())
+                .and_then(|c| c.orientation)
+                .unwrap_or(1);
+            Some((size as u64, mtime, orient))
+        } else {
+            None
+        }
     }
 
     /// Upserts files and directories into `archive_catalog.db`.
@@ -723,6 +762,7 @@ mod tests {
                 culling: CullingState::default(),
                 is_raw: false,
                 is_video: false,
+                mtime: 1700000000,
             },
             ArchiveFile {
                 path: "/photos/2024/sub/img2.arw".into(),
@@ -737,6 +777,7 @@ mod tests {
                 culling: CullingState::default(),
                 is_raw: true,
                 is_video: false,
+                mtime: 1700000001,
             },
         ];
         let dirs = vec!["/photos/2024".into(), "/photos/2024/sub".into()];

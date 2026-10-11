@@ -15,6 +15,7 @@ export interface LibraryImage {
   path: string;
   name: string;
   size: number;
+  mtime?: number | null;
   date: string | null;
   date_modified?: string | null;
   width?: number | null;
