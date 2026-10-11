@@ -183,6 +183,29 @@
   - **Batch Format Toggles:** Dedicated 1-click action buttons / format pills in the Step 2 source preview toolbar (`[ Select only RAWs ]`, `[ Deselect all JPGs ]`, `[ Videos ]`).
   - **Dynamic Volume Feedback:** Instantly recalculates transfer file count, total bytes, and destination disk headroom without requiring manual folder-by-folder unchecking.
 
+- [ ] **Umschaltbares RAW + JPEG Stacking (Kombi-Kacheln mit A/B-Toggle in Loupe & Inspector):**
+  - **Context & Goal:**
+    Beim simultanen Fotografieren in RAW + JPG (oder RAW + HIF) entstehen Bildpaare mit identischem Basisnamen (z. B. `_DSC1234.ARW` und `_DSC1234.JPG`). Im Grid verdoppeln diese Paare die Kachelanzahl und verlangsamen die visuelle Sichtung. Das RAW+JPEG Stacking fasst Bildpaare im Grid optional zu einer einzigen virtuellen Kachel zusammen, während in der Loupe-Ansicht ein blitzschneller A/B-Vergleich zwischen neutralem RAW und kamerainternem JPEG-Bildstil ermöglicht wird.
+  - **Grid-Ansicht & Kombi-Badges:**
+    - **Umschalt-Option:** Schnellwahlschalter in der Filter-/Toolbar sowie Tastenkürzel (`Alt+S`): *„RAW + JPG stapeln“* / *„Stack RAW+JPEG“*.
+    - **Pairing-Logik:** Dateien im selben Ordner mit identischem Stamm/Basisnamen (`stem`) werden im UI-Selector zu einer gemeinsamen Kachel verschmolzen (unterstützt alle gängigen RAW-Formate gepaart mit `.jpg`, `.jpeg`, `.hif`, `.heic`).
+    - **Kombi-Badge oben links:** Kachel zeigt `[RAW] [JPG]` (oder `[RAW+JPG]`), wobei das aktuell für die Anzeige ausgewählte Master-Format farblich hervorgehoben ist (z. B. `RAW` in Bernstein/Orange, `JPG` in dezentem Cyan/Grau).
+  - **Loupe View & Zero-Latency A/B-Vergleich:**
+    - **Konfigurierbarer Master:** Einstellbarer Standard in den Settings: *RAW-Master* (Standard, eingebettetes hochauflösendes Sensor-Preview) vs. *JPEG-Master* (kamerainterne Bearbeitung/Farben).
+    - **1-Key A/B-Umschaltung:** Taste `J` (oder Halten von `\` / `J` für temporären Hold-to-Compare) schaltet nahtlos zwischen RAW-Vorschau und Kamera-JPEG um – ohne Verlust von Zoomstufe oder Pan-Position (ideal für Schärfe- und Farbabgleiche bei 1:1 Sensor-Zoom).
+    - **GUI-Umschalter:** Schwebende Pill-Buttons in der Loupe-Toolbar: `[ • RAW | JPG ]`.
+  - **Inspector-Integration:**
+    - Header zeigt den einheitlichen Basisnamen mit Format-Chips und Dateigrößen: z. B. `_DSC1234` mit `[RAW (42.8 MB)]` und `[JPG (8.1 MB)]`.
+    - Belichtungs- und Aufnahmedaten (Zeit, Blende, ISO, Brennweite, GPS) bleiben synchron; formatspezifische Metadaten (Dateigröße, Farbraum) passen sich dem gewählten Format an.
+  - **Synchrones Culling & Selektives Löschen:**
+    - **Synchrones Culling (Shared State):** Bewertungen (Picks `P`, Rejects `X`, Sterne `1`–`5`, Farblabels `6`–`9`, Tags) werden simultan in beide Sidecars geschrieben (`.ARW.rrdata` und `.JPG.rrdata`). Das Motiv wird einheitlich bewertet, wodurch keine Desynchronisation zwischen RAW und JPEG entsteht.
+    - **Differenzierter Lösch-Dialog:** Beim endgültigen Löschen eines gestapelten Paars bietet der Sicherheitsdialog drei Optionen:
+      1. `[ Beide Dateien löschen ]` (Standard)
+      2. `[ Nur RAW löschen ]` (z. B. Speicherplatz freigeben)
+      3. `[ Nur JPEG löschen ]` (Kamera-JPEGs nach initialer Sichtung verwerfen).
+  - **Performante Virtuelle Store-Architektur:**
+    - Der physische `images`-Array in `libraryStore` bleibt unberührt; die Gruppierung erfolgt rein virtuell über einen performanten `useMemo`-Selector in `LibraryCenter.tsx` ($< 5\,\text{ms}$ Overhead). Das Ein- und Ausschalten des Stapelmodus erfordert keinen Neuscan und erfolgt ohne Verzögerung.
+
 ### Milestone: Multi-RAW Developer & Universal Sidecar Architecture
 - [ ] **Industry Standard Adobe XMP Sidecars (`.xmp`) & Multi-RAW Developer Integration:**
   - **Context & Goal:**  
@@ -700,6 +723,88 @@
     - **Mode 2 (Vollbild-Ersatz / Swap):** Vollflächige Umschaltung des Vorschaukastens auf ein detailliertes 256-Kanal-RGB- und Helligkeits-Histogramm inklusive Beschneidungswarnungen (Clipping-Indikatoren für abgesoffene Tiefen und ausgefressene Lichter).
   - **Performance:**
     - Client-seitige Berechnung via Canvas/WebGL oder Rust Thumbnail-Sampler in unter 5 ms direkt aus dem gecachten Vorschau-JPEG.
+
+- [ ] **Redaktionelle Metadaten: Vorbelegung (Settings/Import), Inspector-Editing & Sidecar-Overrides:**
+  - **Problemstellung & Kontext:**
+    Professionelle Bildarchive, Kundenübergaben und Presse-Workflows erfordern verlässliche Urheber- und Bildrechte-Angaben (Fotograf, Copyright, Nutzungsrechte, Titel, Bildbeschreibung) sowie die Möglichkeit, fehlerhafte Aufnahmezeiten (z. B. asynchrone Kamerauhren bei Multi-Cam-Shootings oder vergessene Zeitzonen-Umstellungen) zu korrigieren.
+  - **Strikte Non-Destructive Data Safety Policy (Zero-Write auf Originale):**
+    - **Absolutes Schreibverbot auf Originaldateien:** Weder RAW-Dateien (`.ARW`, `.CR2`, `.CR3`, `.NEF`, `.DNG` etc.) noch Kamera-JPEGs oder Videos werden jemals bitweise modifiziert. Originale bleiben physisch unberührt und schreibgeschützt.
+    - **100% Sidecar-basierte Persistenz:** Sämtliche Vorbelegungen, manuellen Anpassungen, redaktionellen Felder und Zeitkorrekturen werden ausschließlich in den herstelleroffenen Sidecars (`<original_path>.rrdata` und optional synchronisiert in Adobe-Standard `.xmp`) gespeichert.
+    - **Atomare Schreibvorgänge:** Speicherung erfolgt stets über temporäre Dateien (`.{stem}.tmp.{thread}.{pid}`) mit anschließendem atomarem OS-Rename (`fs::rename`), um Datenkorruption bei Stromausfall oder Netzwerkunterbrechungen auszuschließen.
+  - **Klassifizierung: Read-Only Sensordaten vs. Editierbare Redaktionsdaten:**
+    1. *Kategorie A: Physische Kamera- & Sensordaten (Streng Read-Only):*
+       - Belichtungszeit, Blende, ISO, Brennweite, Belichtungskorrektur, Belichtungsprogramm, Messmethode, Blitzstatus, Weißabgleich, Sensor-Dimensionen, Bittiefe, Farbraum, Kameramodell, Objektiv, Seriennummern (Body/Lens), Shutter Actuation Count.
+       - Diese Parameter spiegeln die physische Aufnahme-Realität wider und werden ausschließlich rein lesend aus dem Original-EXIF dargestellt.
+    2. *Kategorie B: Redaktionelle IPTC- & Metadaten (Editierbar & Vorbelegbar via Sidecar):*
+       - **Fotograf / Urheber (`artist` / `creator`):** Name des Fotografen / Byline.
+       - **Copyright-Hinweis (`copyright`):** Urheberrechtshinweis mit dynamischem `{year}` Token (z. B. `© {year} Name. Alle Rechte vorbehalten.`).
+       - **Nutzungsbedingungen / Lizenz (`usageTerms` / `rights`):** z. B. Redaktionelle Nutzung, Creative Commons, Exklusivlizenz.
+       - **Bildtitel / Headline (`title`):** Kurzer prägnanter Motivtitel.
+       - **Beschreibung / Bildtext (`description` / `caption`):** Ausführliche Inhaltsbeschreibung für Agenturen/Presse.
+       - **Aufnahmezeit-Korrektur (`timeShiftSeconds`):** Relativer Zeit-Offset in Sekunden zur Non-Destructive-Harmonisierung asynchroner Kamerauhren.
+  - **Sprint 1: Globale Settings-Vorbelegung & Shoot-spezifische Import-Profile (Ingest-Ebene):**
+    - *Globale Konfiguration in `SettingsView.tsx` (`settingsStore.ts`):*
+      - **Dass & Wo:** Eigene, strukturierte Einstellungskarte *„Standard-Metadaten & Copyright“* (mit Icon `UserCheck` oder `Copyright`) in `SettingsView.tsx`, platziert zwischen den Workflow-Voreinstellungen und den GPS-Optionen.
+      - **Welche Datenfelder:**
+        1. **Urheber / Fotograf (`defaultArtist`):**
+           - *UI:* Text-Input mit Label *„Standard-Urheber / Fotograf“*.
+           - *Placeholder:* z. B. `Max Mustermann` oder `Fotostudio Mustermann`.
+           - *Hilfetext:* *„Wird als IPTC Creator / Artist bei neuen Importen und als Vorbelegung im Inspector genutzt.“*
+        2. **Copyright-Hinweis (`defaultCopyright`):**
+           - *UI:* Text-Input mit Label *„Standard-Copyright-Hinweis“*.
+           - *Placeholder:* z. B. `© {year} Max Mustermann. Alle Rechte vorbehalten.`.
+           - *Token-Syntax & Token-Chips:* Unterstützt `{year}` als dynamischen Platzhalter. Unter dem Feld wird ein klickbarer Chip `[ + {year} ]` angezeigt, der das Token per Klick an der Cursor-Position einfügt.
+           - *Dynamische Live-Vorschau:* Unmittelbar unter dem Eingabefeld rendert eine responsive Live-Vorschau in dezenter Textfarbe:  
+             `↳ Vorschau: © 2026 Max Mustermann. Alle Rechte vorbehalten.` (aufgelöst mit aktuellem Jahr bzw. beim Import mit dem EXIF-Aufnahmejahr des Bildes).
+        3. **Nutzungsbedingungen / Lizenz (`defaultUsageTerms`):**
+           - *UI:* Text-Input oder mehrzeiliges Eingabefeld mit Label *„Nutzungsrechte / Lizenzbedingungen“*.
+           - *Placeholder:* z. B. `Alle Rechte vorbehalten` oder `Redaktionelle Nutzung honorarpflichtig`.
+        4. **Import-Standard-Toggle (`autoApplyEditorialOnImport`):**
+           - *UI:* Standard-Umschalter (Toggle-Track): *„Metadaten beim Import automatisch per Sidecar zuweisen“*.
+           - *Funktion:* Steuert, ob die Checkbox im Import-Wizard standardmäßig aktiv vorselektiert ist (Default: `false` / Opt-In).
+      - **Wie die Speicherung erfolgt:**
+        - Persistierung im `settingsStore` (`localStorage` / Tauri-Settings).
+        - Abwärtskompatibel mit Fallbacks (`""` bzw. `false`), sodass bestehende Installationen sauber starten.
+    - *Import-Wizard Integration (`ImportPreviewStep.tsx` / `ImportExecuteStep.tsx`):*
+      - Checkbox in den Import-Optionen: *☑ „Redaktionelle Metadaten & Copyright beim Import zuweisen“*.
+      - Shoot-spezifische Übersteuerung: Werte werden aus den Settings vorinitialisiert, können jedoch pro Import-Auftrag überschrieben werden (z. B. für Gast-Fotografen oder spezielle Kunden-Shootings).
+      - Generiert während des Importvorgangs parallel zu den Bilddateien automatisch schlanke `.rrdata`-Sidecars (keine Modifikation der importierten Mediendateien).
+  - **Sprint 2: Inspector Inline- & Batch-Editing UI (Library-Ebene):**
+    - *UI-Komponente in `LibraryInspector.tsx`:*
+      - Neuer einklappbarer Bereich: *„Redaktionelle Metadaten & Rechte“* (`collapsedSections.editorial`).
+      - Design folgt 100% dem bewährten **GPS-Editor-Pattern**:
+        - Stift-Icon (`Pencil`) schaltet den Inline-Bearbeitungsmodus frei.
+        - Fallback-Kaskade: Zeigt vorrangig den Sidecar-Wert an; falls nicht vorhanden, dezent den aus dem Kamera-EXIF gelesenen Wert oder `—`.
+        - Editierbare Input-Felder für *Fotograf*, *Copyright*, *Titel* und mehrzeilige Textarea für *Beschreibung*.
+    - *Multi-Selection Batch-Bearbeitung (`selectedPaths.size > 1`):*
+      - Prominenter Hinweis-Banner: *„Wird auf {N} ausgewählte Bilder angewendet“*.
+      - Mixed-State-Handling: Besitzen die markierten Fotos unterschiedliche Werte, zeigt das Feld den Platzhalter `<verschiedene Werte>`. Wird ein Feld editiert und gespeichert, wird der neue Wert einheitlich auf alle ausgewählten Bilder angewendet.
+    - *Revert / Reset auf Kamera-Original:*
+      - Zurücksetzen-Button (`Undo` / `Trash2` / *„Auf Original zurücksetzen“*): Löscht den entsprechenden Override-Eintrag aus dem `.rrdata`-Sidecar. Das UI fällt augenblicklich wieder auf den unveränderten Kamera-Originalwert zurück.
+  - **Sprint 3: Sidecar-Persistenz, Schema-Erweiterung & DateTimeOriginal Time-Shift:**
+    - *Backend-Schema (`culling.rs` / `rapidready-core`):*
+      - Erweiterung des `.rrdata`-JSON-Objekts um einen `editorial`-Block:
+        ```json
+        {
+          "version": 1,
+          "editorial": {
+            "artist": "Max Mustermann",
+            "copyright": "© 2026 Max Mustermann",
+            "usageTerms": "Redaktionelle Nutzung honorarpflichtig",
+            "title": "Alpenglühen am Matterhorn",
+            "description": "Sonnenaufgang mit dramatischen Wolkenformationen"
+          },
+          "timeShiftSeconds": 3600
+        }
+        ```
+      - Rust Tauri Commands: `write_editorial_sidecar(paths, editorial_data)` und `clear_editorial_override(paths, field_key)`.
+    - *DateTimeOriginal Non-Destructive Time-Shift:*
+      - Speichert einen vorzeichenbehafteten Offset `timeShiftSeconds: i64` im Sidecar.
+      - `metadata_resolver.rs` und `date_resolver.rs` addieren den Offset dynamisch zur Anzeige und Sortierung (`effective_date = original_date + timeShiftSeconds`).
+      - Inspector UI: Kleiner Time-Shift-Button (`Clock` / `History`) neben dem Aufnahmedatum mit Dialog zur relativen Zeitverschiebung (`[ + / - ] [ HH : MM : SS ]`).
+      - Export-Integration: Beim Sammlungs-Export (Photobook / Web Export) wird der korrigierte Zeitstempel in das neu erzeugte Ziel-Duplikat geschrieben; die Originaldatei bleibt unberührt.
+    - *Adobe XMP Synchronisation (`.xmp`):*
+      - Bei aktiviertem XMP-Export / Dual-Write werden die redaktionellen Werte standardkonform in Dublin Core und Photoshop Schemas übertragen (`dc:creator`, `dc:rights`, `photoshop:Credit`, `dc:title`, `dc:description`, `exif:DateTimeOriginal`).
 
 ---
 
