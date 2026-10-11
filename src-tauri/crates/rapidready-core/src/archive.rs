@@ -132,10 +132,16 @@ impl ScanController {
     }
 }
 
+fn default_true() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArchiveScanResult {
     pub files: Vec<ArchiveFile>,
     pub directories: Vec<String>,
+    #[serde(default = "default_true")]
+    pub is_fully_indexed: bool,
 }
 
 pub fn scan_archive_directory_streaming<P, C>(
@@ -318,12 +324,15 @@ where
         is_complete: !is_cancelled,
     });
 
-    files.par_sort_unstable_by(|a, b| a.path.cmp(&b.path));
-    all_directories.sort_unstable();
-    all_directories.dedup();
+    if !is_cancelled {
+        files.par_sort_unstable_by(|a, b| a.path.cmp(&b.path));
+        all_directories.sort_unstable();
+        all_directories.dedup();
+    }
     Ok(ArchiveScanResult {
         files,
         directories: all_directories,
+        is_fully_indexed: !is_cancelled,
     })
 }
 

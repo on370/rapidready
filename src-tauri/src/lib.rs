@@ -32,6 +32,12 @@ pub fn run() {
             }
 
             use tauri::Manager;
+            let app_dir = app.path().app_data_dir()?;
+            let catalog = rapidready_core::archive_catalog::ArchiveCatalog::new(&app_dir)?;
+            app.manage(commands::ArchiveCatalogState {
+                catalog: std::sync::Arc::new(catalog),
+            });
+
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_theme(Some(tauri::Theme::Dark));
             }
@@ -264,7 +270,11 @@ pub fn run() {
             commands::export_collection,
             commands::cancel_collection_export,
             commands::warm_thumbnail_cache,
-            commands::cancel_warmup_cache
+            commands::cancel_warmup_cache,
+            commands::get_cached_archive_files,
+            commands::get_cached_archive_count,
+            commands::reconcile_archive_delta,
+            commands::rebuild_archive_catalog
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

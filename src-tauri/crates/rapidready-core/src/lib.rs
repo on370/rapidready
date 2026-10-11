@@ -11,3 +11,4 @@ pub mod archive;
 pub mod metadata_resolver;
 pub mod collections;
 pub mod collection_export;
+pub mod archive_catalog;

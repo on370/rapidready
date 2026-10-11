@@ -292,6 +292,21 @@ pub struct ArchiveScanState {
     pub next_id: Arc<AtomicU64>,
 }
 
+#[derive(Clone)]
+pub struct ArchiveCatalogState {
+    pub catalog: Arc<rapidready_core::archive_catalog::ArchiveCatalog>,
+}
+
+pub fn get_archive_catalog(app: &AppHandle) -> Result<Arc<rapidready_core::archive_catalog::ArchiveCatalog>, String> {
+    if let Some(state) = app.try_state::<ArchiveCatalogState>() {
+        return Ok(state.catalog.clone());
+    }
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let catalog = rapidready_core::archive_catalog::ArchiveCatalog::new(&app_dir)
+        .map_err(|e| e.to_string())?;
+    Ok(Arc::new(catalog))
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArchiveChunkPayload {
     pub scan_id: u64,
@@ -446,11 +461,20 @@ pub fn stop_watching_directory(
 pub async fn reconcile_folder(
     folder_path: String,
     known_paths: Vec<String>,
+    catalog_state: tauri::State<'_, ArchiveCatalogState>,
 ) -> Result<rapidready_core::archive::ReconcileDiff, String> {
+    let catalog = catalog_state.catalog.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let p = std::path::PathBuf::from(&folder_path);
-        rapidready_core::archive::reconcile_directory_files(&p, &known_paths)
-            .map_err(|e| e.to_string())
+        let diff = rapidready_core::archive::reconcile_directory_files(&p, &known_paths)
+            .map_err(|e| e.to_string())?;
+        if !diff.added.is_empty() || !diff.new_dirs.is_empty() {
+            let _ = catalog.upsert_archive_files(&folder_path, &diff.added, &diff.new_dirs);
+        }
+        if !diff.removed.is_empty() {
+            let _ = catalog.delete_files(&diff.removed);
+        }
+        Ok(diff)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -471,6 +495,7 @@ pub async fn scan_archive_directory(
     initial_bytes: Option<u64>,
     state: tauri::State<'_, SidecarWatcherState>,
     scan_state: tauri::State<'_, ArchiveScanState>,
+    catalog_state: tauri::State<'_, ArchiveCatalogState>,
 ) -> Result<rapidready_core::archive::ArchiveScanResult, String> {
     let dir = PathBuf::from(&path);
     let _ = start_watching_dir_internal(&app, &dir, &state);
@@ -494,6 +519,12 @@ pub async fn scan_archive_directory(
     let app_for_chunk = app.clone();
     let controller_clone = controller.clone();
     let scan_state_clone = scan_state.current_scan.clone();
+    let catalog_for_chunk = catalog_state.catalog.clone();
+    let path_clone = path.clone();
+
+    if existing_paths.is_none() {
+        let _ = catalog_state.catalog.set_archive_indexing_status(&path, false);
+    }
 
     let existing_set: Option<std::collections::HashSet<String>> = existing_paths.map(|paths| {
         paths
@@ -514,6 +545,7 @@ pub async fn scan_archive_directory(
                 let _ = app_for_prog.emit("archive_scan_progress", progress);
             },
             move |chunk, dirs| {
+                let _ = catalog_for_chunk.upsert_archive_files(&path_clone, &chunk, &dirs);
                 let _ = app_for_chunk.emit("archive_scan_chunk", ArchiveChunkPayload {
                     scan_id,
                     files: chunk,
@@ -533,6 +565,12 @@ pub async fn scan_archive_directory(
             if active.id == scan_id {
                 *lock = None;
             }
+        }
+    }
+
+    if let Ok(ref result) = res {
+        if result.is_fully_indexed {
+            let _ = catalog_state.catalog.set_archive_indexing_status(&path, true);
         }
     }
 
@@ -585,8 +623,9 @@ pub async fn set_culling_state(
     rating: u8,
     color: Option<String>,
     tags: Option<Vec<String>>,
+    catalog_state: tauri::State<'_, ArchiveCatalogState>,
 ) -> Result<(), String> {
-    let p = PathBuf::from(path);
+    let p = PathBuf::from(&path);
     // Read existing
     let mut state = rapidready_core::culling::read_sidecar(&p);
     state.flag = flag;
@@ -605,7 +644,101 @@ pub async fn set_culling_state(
     }
     
     // Write updated
-    rapidready_core::culling::write_sidecar(&p, &state).map_err(|e| e.to_string())
+    rapidready_core::culling::write_sidecar(&p, &state).map_err(|e| e.to_string())?;
+    let _ = catalog_state.catalog.update_culling(&path, &state, None);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_cached_archive_files(
+    path: String,
+    catalog_state: tauri::State<'_, ArchiveCatalogState>,
+) -> Result<rapidready_core::archive::ArchiveScanResult, String> {
+    let catalog = catalog_state.catalog.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        catalog.get_cached_archive_files(&path).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn get_cached_archive_count(
+    path: String,
+    catalog_state: tauri::State<'_, ArchiveCatalogState>,
+) -> Result<usize, String> {
+    let catalog = catalog_state.catalog.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        catalog.get_cached_count(&path).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn reconcile_archive_delta(
+    app: AppHandle,
+    path: String,
+    scan_id: Option<u64>,
+    catalog_state: tauri::State<'_, ArchiveCatalogState>,
+    scan_state: tauri::State<'_, ArchiveScanState>,
+) -> Result<rapidready_core::archive_catalog::ArchiveDeltaResult, String> {
+    let dir = PathBuf::from(&path);
+    let scan_id = scan_id.unwrap_or_else(|| scan_state.next_id.fetch_add(1, Ordering::SeqCst) + 1);
+    let controller = rapidready_core::archive::ScanController::new();
+
+    {
+        let mut lock = scan_state.current_scan.lock().unwrap();
+        if let Some(ref prev) = *lock {
+            prev.controller.cancel();
+        }
+        *lock = Some(ActiveScan {
+            id: scan_id,
+            controller: controller.clone(),
+        });
+    }
+
+    let app_clone = app.clone();
+    let catalog = catalog_state.catalog.clone();
+    let scan_state_clone = scan_state.current_scan.clone();
+
+    let res = tauri::async_runtime::spawn_blocking(move || {
+        catalog.sync_archive_delta(
+            &dir,
+            scan_id,
+            &controller,
+            move |progress| {
+                let _ = app_clone.emit("archive_scan_progress", progress);
+            },
+        )
+        .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?;
+
+    {
+        let mut lock = scan_state_clone.lock().unwrap();
+        if let Some(ref active) = *lock {
+            if active.id == scan_id {
+                *lock = None;
+            }
+        }
+    }
+
+    res
+}
+
+#[tauri::command]
+pub async fn rebuild_archive_catalog(
+    path: String,
+    catalog_state: tauri::State<'_, ArchiveCatalogState>,
+) -> Result<(), String> {
+    let catalog = catalog_state.catalog.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        catalog.rebuild_archive_catalog(&path).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 pub fn normalize_path_str(p: &Path) -> String {
@@ -805,9 +938,12 @@ pub async fn delete_files_impl(
         }
     }
 
-    // Automatically prune successfully deleted files from all collections
+    // Automatically prune successfully deleted files from all collections and archive catalog
     if !deleted.is_empty() {
         if let Some(app) = app {
+            if let Ok(catalog) = get_archive_catalog(app) {
+                let _ = catalog.delete_files(&deleted);
+            }
             if let Ok(app_dir) = app.path().app_data_dir() {
                 if let Ok(mut tree) = core_load_collections(&app_dir) {
                     if core_prune_paths_from_all_collections(&mut tree, &deleted) {
@@ -879,6 +1015,9 @@ pub async fn delete_folder_impl(
                 if core_prune_folder_from_all_collections(&mut tree, &path) {
                     let _ = core_save_collections(tree, &app_dir);
                 }
+            }
+            if let Ok(catalog) = get_archive_catalog(app) {
+                let _ = catalog.delete_folders(&[path.clone()]);
             }
         }
     }

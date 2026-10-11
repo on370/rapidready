@@ -336,5 +336,20 @@
     "exporting": "Exporting...",
     "startExport": "Start Export",
     "exportSuccess": "{{count}} photos successfully exported!"
+  },
+  "scanMenu": {
+    "refreshFolder": "Refresh current folder",
+    "syncArchive": "Sync entire archive",
+    "rebuildCatalog": "Completely rebuild archive index & cache...",
+    "options": "Scan options",
+    "rebuildConfirmTitle": "Rebuild Archive Index & Cache",
+    "rebuildConfirmMessage": "Do you really want to completely re-index all {{count}} photos on this storage location? This process may take a considerable amount of time on slow media.",
+    "rebuildConfirmBtn": "Rebuild",
+    "cancel": "Cancel"
+  },
+  "initialScan": {
+    "badge": "One-time initial indexing",
+    "tooltip": "RapidReady is creating your local high-speed index. Once completed, this archive will open instantly from cached data in the future, even when the NAS is asleep.",
+    "subline": "Future launches will open this archive instantly from cached data."
   }
 }

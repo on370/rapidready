@@ -1,3 +1,5 @@
+import { useState, useEffect } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { Loader2, Pause, Play, X, RotateCw, Folder, Check, Zap, HelpCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLibraryStore } from '../../../../stores/libraryStore';
@@ -93,11 +95,33 @@ export function ArchiveScanBanner({ onRestartScan }: ArchiveScanBannerProps) {
   const images = useLibraryStore((s) => s.images);
   const rootPath = useLibraryStore((s) => s.rootPath);
   const viewMode = useLibraryStore((s) => s.viewMode);
+  const isInitialScan = useLibraryStore((s) => s.isInitialScan);
+  const scanStartTime = useLibraryStore((s) => s.scanStartTime);
   const pauseScan = useLibraryStore((s) => s.pauseScan);
   const resumeScan = useLibraryStore((s) => s.resumeScan);
   const cancelScan = useLibraryStore((s) => s.cancelScan);
   const setScanState = useLibraryStore((s) => s.setScanState);
   const loadArchive = useLibraryStore((s) => s.loadArchive);
+
+  const [isNetworkPath, setIsNetworkPath] = useState(false);
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    if (rootPath) {
+      invoke<boolean>('is_network_path', { path: rootPath })
+        .then(setIsNetworkPath)
+        .catch(() => setIsNetworkPath(false));
+    } else {
+      setIsNetworkPath(false);
+    }
+  }, [rootPath]);
+
+  useEffect(() => {
+    if (scanState === 'scanning' && scanStartTime) {
+      const interval = setInterval(() => setNow(Date.now()), 1000);
+      return () => clearInterval(interval);
+    }
+  }, [scanState, scanStartTime]);
 
   const throughput = useThroughput(
     scanProgress?.total_bytes ?? 0,
@@ -114,6 +138,15 @@ export function ArchiveScanBanner({ onRestartScan }: ArchiveScanBannerProps) {
   const currentDir = scanProgress?.current_dir || '';
   const shortDir = currentDir ? currentDir.split('/').slice(-2).join('/') : '';
 
+  const scanElapsedSec = scanStartTime ? (now - scanStartTime) / 1000 : 0;
+  const meetsGracePeriod = scanElapsedSec >= 3;
+  const meetsRelevanceCriteria =
+    isNetworkPath ||
+    filesCount > 2000 ||
+    (throughput.bytesPerSecond > 0 && throughput.bytesPerSecond < 25 * 1024 * 1024);
+
+  const showInitialBadge = isInitialScan && meetsGracePeriod && meetsRelevanceCriteria;
+
   const handleRestart = onRestartScan || (() => {
     if (rootPath) {
       loadArchive(rootPath, true);
@@ -123,8 +156,39 @@ export function ArchiveScanBanner({ onRestartScan }: ArchiveScanBannerProps) {
   const bottomClass = viewMode === 'loupe' ? 'bottom-28' : 'bottom-4';
 
   return (
-    <div className={`absolute ${bottomClass} left-4 right-4 z-40 flex justify-center pointer-events-none animate-in fade-in slide-in-from-bottom-2 duration-150`}>
-      <div className="pointer-events-auto flex items-center h-10 w-[640px] max-w-full px-3.5 rounded-2xl bg-[#18181b]/95 backdrop-blur-md border border-white/10 shadow-2xl text-xs select-none">
+    <div className={`absolute ${bottomClass} left-4 right-4 z-40 flex flex-col items-center gap-1.5 pointer-events-none animate-in fade-in slide-in-from-bottom-2 duration-150`}>
+      {/* Top one-line card: Initial Scan Info (only shown during initial scan meeting criteria) */}
+      {scanState === 'scanning' && showInitialBadge && (
+        <div className="pointer-events-auto h-7 sm:h-8 w-[680px] max-w-full px-3 rounded-xl bg-[#18181b]/95 backdrop-blur-md border border-white/10 shadow-xl text-xs select-none flex items-center gap-2.5">
+          <div className="relative group/initial flex items-center flex-shrink-0">
+            <div className="bg-amber-400/10 text-amber-300 border border-amber-400/25 rounded-full px-2 py-0.5 text-[10px] font-medium flex items-center gap-1 cursor-help whitespace-nowrap shadow-sm">
+              <Zap className="w-2.5 h-2.5 text-amber-400 flex-shrink-0" />
+              <span>{t('initialScan.badge', '⚡ Einmalige Erstindizierung')}</span>
+            </div>
+
+            {/* Interactive Tooltip on hover */}
+            <div className="absolute bottom-full mb-2 left-0 opacity-0 pointer-events-none group-hover/initial:opacity-100 group-hover/initial:pointer-events-auto transition-all duration-150 z-50">
+              <div className="bg-[#18181b]/95 backdrop-blur-md border border-white/15 shadow-2xl rounded-xl p-2.5 w-72 text-txt-primary select-none flex flex-col gap-1 text-[11px] leading-relaxed">
+                <div className="flex items-center gap-1.5 font-semibold text-amber-300 border-b border-white/10 pb-1">
+                  <Zap className="w-3.5 h-3.5 text-amber-400" />
+                  <span>{t('initialScan.badge', 'Einmalige Erstindizierung')}</span>
+                </div>
+                <p className="text-txt-secondary text-[11px] pt-0.5">
+                  {t('initialScan.tooltip', 'RapidReady erstellt deinen lokalen High-Speed-Index. Sobald dieser einmalig abgeschlossen ist, öffnet sich dieses Archiv zukünftig selbst bei schlafendem NAS sofort aus den zwischengespeicherten Daten.')}
+                </p>
+              </div>
+              <div className="w-2 h-2 bg-[#18181b] border-b border-r border-white/15 rotate-45 ml-4 -mt-1" />
+            </div>
+          </div>
+
+          <span className="text-txt-tertiary text-[11px] truncate">
+            {t('initialScan.subline', 'Zukünftige Starts öffnen dieses Archiv sofort aus den zwischengespeicherten Daten.')}
+          </span>
+        </div>
+      )}
+
+      {/* Main scan status banner */}
+      <div className="pointer-events-auto flex items-center h-10 w-[680px] max-w-full px-3.5 rounded-2xl bg-[#18181b]/95 backdrop-blur-md border border-white/10 shadow-2xl text-xs select-none">
         {scanState === 'scanning' && (
           <>
             <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
@@ -212,7 +276,7 @@ export function ArchiveScanBanner({ onRestartScan }: ArchiveScanBannerProps) {
             <div className="flex items-center gap-1.5 flex-shrink-0 border-l border-white/10 pl-2.5">
               <button
                 onClick={handleRestart}
-                className="h-7 flex items-center gap-1 px-2.5 rounded-lg bg-white/5 hover:bg-white/10 text-accent transition-colors cursor-pointer text-[11px] flex-shrink-0 whitespace-nowrap"
+                className="h-7 flex items-center gap-1.5 px-2.5 rounded-lg bg-accent/20 hover:bg-accent/30 text-accent font-medium transition-colors cursor-pointer text-[11px] flex-shrink-0 whitespace-nowrap shadow-sm"
               >
                 <RotateCw className="w-3 h-3 flex-shrink-0" />
                 <span>{t('loading.continueRest', 'Restliche Fotos laden')}</span>

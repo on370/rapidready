@@ -112,11 +112,15 @@ interface LibraryStore {
   activeScanId: number | null;
   scanState: 'idle' | 'connecting' | 'scanning' | 'paused' | 'stopped' | 'completed';
   scanProgress: ArchiveScanProgress | null;
+  isInitialScan: boolean;
+  scanStartTime: number | null;
   appendImageChunk: (chunk: LibraryImage[], dirs?: string[]) => void;
   addImages: (newImages: LibraryImage[], newDirs?: string[]) => void;
   removeImages: (paths: string[]) => void;
   reconcileFolder: (folderPath?: string) => Promise<void>;
   reconcileActiveFolder: () => Promise<void>;
+  reconcileArchiveDelta: (targetPath?: string, isBackground?: boolean) => Promise<void>;
+  rebuildArchiveCatalog: (targetPath?: string) => Promise<void>;
   setScanState: (state: 'idle' | 'connecting' | 'scanning' | 'paused' | 'stopped' | 'completed') => void;
   setScanProgress: (progress: ArchiveScanProgress | null) => void;
   pauseScan: () => void;
@@ -228,6 +232,8 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
   activeScanId: null,
   scanState: 'idle',
   scanProgress: null,
+  isInitialScan: false,
+  scanStartTime: null,
   discoveredFolders: new Set<string>(),
   addDiscoveredFolders: (folders) => set((state) => {
     if (!folders || folders.length === 0) return state;
@@ -447,10 +453,149 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
       };
     });
   },
+  reconcileArchiveDelta: async (targetPath?: string, isBackground = false) => {
+    const root = targetPath || get().rootPath;
+    if (!root) return;
+
+    const scanId = nextScanCounter++;
+    if (!isBackground) {
+      set({
+        activeScanId: scanId,
+        scanState: 'scanning',
+        scanProgress: {
+          scan_id: scanId,
+          files_found: get().images.length,
+          total_bytes: 0,
+          current_dir: root,
+          is_paused: false,
+          is_cancelled: false,
+          is_complete: false,
+        },
+      });
+    }
+
+    try {
+      const delta = await invoke<{
+        root_path: string;
+        added: LibraryImage[];
+        updated: LibraryImage[];
+        removed: string[];
+        new_dirs: string[];
+      }>('reconcile_archive_delta', {
+        path: root,
+        scanId,
+      });
+
+      if (delta) {
+        if ((delta.added && delta.added.length > 0) || (delta.new_dirs && delta.new_dirs.length > 0)) {
+          get().addImages(delta.added || [], delta.new_dirs || []);
+        }
+        if (delta.removed && delta.removed.length > 0) {
+          get().removeImages(delta.removed);
+        }
+        if (delta.updated && delta.updated.length > 0) {
+          for (const item of delta.updated) {
+            get().updateImageMetadata(item.path, item);
+          }
+        }
+      }
+
+      if (!isBackground) {
+        set({
+          scanState: 'completed',
+          scanProgress: get().scanProgress ? {
+            ...get().scanProgress!,
+            is_complete: true,
+          } : null,
+        });
+      }
+    } catch (err) {
+      console.error('Error reconciling archive delta:', err);
+      if (!isBackground) {
+        set({ scanState: 'idle' });
+      }
+    }
+  },
+  rebuildArchiveCatalog: async (targetPath?: string) => {
+    const root = targetPath || get().rootPath;
+    if (!root) return;
+    try {
+      await invoke('rebuild_archive_catalog', { path: root });
+      set({
+        images: [],
+        imageIndexMap: new Map(),
+        discoveredFolders: new Set([normalizeSlash(root)]),
+        isInitialScan: true,
+        scanStartTime: Date.now(),
+      });
+      await get().loadArchive(root, false);
+    } catch (err) {
+      console.error('Error rebuilding archive catalog:', err);
+    }
+  },
   loadArchive: async (path: string, preserveExisting = false) => {
     const scanId = nextScanCounter++;
     const currentImages = useLibraryStore.getState().images;
     const isContinuing = preserveExisting && currentImages.length > 0;
+
+    if (!isContinuing) {
+      // Phase 1 (< 30 ms): Try loading cached metadata from local SQLite archive_catalog.db
+      try {
+        const cached = await invoke<{
+          files: LibraryImage[];
+          directories: string[];
+          is_fully_indexed?: boolean;
+        }>('get_cached_archive_files', { path });
+
+        if (cached && cached.files && cached.files.length > 0) {
+          const sorted = cached.files.slice().sort((a, b) => a.path.localeCompare(b.path));
+          const imageIndexMap = new Map<string, number>();
+          for (let i = 0; i < sorted.length; i++) {
+            imageIndexMap.set(normalizePath(sorted[i].path), i);
+          }
+          const initialFolders = new Set<string>();
+          initialFolders.add(normalizeSlash(path));
+          const { next: nextFolders } = mergeFoldersDeduped(initialFolders, cached.directories || []);
+
+          const isFullyIndexed = cached.is_fully_indexed !== false;
+          const initialBytes = sorted.reduce((sum, img) => sum + (img.size || 0), 0);
+
+          set({
+            activeScanId: scanId,
+            rootPath: path,
+            activeFolderPath: path,
+            selectedFolderPaths: path ? new Set([normalizePath(path)]) : new Set(),
+            discoveredFolders: nextFolders,
+            viewMode: 'grid',
+            isLoading: false,
+            scanState: isFullyIndexed ? 'idle' : 'stopped',
+            isInitialScan: !isFullyIndexed,
+            scanStartTime: null,
+            scanProgress: isFullyIndexed ? null : {
+              scan_id: scanId,
+              files_found: sorted.length,
+              total_bytes: initialBytes,
+              current_dir: path,
+              is_paused: false,
+              is_cancelled: true,
+              is_complete: false,
+            },
+            images: sorted,
+            imageIndexMap,
+          });
+
+          if (isFullyIndexed) {
+            // Phase 2: Start background delta-sync silently without blocking UI
+            get().reconcileArchiveDelta(path, true);
+          }
+          return;
+        }
+      } catch (e) {
+        console.warn("Failed to load cached archive metadata, falling back to full scan:", e);
+      }
+    }
+
+    const isInitial = !isContinuing;
     const existingPaths = isContinuing ? currentImages.map(i => i.path) : null;
     const initialBytes = isContinuing ? currentImages.reduce((sum, img) => sum + (img.size || 0), 0) : 0;
 
@@ -462,6 +607,8 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
       discoveredFolders: isContinuing ? s.discoveredFolders : (path ? new Set([normalizeSlash(path)]) : new Set()),
       viewMode: 'grid',
       isLoading: true,
+      isInitialScan: isInitial,
+      scanStartTime: isInitial ? Date.now() : null,
       scanState: isContinuing ? 'scanning' : 'connecting',
       scanProgress: isContinuing ? {
         scan_id: scanId,

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useSettingsStore } from "../../../stores/settingsStore";
-import { Bookmark, ChevronDown, Plus, HardDrive, Folder, ChevronRight, FolderOpen, Sparkles, Loader2, Camera, RefreshCw, Images } from "lucide-react";
+import { Bookmark, ChevronDown, Plus, HardDrive, Folder, ChevronRight, FolderOpen, Sparkles, Loader2, Camera, RefreshCw, Images, Zap, AlertTriangle } from "lucide-react";
 import { open, ask } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
 import { useLibraryStore, LibraryImage } from "../../../stores/libraryStore";
@@ -335,7 +335,28 @@ export function LibraryLeftSidebar() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [collectionsOpen, setCollectionsOpen] = useState(true);
   const [libraryOpen, setLibraryOpen] = useState(true);
+  const [scanMenuOpen, setScanMenuOpen] = useState(false);
+  const [showRebuildConfirm, setShowRebuildConfirm] = useState(false);
   const collectionsTreeRef = useRef<CollectionsTreeRef>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+      if (e.key === 'F5') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          useLibraryStore.getState().reconcileArchiveDelta();
+        } else {
+          useLibraryStore.getState().reconcileActiveFolder();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
   
   const rootPath = useLibraryStore((s) => s.rootPath);
   const activeFolderPath = useLibraryStore((s) => s.activeFolderPath);
@@ -1256,7 +1277,7 @@ export function LibraryLeftSidebar() {
       {/* Section 2: Library */}
       <div data-tour="library-folder-tree" className="flex flex-col flex-1 min-h-0">
         <div 
-          className="px-4 py-3 border-b border-app-border flex items-center justify-between cursor-pointer hover:bg-app-hover/50 transition-colors flex-shrink-0 select-none" 
+          className="relative px-4 py-3 border-b border-app-border flex items-center justify-between cursor-pointer hover:bg-app-hover/50 transition-colors flex-shrink-0 select-none" 
           onClick={() => setLibraryOpen(!libraryOpen)}
         >
           <div className="flex items-center gap-2">
@@ -1267,16 +1288,91 @@ export function LibraryLeftSidebar() {
               {isLoading && <Loader2 className="w-3 h-3 text-accent animate-spin ml-1" />}
             </h2>
           </div>
-          <button
-            onClick={(e) => {
+          <div 
+            className="flex items-center bg-white/5 hover:bg-white/10 rounded border border-white/10 transition-colors"
+            onClick={(e) => e.stopPropagation()}
+            onContextMenu={(e) => {
+              e.preventDefault();
               e.stopPropagation();
-              useLibraryStore.getState().reconcileActiveFolder();
+              setScanMenuOpen(true);
             }}
-            className="p-1 text-txt-tertiary hover:text-txt-primary hover:bg-white/10 rounded transition-colors cursor-pointer"
-            title={t("sidebar.refreshFolder", "Ordner aktualisieren (F5)")}
           >
-            <RefreshCw className="w-3.5 h-3.5" />
-          </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                useLibraryStore.getState().reconcileActiveFolder();
+              }}
+              className="p-1 text-txt-tertiary hover:text-txt-primary transition-colors cursor-pointer"
+              title={t("scanMenu.refreshFolder", "Aktuellen Ordner aktualisieren (F5)")}
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
+            <div className="w-[1px] h-3 bg-white/10" />
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setScanMenuOpen((prev) => !prev);
+              }}
+              className="px-0.5 py-1 text-txt-tertiary hover:text-txt-primary transition-colors cursor-pointer"
+              title={t("scanMenu.options", "Scan-Optionen")}
+            >
+              <ChevronDown className={`w-3 h-3 transition-transform ${scanMenuOpen ? "rotate-180" : ""}`} />
+            </button>
+          </div>
+
+          {scanMenuOpen && (
+            <>
+              <div className="fixed inset-0 z-50 cursor-default" onClick={(e) => { e.stopPropagation(); setScanMenuOpen(false); }} />
+              <div 
+                className="absolute right-3 top-full mt-1 w-72 max-w-[calc(100%-1.5rem)] bg-[#18181b]/95 backdrop-blur-md border border-white/15 rounded-xl shadow-2xl z-50 overflow-hidden text-xs py-1 animate-in fade-in zoom-in-95 duration-100 select-none text-txt-primary"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Typ A */}
+                <button
+                  className="w-full text-left px-3 py-2 hover:bg-white/10 text-txt-secondary hover:text-txt-primary transition-colors flex items-center justify-between group cursor-pointer"
+                  onClick={() => {
+                    setScanMenuOpen(false);
+                    useLibraryStore.getState().reconcileActiveFolder();
+                  }}
+                >
+                  <span className="flex items-center gap-2 min-w-0">
+                    <RefreshCw className="w-3.5 h-3.5 text-txt-tertiary group-hover:text-accent flex-shrink-0" />
+                    <span className="truncate">{t("scanMenu.refreshFolder", "Aktuellen Ordner aktualisieren")}</span>
+                  </span>
+                  <kbd className="text-[10px] font-mono text-txt-tertiary bg-white/5 border border-white/10 px-1 rounded ml-2 flex-shrink-0">F5</kbd>
+                </button>
+
+                {/* Typ B */}
+                <button
+                  className="w-full text-left px-3 py-2 hover:bg-white/10 text-txt-secondary hover:text-txt-primary transition-colors flex items-center justify-between group cursor-pointer"
+                  onClick={() => {
+                    setScanMenuOpen(false);
+                    useLibraryStore.getState().reconcileArchiveDelta();
+                  }}
+                >
+                  <span className="flex items-center gap-2 min-w-0">
+                    <Zap className="w-3.5 h-3.5 text-accent flex-shrink-0" />
+                    <span className="truncate">{t("scanMenu.syncArchive", "Gesamtes Archiv synchronisieren")}</span>
+                  </span>
+                  <kbd className="text-[10px] font-mono text-txt-tertiary bg-white/5 border border-white/10 px-1 rounded ml-2 flex-shrink-0">Shift+F5</kbd>
+                </button>
+
+                <div className="h-[1px] bg-white/10 my-1" />
+
+                {/* Typ C */}
+                <button
+                  className="w-full text-left px-3 py-2 hover:bg-danger/15 text-txt-secondary hover:text-danger transition-colors flex items-start gap-2 group cursor-pointer"
+                  onClick={() => {
+                    setScanMenuOpen(false);
+                    setShowRebuildConfirm(true);
+                  }}
+                >
+                  <AlertTriangle className="w-3.5 h-3.5 text-danger flex-shrink-0 mt-0.5" />
+                  <span className="leading-snug break-words">{t("scanMenu.rebuildCatalog", "Archiv-Index & Cache vollständig neu aufbauen...")}</span>
+                </button>
+              </div>
+            </>
+          )}
         </div>
         
         <div className={`flex flex-col flex-1 min-h-0 ${!libraryOpen ? "hidden" : ""}`}>
@@ -1507,6 +1603,53 @@ export function LibraryLeftSidebar() {
           onDiscardCollections={handleDiscardTempCollections}
           onCancel={handleCancelTempDialog}
         />
+      )}
+
+      {/* Rebuild Catalog Confirmation Modal (Typ C) */}
+      {showRebuildConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
+          <div 
+            className="bg-[#18181b] border border-white/15 rounded-2xl p-5 max-w-md w-full shadow-2xl flex flex-col gap-4 text-left select-none animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3.5">
+              <div className="p-2.5 rounded-xl bg-danger/15 text-danger border border-danger/25 flex-shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-sm font-semibold text-white">
+                  {t("scanMenu.rebuildConfirmTitle", "Archiv-Index & Cache neu aufbauen")}
+                </h3>
+                <p className="text-xs text-txt-secondary mt-1.5 leading-relaxed">
+                  {t("scanMenu.rebuildConfirmMessage", {
+                    count: imageCount.toLocaleString(),
+                    defaultValue: `Möchtest du alle ${imageCount.toLocaleString()} Fotos auf diesem Speicherort wirklich vollständig neu einlesen? Dieser Vorgang kann auf langsamen Medien längere Zeit in Anspruch nehmen.`
+                  })}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-white/10">
+              <button
+                type="button"
+                onClick={() => setShowRebuildConfirm(false)}
+                className="px-3.5 py-1.5 text-xs font-medium text-txt-secondary hover:text-white bg-white/5 hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
+              >
+                {t("scanMenu.cancel", "Abbrechen")}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRebuildConfirm(false);
+                  useLibraryStore.getState().rebuildArchiveCatalog();
+                }}
+                className="px-3.5 py-1.5 text-xs font-semibold text-white bg-danger hover:bg-danger/90 rounded-lg shadow-sm transition-colors cursor-pointer"
+              >
+                {t("scanMenu.rebuildConfirmBtn", "Neu aufbauen")}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
