@@ -3,13 +3,36 @@
 pub mod commands;
 pub mod menu;
 
-use std::path::Path;
 use tauri::http::Response;
 use tauri::Emitter;
 
 #[cfg(target_os = "macos")]
 extern "C" {
     fn set_macos_dock_icon(bytes: *const u8, length: usize);
+}
+
+fn extract_query_param<T: std::str::FromStr>(query: &str, full_str: &str, key: &str) -> Option<T> {
+    if !query.is_empty() {
+        for part in query.split('&') {
+            if let Some(val) = part.strip_prefix(key).and_then(|p| p.strip_prefix('=')) {
+                if let Ok(v) = val.parse::<T>() {
+                    return Some(v);
+                }
+            }
+        }
+    }
+    let needle = format!("{}=", key);
+    if let Some(idx) = full_str.find(&needle) {
+        let sub = &full_str[idx + needle.len()..];
+        let val_str: String = sub
+            .chars()
+            .take_while(|c| *c != '&' && *c != '%' && *c != '?' && *c != '#' && !c.is_whitespace())
+            .collect();
+        if let Ok(v) = val_str.parse::<T>() {
+            return Some(v);
+        }
+    }
+    None
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -68,172 +91,173 @@ pub fn run() {
             Ok(())
         })
         .register_asynchronous_uri_scheme_protocol("rr-image", |_app, request, responder| {
-            tauri::async_runtime::spawn_blocking(move || {
+            tauri::async_runtime::spawn(async move {
                 let uri_obj = request.uri();
-            let uri_path = uri_obj.path();
-            let query = uri_obj.query().unwrap_or("");
-            
-            let is_fullres = query.contains("fullres=true") || uri_path.ends_with("%3Ffullres=true") || uri_path.ends_with("?fullres=true");
-            
-            let orient_param = query
-                .split('&')
-                .find(|p| p.starts_with("orient="))
-                .and_then(|p| p.strip_prefix("orient="))
-                .and_then(|v| v.parse::<u32>().ok())
-                .or_else(|| {
-                    if let Some(idx) = uri_path.find("orient=") {
-                        let sub = &uri_path[idx + 7..];
-                        let digits: String = sub.chars().take_while(|c| c.is_ascii_digit()).collect();
-                        digits.parse::<u32>().ok()
-                    } else {
-                        None
-                    }
-                });
-
-            let size_param = query
-                .split('&')
-                .find(|p| p.starts_with("size="))
-                .and_then(|p| p.strip_prefix("size="))
-                .and_then(|v| v.parse::<u64>().ok());
-
-            let mtime_param = query
-                .split('&')
-                .find(|p| p.starts_with("mtime="))
-                .and_then(|p| p.strip_prefix("mtime="))
-                .and_then(|v| v.parse::<i64>().ok());
-
-            let path_str = uri_path;
-            
-            // Clean up path
-            let path_str = if path_str.starts_with("rr-image://localhost") {
-                path_str.strip_prefix("rr-image://localhost").unwrap_or(path_str)
-            } else if path_str.starts_with("rr-image://") {
-                path_str.strip_prefix("rr-image://").unwrap_or(path_str)
-            } else {
-                path_str
-            };
-            
-            // Strip any remaining query string if it was URL encoded in the path
-            let path_str = if let Some(idx) = path_str.find("%3F") {
-                &path_str[..idx]
-            } else if let Some(idx) = path_str.find('?') {
-                &path_str[..idx]
-            } else {
-                path_str
-            };
-            
-            #[allow(unused_mut)]
-            let mut decoded_path = match urlencoding::decode(path_str) {
-                Ok(p) => p.into_owned(),
-                Err(_) => path_str.to_string(),
-            };
-
-            #[cfg(target_os = "windows")]
-            {
-                // Normalize all forward slashes to backslashes first
-                decoded_path = decoded_path.replace('/', "\\");
-
-                // 1. Local drive letter paths: convert "\C:\Photos\..." or "/C:/Photos/..." to "C:\Photos\..."
-                if decoded_path.starts_with('\\') && decoded_path.chars().nth(2) == Some(':') {
-                    decoded_path.remove(0);
-                }
-                // 2. Windows UNC network share paths (e.g. NAS "\\server\share\..."):
-                // HTTP request paths prepend a slash, which after slash replacement becomes "\\\server\share\...".
-                // Strip redundant leading backslashes so exactly two remain ("\\server\share\...").
-                else if decoded_path.starts_with(r"\\\") {
-                    while decoded_path.starts_with(r"\\\") {
-                        decoded_path.remove(0);
-                    }
-                }
-            }
-
-            let path = Path::new(&decoded_path);
-            
-            if is_fullres {
-                let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+                let uri_path = uri_obj.path();
+                let query = uri_obj.query().unwrap_or("");
+                let full_uri_str = uri_obj.to_string();
                 
-                if ["cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2", "pef", "3fr", "x3f", "nrw", "heic", "heif", "hif", "mp4", "mov", "m4v", "avi"].contains(&ext.as_str()) {
-                    match rapidready_core::thumbnail::get_max_preview_jpeg_with_orient_and_hints(path, orient_param, size_param, mtime_param) {
-                        Ok(bytes) => {
-                            let res = Response::builder()
-                                .header("Content-Type", "image/jpeg")
-                                .header("Access-Control-Allow-Origin", "*")
-                                .header("Cache-Control", "public, max-age=86400, immutable")
-                                .body(bytes)
-                                .unwrap();
-                            responder.respond(res);
-                            return;
-                        }
-                        Err(_) => {}
-                    }
+                let is_fullres = query.contains("fullres=true")
+                    || uri_path.ends_with("%3Ffullres=true")
+                    || uri_path.ends_with("?fullres=true")
+                    || full_uri_str.contains("fullres=true");
+                
+                let orient_param: Option<u32> = extract_query_param(query, &full_uri_str, "orient");
+                let size_param: Option<u64> = extract_query_param(query, &full_uri_str, "size");
+                let mtime_param: Option<i64> = extract_query_param(query, &full_uri_str, "mtime");
+                let scale: u32 = extract_query_param(query, &full_uri_str, "scale").unwrap_or(1);
+
+                let path_str = uri_path;
+                let path_str = if path_str.starts_with("rr-image://localhost") {
+                    path_str.strip_prefix("rr-image://localhost").unwrap_or(path_str)
+                } else if path_str.starts_with("rr-image://") {
+                    path_str.strip_prefix("rr-image://").unwrap_or(path_str)
                 } else {
-                    let sidecar_state = rapidready_core::culling::read_sidecar(path);
-                    let eff_orient = orient_param.or(sidecar_state.orientation);
-                    if let Ok(bytes) = std::fs::read(path) {
-                        let content_type = if ext == "png" { "image/png" } else { "image/jpeg" };
-                        let final_bytes = if (ext == "jpg" || ext == "jpeg") && eff_orient.is_some() && eff_orient != Some(1) {
-                            rapidready_core::thumbnail::inject_orientation_into_jpeg(&bytes, eff_orient.unwrap() as u16)
-                        } else {
-                            bytes
-                        };
+                    path_str
+                };
+                
+                let path_str = if let Some(idx) = path_str.find("%3F") {
+                    &path_str[..idx]
+                } else if let Some(idx) = path_str.find('?') {
+                    &path_str[..idx]
+                } else {
+                    path_str
+                };
+                
+                #[allow(unused_mut)]
+                let mut decoded_path = match urlencoding::decode(path_str) {
+                    Ok(p) => p.into_owned(),
+                    Err(_) => path_str.to_string(),
+                };
+
+                #[cfg(target_os = "windows")]
+                {
+                    decoded_path = decoded_path.replace('/', "\\");
+                    if decoded_path.starts_with('\\') && decoded_path.chars().nth(2) == Some(':') {
+                        decoded_path.remove(0);
+                    } else if decoded_path.starts_with(r"\\\") {
+                        while decoded_path.starts_with(r"\\\") {
+                            decoded_path.remove(0);
+                        }
+                    }
+                }
+
+                let path = std::path::PathBuf::from(decoded_path);
+
+                // FAST PATH: If not fullres, check L1 RAM cache and L2 local NVMe chunk cache.
+                // Resolves in < 0.05 ms without spawning blocking threads or touching SMB/NAS!
+                if !is_fullres {
+                    if let Some(bytes) = rapidready_core::thumbnail::get_cached_preview_jpeg_fast(
+                        &path,
+                        scale,
+                        orient_param,
+                        size_param,
+                        mtime_param,
+                    ) {
                         let res = Response::builder()
-                            .header("Content-Type", content_type)
+                            .header("Content-Type", "image/jpeg")
                             .header("Access-Control-Allow-Origin", "*")
                             .header("Cache-Control", "public, max-age=86400, immutable")
-                            .body(final_bytes)
+                            .body(bytes)
                             .unwrap();
                         responder.respond(res);
                         return;
                     }
                 }
-            }
-            
-            let scale = if query.contains("scale=0") {
-                0
-            } else if query.contains("scale=2") {
-                2
-            } else {
-                1
-            };
-            let res = match rapidready_core::thumbnail::get_preview_jpeg_with_orient_and_hints(path, scale, orient_param, size_param, mtime_param) {
-                Ok(bytes) => {
-                    Response::builder()
-                        .header("Content-Type", "image/jpeg")
-                        .header("Access-Control-Allow-Origin", "*")
-                        .header("Cache-Control", "public, max-age=86400, immutable")
-                        .body(bytes)
-                        .unwrap()
-                }
-                Err(_) => {
-                    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
-                    if ["jpg", "jpeg", "png", "heic", "heif", "hif", "webp", "avif"].contains(&ext.as_str()) {
-                        if let Ok(bytes) = std::fs::read(path) {
-                            let content_type = if ext == "png" {
-                                "image/png"
-                            } else if ext == "webp" {
-                                "image/webp"
-                            } else if ext == "avif" {
-                                "image/avif"
-                            } else if ext == "heic" || ext == "heif" || ext == "hif" {
-                                "image/heic"
-                            } else {
-                                "image/jpeg"
-                            };
+
+                // SLOW PATH: Cache miss on NAS or fullres decode.
+                // Limit concurrent active SMB decodes to max 8 to prevent thread-pool exhaustion
+                // and WebKit IPC stall.
+                static SLOW_DECODE_SEMAPHORE: std::sync::OnceLock<tokio::sync::Semaphore> = std::sync::OnceLock::new();
+                let sem = SLOW_DECODE_SEMAPHORE.get_or_init(|| tokio::sync::Semaphore::new(8));
+
+                let permit = match sem.acquire().await {
+                    Ok(p) => p,
+                    Err(_) => {
+                        responder.respond(Response::builder().status(500).body(Vec::new()).unwrap());
+                        return;
+                    }
+                };
+
+                let res = tauri::async_runtime::spawn_blocking(move || {
+                    let _permit = permit;
+                    let path = &path;
+                    if is_fullres {
+                        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+                        
+                        if ["cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2", "pef", "3fr", "x3f", "nrw", "heic", "heif", "hif", "mp4", "mov", "m4v", "avi"].contains(&ext.as_str()) {
+                            match rapidready_core::thumbnail::get_max_preview_jpeg_with_orient_and_hints(path, orient_param, size_param, mtime_param) {
+                                Ok(bytes) => {
+                                    return Response::builder()
+                                        .header("Content-Type", "image/jpeg")
+                                        .header("Access-Control-Allow-Origin", "*")
+                                        .header("Cache-Control", "public, max-age=86400, immutable")
+                                        .body(bytes)
+                                        .unwrap();
+                                }
+                                Err(_) => {}
+                            }
+                        } else {
+                            let sidecar_state = rapidready_core::culling::read_sidecar(path);
+                            let eff_orient = orient_param.or(sidecar_state.orientation);
+                            if let Ok(bytes) = std::fs::read(path) {
+                                let content_type = if ext == "png" { "image/png" } else { "image/jpeg" };
+                                let final_bytes = if (ext == "jpg" || ext == "jpeg") && eff_orient.is_some() && eff_orient != Some(1) {
+                                    rapidready_core::thumbnail::inject_orientation_into_jpeg(&bytes, eff_orient.unwrap() as u16)
+                                } else {
+                                    bytes
+                                };
+                                return Response::builder()
+                                    .header("Content-Type", content_type)
+                                    .header("Access-Control-Allow-Origin", "*")
+                                    .header("Cache-Control", "public, max-age=86400, immutable")
+                                    .body(final_bytes)
+                                    .unwrap();
+                            }
+                        }
+                    }
+                    
+                    match rapidready_core::thumbnail::get_preview_jpeg_with_orient_and_hints(path, scale, orient_param, size_param, mtime_param) {
+                        Ok(bytes) => {
                             Response::builder()
-                                .header("Content-Type", content_type)
+                                .header("Content-Type", "image/jpeg")
                                 .header("Access-Control-Allow-Origin", "*")
                                 .header("Cache-Control", "public, max-age=86400, immutable")
                                 .body(bytes)
                                 .unwrap()
-                        } else {
-                            Response::builder().status(404).body(Vec::new()).unwrap()
                         }
-                    } else {
-                        Response::builder().status(404).body(Vec::new()).unwrap()
+                        Err(_) => {
+                            let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+                            if ["jpg", "jpeg", "png", "heic", "heif", "hif", "webp", "avif"].contains(&ext.as_str()) {
+                                if let Ok(bytes) = std::fs::read(path) {
+                                    let content_type = if ext == "png" {
+                                        "image/png"
+                                    } else if ext == "webp" {
+                                        "image/webp"
+                                    } else if ext == "avif" {
+                                        "image/avif"
+                                    } else if ext == "heic" || ext == "heif" || ext == "hif" {
+                                        "image/heic"
+                                    } else {
+                                        "image/jpeg"
+                                    };
+                                    Response::builder()
+                                        .header("Content-Type", content_type)
+                                        .header("Access-Control-Allow-Origin", "*")
+                                        .header("Cache-Control", "public, max-age=86400, immutable")
+                                        .body(bytes)
+                                        .unwrap()
+                                } else {
+                                    Response::builder().status(404).body(Vec::new()).unwrap()
+                                }
+                            } else {
+                                Response::builder().status(404).body(Vec::new()).unwrap()
+                            }
+                        }
                     }
-                }
-            };
-            responder.respond(res);
+                }).await.unwrap_or_else(|_| Response::builder().status(500).body(Vec::new()).unwrap());
+
+                responder.respond(res);
             });
         })
         .invoke_handler(tauri::generate_handler![
@@ -291,7 +315,10 @@ pub fn run() {
             commands::reconcile_archive_delta,
             commands::rebuild_archive_catalog,
             commands::get_disk_cache_stats,
-            commands::clear_disk_cache
+            commands::clear_disk_cache,
+            commands::set_active_viewport_folder,
+            commands::set_active_viewport_paths,
+            commands::start_archive_thumbnailing
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

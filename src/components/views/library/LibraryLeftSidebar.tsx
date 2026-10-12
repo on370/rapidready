@@ -720,10 +720,10 @@ export function LibraryLeftSidebar() {
       return;
     }
 
-    // While scanning: throttle tree updates to at most once every 350ms
+    // While scanning: throttle tree updates to at most once every 1200ms
     const now = Date.now();
     const timeSinceLast = now - lastTreeUpdateRef.current;
-    if (timeSinceLast >= 350) {
+    if (timeSinceLast >= 1200) {
       if (throttleTimerRef.current) {
         clearTimeout(throttleTimerRef.current);
         throttleTimerRef.current = null;
@@ -733,7 +733,7 @@ export function LibraryLeftSidebar() {
       throttleTimerRef.current = setTimeout(() => {
         throttleTimerRef.current = null;
         updateTreeNow();
-      }, Math.max(50, 350 - timeSinceLast));
+      }, Math.max(50, 1200 - timeSinceLast));
     }
   }, [rootPath, imageCount, scanState, extraFolders, discoveredFolders]);
 

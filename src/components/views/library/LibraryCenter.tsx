@@ -50,7 +50,7 @@ export function LibraryCenter({
     selectedRatingFilter,
     selectedColorFilter,
     selectedTagFilter,
-    lastImportPaths, isViewingLastImport, rootPath,
+    lastImportPaths, isViewingLastImport, rootPath, scanState,
   } = useLibraryStore();
 
   const activeCollectionId = useCollectionsStore((s) => s.activeCollectionId);
@@ -128,7 +128,7 @@ export function LibraryCenter({
     }
 
     // Always guarantee alphabetical sorting by path so order is 100% deterministic!
-    return list.slice().sort((a, b) => a.path.localeCompare(b.path));
+    return list.slice().sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   }, [activeCollectionId, activeCollection, images, isViewingLastImport, normLastImport, selectedFolderPaths, normActiveFolder, normRoot]);
 
   const displayedImages = React.useMemo(() => {
@@ -152,29 +152,55 @@ export function LibraryCenter({
     });
   }, [scopedImages, selectedTagFilter, selectedColorFilter, selectedRatingFilter, filterMode]);
 
+  const lastCountsRef = useRef<{ tags: { name: string; count: number }[]; colors: Map<string, number>; ratings: number[] }>({
+    tags: [],
+    colors: new Map(),
+    ratings: [0, 0, 0, 0, 0, 0],
+  });
+  const lastCalcTimeRef = useRef<number>(0);
+
   const availableTags = React.useMemo(() => {
+    const isScanning = scanState === 'scanning';
+    const now = Date.now();
+    if (isScanning && scopedImages.length > 2000 && now - lastCalcTimeRef.current < 1500 && lastCountsRef.current.tags.length > 0) {
+      return lastCountsRef.current.tags;
+    }
     const tagCounts = new Map<string, number>();
     for (const img of scopedImages) {
       for (const tag of img.culling.tags) {
         tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
       }
     }
-    return Array.from(tagCounts.entries())
+    const result = Array.from(tagCounts.entries())
       .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
-  }, [scopedImages]);
+      .sort((a, b) => b.count - a.count || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    lastCountsRef.current.tags = result;
+    lastCalcTimeRef.current = now;
+    return result;
+  }, [scopedImages, scanState]);
 
   const colorCounts = React.useMemo(() => {
+    const isScanning = scanState === 'scanning';
+    const now = Date.now();
+    if (isScanning && scopedImages.length > 2000 && now - lastCalcTimeRef.current < 1500 && lastCountsRef.current.colors.size > 0) {
+      return lastCountsRef.current.colors;
+    }
     const counts = new Map<string, number>();
     for (const img of scopedImages) {
       if (img.culling.color) {
         counts.set(img.culling.color, (counts.get(img.culling.color) || 0) + 1);
       }
     }
+    lastCountsRef.current.colors = counts;
     return counts;
-  }, [scopedImages]);
+  }, [scopedImages, scanState]);
 
   const ratingCounts = React.useMemo(() => {
+    const isScanning = scanState === 'scanning';
+    const now = Date.now();
+    if (isScanning && scopedImages.length > 2000 && now - lastCalcTimeRef.current < 1500 && lastCountsRef.current.ratings.some(r => r > 0)) {
+      return lastCountsRef.current.ratings;
+    }
     const counts = [0, 0, 0, 0, 0, 0];
     for (const img of scopedImages) {
       const r = img.culling.rating || 0;
@@ -182,8 +208,9 @@ export function LibraryCenter({
         if (r >= s) counts[s]++;
       }
     }
+    lastCountsRef.current.ratings = counts;
     return counts;
-  }, [scopedImages]);
+  }, [scopedImages, scanState]);
 
   const activeImage = useMemo(() => {
     if (selectedPaths.size === 0) return undefined;

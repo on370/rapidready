@@ -20,7 +20,7 @@ use rapidready_core::collection_export::{
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use tauri::{AppHandle, Emitter, Manager};
 use notify::{Watcher, RecommendedWatcher};
 
@@ -516,11 +516,14 @@ pub async fn scan_archive_directory(
     }
 
     let app_for_prog = app.clone();
+    let app_for_prog_final = app.clone();
     let app_for_chunk = app.clone();
     let controller_clone = controller.clone();
     let scan_state_clone = scan_state.current_scan.clone();
     let catalog_for_chunk = catalog_state.catalog.clone();
+    let catalog_for_cancel = catalog_state.catalog.clone();
     let path_clone = path.clone();
+    let path_for_cancel = path.clone();
 
     if existing_paths.is_none() {
         let _ = catalog_state.catalog.set_archive_indexing_status(&path, false);
@@ -535,13 +538,16 @@ pub async fn scan_archive_directory(
     let init_bytes = initial_bytes.unwrap_or(0);
 
     let res = tauri::async_runtime::spawn_blocking(move || {
-        rapidready_core::archive::scan_archive_directory_streaming(
+        let walk_res = rapidready_core::archive::scan_archive_directory_streaming(
             &dir,
             existing_set.as_ref(),
             init_bytes,
             scan_id,
-            controller_clone,
-            move |progress| {
+            controller_clone.clone(),
+            move |mut progress| {
+                if progress.is_complete {
+                    progress.is_complete = false;
+                }
                 let _ = app_for_prog.emit("archive_scan_progress", progress);
             },
             move |chunk, dirs| {
@@ -553,7 +559,41 @@ pub async fn scan_archive_directory(
                 });
             },
         )
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+        if controller_clone.is_cancelled() {
+            let actual_count = catalog_for_cancel.get_cached_count(&path_for_cancel).unwrap_or(walk_res.files.len());
+            let _ = app_for_prog_final.emit("archive_scan_progress", rapidready_core::archive::ArchiveScanProgress {
+                scan_id,
+                files_found: actual_count,
+                total_bytes: 0,
+                current_dir: String::new(),
+                is_paused: false,
+                is_cancelled: true,
+                is_complete: false,
+                phase: Some("discovering".to_string()),
+                total_files: None,
+            });
+            return Ok(walk_res);
+        }
+
+        let is_cancelled = controller_clone.is_cancelled();
+        let _ = app_for_prog_final.emit("archive_scan_progress", rapidready_core::archive::ArchiveScanProgress {
+            scan_id,
+            files_found: walk_res.files.len(),
+            total_bytes: 0,
+            current_dir: String::new(),
+            is_paused: false,
+            is_cancelled,
+            is_complete: false, // Discovery phase complete; thumbnailing follows in Phase 2
+            phase: Some("discovering".to_string()),
+            total_files: Some(walk_res.files.len()),
+        });
+
+        let mut final_res = walk_res;
+        final_res.is_fully_indexed = false;
+
+        Ok(final_res)
     })
     .await
     .map_err(|e| format!("Task join error: {}", e))?;
@@ -565,12 +605,6 @@ pub async fn scan_archive_directory(
             if active.id == scan_id {
                 *lock = None;
             }
-        }
-    }
-
-    if let Ok(ref result) = res {
-        if result.is_fully_indexed {
-            let _ = catalog_state.catalog.set_archive_indexing_status(&path, true);
         }
     }
 
@@ -727,9 +761,11 @@ pub async fn reconcile_archive_delta(
     let app_clone = app.clone();
     let catalog = catalog_state.catalog.clone();
     let scan_state_clone = scan_state.current_scan.clone();
+    let path_clone = path.clone();
+    let controller_clone = controller.clone();
 
     let res = tauri::async_runtime::spawn_blocking(move || {
-        catalog.sync_archive_delta(
+        let delta_res = catalog.sync_archive_delta(
             &dir,
             scan_id,
             &controller,
@@ -737,7 +773,134 @@ pub async fn reconcile_archive_delta(
                 let _ = app_clone.emit("archive_scan_progress", progress);
             },
         )
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+        if !controller_clone.is_cancelled() {
+            if let Some(chunk_cache) = rapidready_core::chunk_cache::get_global_chunk_cache() {
+                let _ = rapidready_core::thumbnail::generate_missing_thumbnails_for_archive(
+                    &catalog,
+                    &chunk_cache,
+                    &path_clone,
+                    1,
+                    &controller_clone,
+                    |_, _, _| {},
+                );
+            }
+        }
+
+        Ok(delta_res)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?;
+
+    {
+        let mut lock = scan_state_clone.lock().unwrap();
+        if let Some(ref active) = *lock {
+            if active.id == scan_id {
+                *lock = None;
+            }
+        }
+    }
+
+    res
+}
+
+#[tauri::command]
+pub fn set_active_viewport_folder(folder_path: Option<String>) {
+    rapidready_core::thumbnail::set_active_folder(folder_path);
+}
+
+#[tauri::command]
+pub fn set_active_viewport_paths(paths: Vec<String>) {
+    rapidready_core::thumbnail::set_active_viewport_paths(paths);
+}
+
+#[tauri::command]
+pub async fn start_archive_thumbnailing(
+    app: AppHandle,
+    path: String,
+    scan_id: Option<u64>,
+    catalog_state: tauri::State<'_, ArchiveCatalogState>,
+    scan_state: tauri::State<'_, ArchiveScanState>,
+) -> Result<usize, String> {
+    let scan_id = scan_id.unwrap_or_else(|| scan_state.next_id.fetch_add(1, Ordering::SeqCst) + 1);
+    let controller = rapidready_core::archive::ScanController::new();
+
+    {
+        let mut lock = scan_state.current_scan.lock().unwrap();
+        if let Some(ref prev) = *lock {
+            prev.controller.cancel();
+        }
+        *lock = Some(ActiveScan {
+            id: scan_id,
+            controller: controller.clone(),
+        });
+    }
+
+    let app_clone = app.clone();
+    let app_final = app.clone();
+    let catalog = catalog_state.catalog.clone();
+    let scan_state_clone = scan_state.current_scan.clone();
+    let path_clone = path.clone();
+    let controller_clone = controller.clone();
+
+    let res = tauri::async_runtime::spawn_blocking(move || {
+        let chunk_cache = match rapidready_core::chunk_cache::get_global_chunk_cache() {
+            Some(c) => c,
+            None => return Err("Chunk cache not initialized".to_string()),
+        };
+
+        let total_cached = catalog.get_cached_count(&path_clone).unwrap_or(0);
+        let ctrl_prog = controller_clone.clone();
+        let last_reported_done = Arc::new(AtomicUsize::new(0));
+        let last_done_clone = last_reported_done.clone();
+
+        let count = rapidready_core::thumbnail::generate_missing_thumbnails_for_archive(
+            &catalog,
+            &chunk_cache,
+            &path_clone,
+            1, // scale 1: micro-thumbnail
+            &controller_clone,
+            move |done, total, current_file| {
+                last_done_clone.store(done, Ordering::SeqCst);
+                let _ = app_clone.emit("archive_scan_progress", rapidready_core::archive::ArchiveScanProgress {
+                    scan_id,
+                    files_found: done,
+                    total_bytes: total as u64,
+                    current_dir: if !current_file.is_empty() { current_file.to_string() } else { format!("{}/{}", done, total) },
+                    is_paused: ctrl_prog.is_paused(),
+                    is_cancelled: ctrl_prog.is_cancelled(),
+                    is_complete: false,
+                    phase: Some("thumbnailing".to_string()),
+                    total_files: Some(total),
+                });
+            },
+        ).map_err(|e| e.to_string())?;
+
+        let is_cancelled = controller_clone.is_cancelled();
+        let final_count = if is_cancelled {
+            last_reported_done.load(Ordering::SeqCst).min(total_cached)
+        } else {
+            total_cached
+        };
+
+        let _ = app_final.emit("archive_scan_progress", rapidready_core::archive::ArchiveScanProgress {
+            scan_id,
+            files_found: final_count,
+            total_bytes: 0,
+            current_dir: String::new(),
+            is_paused: false,
+            is_cancelled,
+            is_complete: !is_cancelled,
+            phase: Some("thumbnailing".to_string()),
+            total_files: Some(total_cached),
+        });
+
+        if !is_cancelled {
+            let _ = catalog.set_archive_indexing_status(&path_clone, true);
+        }
+
+        Ok(count)
     })
     .await
     .map_err(|e| format!("Task join error: {}", e))?;

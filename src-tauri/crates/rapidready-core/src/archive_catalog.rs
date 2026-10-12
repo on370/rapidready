@@ -34,36 +34,83 @@ pub fn get_global_catalog() -> Option<Arc<ArchiveCatalog>> {
     GLOBAL_ARCHIVE_CATALOG.get().cloned()
 }
 
-pub fn get_catalog_metadata_hint(path: &Path) -> Option<(u64, i64, u32)> {
+pub fn get_catalog_metadata_hint(path: &Path) -> Option<(u64, i64, Option<u32>)> {
     let catalog = get_global_catalog()?;
     catalog.get_file_metadata_hint(path)
 }
 
+pub struct PooledCatalogReadConn<'a> {
+    conn: Option<Connection>,
+    pool: &'a Mutex<Vec<Connection>>,
+}
+
+impl<'a> std::ops::Deref for PooledCatalogReadConn<'a> {
+    type Target = Connection;
+    fn deref(&self) -> &Self::Target {
+        self.conn.as_ref().unwrap()
+    }
+}
+
+impl<'a> std::ops::DerefMut for PooledCatalogReadConn<'a> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.conn.as_mut().unwrap()
+    }
+}
+
+impl<'a> Drop for PooledCatalogReadConn<'a> {
+    fn drop(&mut self) {
+        if let Some(conn) = self.conn.take() {
+            if let Ok(mut pool) = self.pool.lock() {
+                if pool.len() < 16 {
+                    pool.push(conn);
+                }
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ThumbnailCandidate {
+    pub path: String,
+    pub size: u64,
+    pub mtime: i64,
+    pub orientation: Option<u32>,
+    pub is_video: bool,
+}
+
 pub struct ArchiveCatalog {
     conn: Arc<Mutex<Connection>>,
+    db_path: Option<std::path::PathBuf>,
+    read_pool: Mutex<Vec<Connection>>,
 }
 
 pub fn normalize_canonical_path(path_str: &str) -> String {
     path_str.replace('\\', "/").trim_end_matches('/').to_string()
 }
 
-fn get_file_and_sidecar_mtime(path: &Path) -> (i64, Option<i64>) {
-    let mtime = fs::metadata(path)
-        .ok()
-        .and_then(|m| m.modified().ok())
-        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
-    let sidecar_path = get_sidecar_path(path);
-    let sidecar_mtime = fs::metadata(&sidecar_path)
-        .ok()
-        .and_then(|m| m.modified().ok())
-        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| d.as_secs() as i64);
-    (mtime, sidecar_mtime)
-}
+
 
 impl ArchiveCatalog {
+    pub fn get_read_conn(&self) -> Result<PooledCatalogReadConn<'_>> {
+        let db_path = self.db_path.as_ref().context("No db_path configured")?;
+        let mut pool = self.read_pool.lock().unwrap();
+        let conn = if let Some(c) = pool.pop() {
+            c
+        } else {
+            let c = Connection::open(db_path)?;
+            c.execute_batch(
+                "PRAGMA journal_mode = WAL;
+                 PRAGMA synchronous = NORMAL;
+                 PRAGMA busy_timeout = 5000;",
+            )?;
+            c
+        };
+        Ok(PooledCatalogReadConn {
+            conn: Some(conn),
+            pool: &self.read_pool,
+        })
+    }
+
     pub fn new(app_data_dir: &Path) -> Result<Self> {
         if !app_data_dir.exists() {
             fs::create_dir_all(app_data_dir)?;
@@ -91,6 +138,8 @@ impl ArchiveCatalog {
 
         let catalog = Self {
             conn: Arc::new(Mutex::new(conn)),
+            db_path: Some(db_path.to_path_buf()),
+            read_pool: Mutex::new(Vec::new()),
         };
 
         catalog.migrate()?;
@@ -153,6 +202,17 @@ impl ArchiveCatalog {
     pub fn get_cached_count(&self, root: &str) -> Result<usize> {
         let norm_root = normalize_canonical_path(root);
         let pattern = format!("{}/%", norm_root);
+        if self.db_path.is_some() {
+            if let Ok(conn) = self.get_read_conn() {
+                let count: i64 = conn.query_row(
+                    "SELECT COUNT(*) FROM archive_files
+                     WHERE archive_root = ?1 OR canonical_path = ?1 OR canonical_path LIKE ?2",
+                    (&norm_root, &pattern),
+                    |row| row.get(0),
+                )?;
+                return Ok(count as usize);
+            }
+        }
         let conn = self.conn.lock().unwrap();
         let count: i64 = conn.query_row(
             "SELECT COUNT(*) FROM archive_files
@@ -167,99 +227,127 @@ impl ArchiveCatalog {
     pub fn get_cached_archive_files(&self, root: &str) -> Result<ArchiveScanResult> {
         let norm_root = normalize_canonical_path(root);
         let pattern = format!("{}/%", norm_root);
-        let conn = self.conn.lock().unwrap();
 
-        let mut stmt = conn.prepare(
-            "SELECT canonical_path, filename, file_size, exif_date, camera, lens, iso, aperture, shutter, is_raw, is_video, sidecar_culling_json, mtime
-             FROM archive_files
-             WHERE archive_root = ?1 OR canonical_path = ?1 OR canonical_path LIKE ?2
-             ORDER BY canonical_path ASC"
-        )?;
+        let query_fn = |conn: &Connection| -> Result<ArchiveScanResult> {
+            let mut stmt = conn.prepare(
+                "SELECT canonical_path, filename, file_size, exif_date, camera, lens, iso, aperture, shutter, is_raw, is_video, sidecar_culling_json, mtime
+                 FROM archive_files
+                 WHERE archive_root = ?1 OR canonical_path = ?1 OR canonical_path LIKE ?2
+                 ORDER BY canonical_path ASC"
+            )?;
 
-        let file_rows = stmt.query_map((&norm_root, &pattern), |row| {
-            let canonical_path: String = row.get(0)?;
-            let filename: String = row.get(1)?;
-            let file_size: i64 = row.get(2)?;
-            let exif_date: Option<String> = row.get(3)?;
-            let camera: Option<String> = row.get(4)?;
-            let lens: Option<String> = row.get(5)?;
-            let iso: Option<String> = row.get(6)?;
-            let aperture: Option<String> = row.get(7)?;
-            let shutter: Option<String> = row.get(8)?;
-            let is_raw: bool = row.get(9)?;
-            let is_video: bool = row.get(10)?;
-            let sidecar_json: Option<String> = row.get(11)?;
-            let mtime: i64 = row.get(12)?;
+            let file_rows = stmt.query_map((&norm_root, &pattern), |row| {
+                let canonical_path: String = row.get(0)?;
+                let filename: String = row.get(1)?;
+                let file_size: i64 = row.get(2)?;
+                let exif_date: Option<String> = row.get(3)?;
+                let camera: Option<String> = row.get(4)?;
+                let lens: Option<String> = row.get(5)?;
+                let iso: Option<String> = row.get(6)?;
+                let aperture: Option<String> = row.get(7)?;
+                let shutter: Option<String> = row.get(8)?;
+                let is_raw: bool = row.get(9)?;
+                let is_video: bool = row.get(10)?;
+                let sidecar_json: Option<String> = row.get(11)?;
+                let mtime: i64 = row.get(12)?;
 
-            let date = exif_date.and_then(|s| {
-                NaiveDateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M:%S")
-                    .or_else(|_| NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S"))
-                    .or_else(|_| chrono::DateTime::parse_from_rfc3339(&s).map(|dt| dt.naive_utc()))
-                    .ok()
-            });
+                let date = exif_date.and_then(|s| {
+                    NaiveDateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M:%S")
+                        .or_else(|_| NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S"))
+                        .or_else(|_| chrono::DateTime::parse_from_rfc3339(&s).map(|dt| dt.naive_utc()))
+                        .ok()
+                });
 
-            let culling: CullingState = sidecar_json
-                .and_then(|s| serde_json::from_str(&s).ok())
-                .unwrap_or_default();
+                let culling: CullingState = sidecar_json
+                    .and_then(|s| serde_json::from_str(&s).ok())
+                    .unwrap_or_default();
 
-            Ok(ArchiveFile {
-                path: canonical_path,
-                name: filename,
-                size: file_size as u64,
-                date,
-                camera,
-                lens,
-                iso,
-                aperture,
-                shutter,
-                culling,
-                is_raw,
-                is_video,
-                mtime,
-            })
-        })?;
+                Ok(ArchiveFile {
+                    path: canonical_path,
+                    name: filename,
+                    size: file_size as u64,
+                    date,
+                    camera,
+                    lens,
+                    iso,
+                    aperture,
+                    shutter,
+                    culling,
+                    is_raw,
+                    is_video,
+                    mtime,
+                })
+            })?;
 
-        let mut files = Vec::new();
-        for f in file_rows {
-            files.push(f?);
-        }
-
-        let mut dir_stmt = conn.prepare(
-            "SELECT path FROM archive_directories
-             WHERE archive_root = ?1 OR path = ?1 OR path LIKE ?2
-             ORDER BY path ASC"
-        )?;
-
-        let dir_rows = dir_stmt.query_map((&norm_root, &pattern), |row| row.get::<_, String>(0))?;
-        let mut directories = Vec::new();
-        for d in dir_rows {
-            directories.push(d?);
-        }
-
-        let is_fully_indexed: bool = {
-            let status: rusqlite::Result<i64> = conn.query_row(
-                "SELECT is_fully_indexed FROM archive_meta WHERE root_path = ?1",
-                [&norm_root],
-                |row| row.get(0),
-            );
-            match status {
-                Ok(val) => val != 0,
-                Err(_) => true,
+            let mut files = Vec::new();
+            for f in file_rows {
+                files.push(f?);
             }
+
+            let mut dir_stmt = conn.prepare(
+                "SELECT path FROM archive_directories
+                 WHERE archive_root = ?1 OR path = ?1 OR path LIKE ?2
+                 ORDER BY path ASC"
+            )?;
+
+            let dir_rows = dir_stmt.query_map((&norm_root, &pattern), |row| row.get::<_, String>(0))?;
+            let mut directories = Vec::new();
+            for d in dir_rows {
+                directories.push(d?);
+            }
+
+            let is_fully_indexed: bool = {
+                let status: rusqlite::Result<i64> = conn.query_row(
+                    "SELECT is_fully_indexed FROM archive_meta WHERE root_path = ?1",
+                    [&norm_root],
+                    |row| row.get(0),
+                );
+                match status {
+                    Ok(val) => val != 0,
+                    Err(_) => false,
+                }
+            };
+
+            Ok(ArchiveScanResult {
+                files,
+                directories,
+                is_fully_indexed,
+            })
         };
 
-        Ok(ArchiveScanResult {
-            files,
-            directories,
-            is_fully_indexed,
-        })
+        if self.db_path.is_some() {
+            if let Ok(conn) = self.get_read_conn() {
+                return query_fn(&conn);
+            }
+        }
+        let conn = self.conn.lock().unwrap();
+        query_fn(&conn)
     }
 
     /// Fast indexed lookup of size, mtime, and orientation from local SQLite catalog in < 0.02 ms.
-    pub fn get_file_metadata_hint(&self, path: &Path) -> Option<(u64, i64, u32)> {
+    pub fn get_file_metadata_hint(&self, path: &Path) -> Option<(u64, i64, Option<u32>)> {
         let norm = normalize_canonical_path(&path.to_string_lossy());
+        if self.db_path.is_some() {
+            if let Ok(conn) = self.get_read_conn() {
+                let mut stmt = conn.prepare_cached(
+                    "SELECT file_size, mtime, sidecar_culling_json FROM archive_files WHERE canonical_path = ?1"
+                ).ok()?;
+                let mut rows = stmt.query([&norm]).ok()?;
+                if let Ok(Some(row)) = rows.next() {
+                    let size: i64 = row.get(0).unwrap_or(0);
+                    let mtime: i64 = row.get(1).unwrap_or(0);
+                    let sidecar_json: Option<String> = row.get(2).unwrap_or(None);
+                    let orient = sidecar_json
+                        .and_then(|s| serde_json::from_str::<CullingState>(&s).ok())
+                        .and_then(|c| c.orientation);
+                    return Some((size as u64, mtime, orient));
+                } else {
+                    return None;
+                }
+            }
+        }
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
+        let mut stmt = conn.prepare_cached(
             "SELECT file_size, mtime, sidecar_culling_json FROM archive_files WHERE canonical_path = ?1"
         ).ok()?;
         let mut rows = stmt.query([&norm]).ok()?;
@@ -269,12 +357,56 @@ impl ArchiveCatalog {
             let sidecar_json: Option<String> = row.get(2).unwrap_or(None);
             let orient = sidecar_json
                 .and_then(|s| serde_json::from_str::<CullingState>(&s).ok())
-                .and_then(|c| c.orientation)
-                .unwrap_or(1);
+                .and_then(|c| c.orientation);
             Some((size as u64, mtime, orient))
         } else {
             None
         }
+    }
+
+    /// Retrieves lightweight candidate descriptors for all files in an archive root to verify or build chunk thumbnails.
+    pub fn get_thumbnail_candidates_for_root(&self, root: &str) -> Result<Vec<ThumbnailCandidate>> {
+        let norm_root = normalize_canonical_path(root);
+        let pattern = format!("{}/%", norm_root);
+
+        let query_fn = |conn: &Connection| -> Result<Vec<ThumbnailCandidate>> {
+            let mut stmt = conn.prepare(
+                "SELECT canonical_path, file_size, mtime, sidecar_culling_json, is_video
+                 FROM archive_files
+                 WHERE archive_root = ?1 OR canonical_path = ?1 OR canonical_path LIKE ?2
+                 ORDER BY canonical_path ASC"
+            )?;
+            let rows = stmt.query_map((&norm_root, &pattern), |row| {
+                let canonical_path: String = row.get(0)?;
+                let file_size: i64 = row.get(1)?;
+                let mtime: i64 = row.get(2)?;
+                let sidecar_json: Option<String> = row.get(3)?;
+                let is_video: bool = row.get(4)?;
+                let orient = sidecar_json
+                    .and_then(|s| serde_json::from_str::<CullingState>(&s).ok())
+                    .and_then(|c| c.orientation);
+                Ok(ThumbnailCandidate {
+                    path: canonical_path,
+                    size: file_size as u64,
+                    mtime,
+                    orientation: orient,
+                    is_video,
+                })
+            })?;
+            let mut candidates = Vec::new();
+            for r in rows {
+                candidates.push(r?);
+            }
+            Ok(candidates)
+        };
+
+        if self.db_path.is_some() {
+            if let Ok(conn) = self.get_read_conn() {
+                return query_fn(&conn);
+            }
+        }
+        let conn = self.conn.lock().unwrap();
+        query_fn(&conn)
     }
 
     /// Upserts files and directories into `archive_catalog.db`.
@@ -321,8 +453,28 @@ impl ArchiveCatalog {
 
             for file in files {
                 let norm_path = normalize_canonical_path(&file.path);
-                let path_obj = Path::new(&file.path);
-                let (mtime, sidecar_mtime) = get_file_and_sidecar_mtime(path_obj);
+                let mtime = if file.mtime != 0 {
+                    file.mtime
+                } else {
+                    let path_obj = Path::new(&file.path);
+                    fs::metadata(path_obj)
+                        .ok()
+                        .and_then(|m| m.modified().ok())
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_secs() as i64)
+                        .unwrap_or(0)
+                };
+                let sidecar_mtime = if file.culling != CullingState::default() {
+                    let path_obj = Path::new(&file.path);
+                    let sidecar_path = get_sidecar_path(path_obj);
+                    fs::metadata(&sidecar_path)
+                        .ok()
+                        .and_then(|m| m.modified().ok())
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_secs() as i64)
+                } else {
+                    None
+                };
                 let exif_date_str = file.date.map(|d| d.format("%Y-%m-%dT%H:%M:%S").to_string());
                 let sidecar_json = serde_json::to_string(&file.culling).ok();
 
@@ -443,7 +595,7 @@ impl ArchiveCatalog {
         Ok(())
     }
 
-    /// Checks whether the archive at `root` is fully indexed. Defaults to true if no record exists.
+    /// Checks whether the archive at `root` is fully indexed. Defaults to false if no record exists.
     pub fn is_archive_fully_indexed(&self, root: &str) -> Result<bool> {
         let norm_root = normalize_canonical_path(root);
         let conn = self.conn.lock().unwrap();
@@ -454,7 +606,7 @@ impl ArchiveCatalog {
         );
         match status {
             Ok(val) => Ok(val != 0),
-            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(true),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(false),
             Err(e) => Err(anyhow::anyhow!(e)),
         }
     }
@@ -554,6 +706,8 @@ impl ArchiveCatalog {
             is_paused: false,
             is_cancelled: false,
             is_complete: false,
+            phase: Some("syncing".to_string()),
+            total_files: None,
         });
 
         // 2. Walk directory reading metadata only
@@ -649,6 +803,8 @@ impl ArchiveCatalog {
                         is_paused: controller.is_paused(),
                         is_cancelled: controller.is_cancelled(),
                         is_complete: false,
+                        phase: Some("syncing".to_string()),
+                        total_files: None,
                     });
                 }
             }
@@ -663,6 +819,8 @@ impl ArchiveCatalog {
                 is_paused: false,
                 is_cancelled: true,
                 is_complete: false,
+                phase: Some("syncing".to_string()),
+                total_files: None,
             });
             return Ok(ArchiveDeltaResult {
                 root_path: norm_root,
@@ -709,8 +867,8 @@ impl ArchiveCatalog {
         }
 
         let is_cancelled = controller.is_cancelled();
-        if !is_cancelled {
-            let _ = self.set_archive_indexing_status(&norm_root, true);
+        if !is_cancelled && (!added_files.is_empty() || !updated_files.is_empty()) {
+            let _ = self.set_archive_indexing_status(&norm_root, false);
         }
         on_progress(ArchiveScanProgress {
             scan_id,
@@ -720,6 +878,8 @@ impl ArchiveCatalog {
             is_paused: false,
             is_cancelled,
             is_complete: !is_cancelled,
+            phase: Some("syncing".to_string()),
+            total_files: Some(scanned_count),
         });
 
         Ok(ArchiveDeltaResult {
@@ -868,8 +1028,8 @@ mod tests {
         let catalog = ArchiveCatalog::new_with_db_path(&db_path).unwrap();
 
         let root_str = root.to_string_lossy();
-        // Unindexed default (no record yet) returns true for backwards compatibility
-        assert!(catalog.is_archive_fully_indexed(&root_str).unwrap());
+        // Unindexed default (no record yet) returns false
+        assert!(!catalog.is_archive_fully_indexed(&root_str).unwrap());
 
         // Explicitly set incomplete (e.g. scan started or interrupted)
         catalog.set_archive_indexing_status(&root_str, false).unwrap();

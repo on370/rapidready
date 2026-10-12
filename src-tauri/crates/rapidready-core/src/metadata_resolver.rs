@@ -31,7 +31,10 @@ pub struct ImageMetadata {
 }
 
 pub fn is_video_path(path: &Path) -> bool {
-    let video_exts = ["mp4", "mov", "m4v", "avi"];
+    let video_exts = [
+        "mp4", "mov", "m4v", "avi", "mkv", "mts", "m2ts", "wmv", "webm", "flv",
+        "3gp", "3g2", "mpg", "mpeg", "m2v", "mod", "tod", "vob",
+    ];
     path.extension()
         .and_then(|s| s.to_str())
         .map(|ext| video_exts.contains(&ext.to_lowercase().as_str()))
@@ -41,7 +44,8 @@ pub fn is_video_path(path: &Path) -> bool {
 pub fn is_raw_path(path: &Path) -> bool {
     let raw_exts = [
         "cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2", "pef", "3fr", "x3f", "nrw",
-        "rwl", "fff", "iiq", "crw", "erf",
+        "rwl", "fff", "iiq", "crw", "erf", "sr2", "srf", "mrw", "dcr", "kdc", "mef", "mos",
+        "srw", "gpr", "raw", "bay", "cap", "eip", "dcs", "drf", "k25",
     ];
     path.extension()
         .and_then(|s| s.to_str())

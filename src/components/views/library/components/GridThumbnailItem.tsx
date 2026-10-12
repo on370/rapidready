@@ -29,7 +29,7 @@ export const GridThumbnailItem = React.memo(function GridThumbnailItem({
   img,
   isActive,
   isSelected,
-  isScrolling = false,
+  isScrolling: _isScrolling = false,
   onClick,
   onDoubleClick,
   onContextMenu,
@@ -49,16 +49,15 @@ export const GridThumbnailItem = React.memo(function GridThumbnailItem({
   const scale = gridThumbnailSize <= 130 ? 0 : gridThumbnailSize > 220 ? 2 : 1;
   const cacheKey = `${img.path}:${img.culling?.orientation || 1}:${scale}`;
   const isCached = loadedThumbnailCache.has(cacheKey);
-  const [shouldLoad, setShouldLoad] = useState(isCached || !isScrolling);
+  const [shouldLoad, setShouldLoad] = useState(isCached || !_isScrolling);
   const imgRef = useRef<HTMLImageElement>(null);
   const placeholderRef = useRef<HTMLDivElement>(null);
 
-  // When scrolling settles, start loading immediately (no redundant timer)
   useEffect(() => {
-    if (!shouldLoad && !isScrolling) {
+    if (!shouldLoad && (isCached || !_isScrolling)) {
       setShouldLoad(true);
     }
-  }, [isScrolling, shouldLoad]);
+  }, [isCached, _isScrolling, shouldLoad]);
 
   // Cancel in-flight HTTP request if tile scrolls off-screen before completing
   useEffect(() => {
@@ -100,9 +99,10 @@ export const GridThumbnailItem = React.memo(function GridThumbnailItem({
         <img 
           ref={imgRef}
           draggable={false}
+          loading="eager"
           decoding="async"
           src={getRrImageUrl(img.path, false, img.culling?.orientation, scale, img.size, img.mtime)} 
-          className={`w-full h-full object-contain relative z-10 transition-opacity duration-150 pointer-events-none ${isCached ? 'opacity-100' : 'opacity-0'}`} 
+          className={`w-full h-full object-contain relative z-10 pointer-events-none transition-opacity duration-150 ${isCached ? 'opacity-100' : 'opacity-0'}`} 
           alt={img.name} 
           onLoad={(e) => {
             loadedThumbnailCache.add(cacheKey);

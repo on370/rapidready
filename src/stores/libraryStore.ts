@@ -45,6 +45,8 @@ export interface ArchiveScanProgress {
   is_paused: boolean;
   is_cancelled: boolean;
   is_complete: boolean;
+  phase?: 'discovering' | 'thumbnailing' | 'syncing' | string;
+  total_files?: number;
 }
 
 export interface ArchiveChunkPayload {
@@ -114,6 +116,8 @@ interface LibraryStore {
   scanState: 'idle' | 'connecting' | 'scanning' | 'paused' | 'stopped' | 'completed';
   scanProgress: ArchiveScanProgress | null;
   isInitialScan: boolean;
+  isFullyIndexed: boolean;
+  setIsFullyIndexed: (isFully: boolean) => void;
   scanStartTime: number | null;
   appendImageChunk: (chunk: LibraryImage[], dirs?: string[]) => void;
   addImages: (newImages: LibraryImage[], newDirs?: string[]) => void;
@@ -127,6 +131,7 @@ interface LibraryStore {
   pauseScan: () => void;
   resumeScan: () => void;
   cancelScan: () => void;
+  startThumbnailing: (targetPath?: string) => Promise<void>;
   loadArchive: (path: string, preserveExisting?: boolean) => Promise<void>;
 
   updateImageMetadata: (path: string, meta: Partial<LibraryImage>) => void;
@@ -234,6 +239,8 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
   scanState: 'idle',
   scanProgress: null,
   isInitialScan: false,
+  isFullyIndexed: false,
+  setIsFullyIndexed: (val) => set({ isFullyIndexed: val }),
   scanStartTime: null,
   discoveredFolders: new Set<string>(),
   addDiscoveredFolders: (folders) => set((state) => {
@@ -279,13 +286,12 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
     }
 
     const startIdx = state.images.length;
-    const nextMap = new Map(state.imageIndexMap);
     for (let i = 0; i < validChunk.length; i++) {
-      nextMap.set(normalizePath(validChunk[i].path), startIdx + i);
+      state.imageIndexMap.set(normalizePath(validChunk[i].path), startIdx + i);
     }
     return {
       images: [...state.images, ...validChunk],
-      imageIndexMap: nextMap,
+      imageIndexMap: state.imageIndexMap,
       discoveredFolders: nextFolders,
     };
   }),
@@ -439,6 +445,15 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
   cancelScan: () => {
     invoke('cancel_archive_scan').catch(console.error);
     set((s) => {
+      const isThumbnailing = s.scanProgress?.phase === 'thumbnailing';
+      if (isThumbnailing) {
+        // In Phase 2: Cancel halts background thumbnail generation, preserving all photos in the grid intact
+        return {
+          scanState: 'stopped',
+          isLoading: false,
+          scanProgress: s.scanProgress ? { ...s.scanProgress, is_cancelled: true } : null,
+        };
+      }
       const count = s.scanProgress?.files_found ?? s.images.length;
       const sortedImages = [...s.images].sort((a, b) => a.path.localeCompare(b.path));
       const imageIndexMap = new Map<string, number>();
@@ -453,6 +468,33 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
         scanProgress: s.scanProgress ? { ...s.scanProgress, is_cancelled: true } : null,
       };
     });
+  },
+  startThumbnailing: async (targetPath?: string) => {
+    const root = targetPath || get().rootPath;
+    if (!root) return;
+    const scanId = nextScanCounter++;
+    const totalFiles = get().images.length;
+    set({
+      activeScanId: scanId,
+      scanState: 'scanning',
+      isInitialScan: true,
+      scanProgress: {
+        scan_id: scanId,
+        files_found: 0,
+        total_bytes: 0,
+        current_dir: root,
+        is_paused: false,
+        is_cancelled: false,
+        is_complete: false,
+        phase: 'thumbnailing',
+        total_files: totalFiles,
+      },
+    });
+    try {
+      await invoke('start_archive_thumbnailing', { path: root, scanId });
+    } catch (err) {
+      console.error('Failed to start archive thumbnailing:', err);
+    }
   },
   reconcileArchiveDelta: async (targetPath?: string, isBackground = false) => {
     const root = targetPath || get().rootPath;
@@ -471,6 +513,7 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
           is_paused: false,
           is_cancelled: false,
           is_complete: false,
+          phase: 'syncing',
         },
       });
     }
@@ -558,7 +601,7 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
           initialFolders.add(normalizeSlash(path));
           const { next: nextFolders } = mergeFoldersDeduped(initialFolders, cached.directories || []);
 
-          const isFullyIndexed = cached.is_fully_indexed !== false;
+          const isFullyIndexed = cached.is_fully_indexed === true;
           const initialBytes = sorted.reduce((sum, img) => sum + (img.size || 0), 0);
 
           set({
@@ -569,17 +612,20 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
             discoveredFolders: nextFolders,
             viewMode: 'grid',
             isLoading: false,
-            scanState: isFullyIndexed ? 'idle' : 'stopped',
+            scanState: isFullyIndexed ? 'idle' : 'scanning',
             isInitialScan: !isFullyIndexed,
-            scanStartTime: null,
+            isFullyIndexed,
+            scanStartTime: isFullyIndexed ? null : Date.now(),
             scanProgress: isFullyIndexed ? null : {
               scan_id: scanId,
-              files_found: sorted.length,
+              files_found: 0,
               total_bytes: initialBytes,
               current_dir: path,
               is_paused: false,
-              is_cancelled: true,
+              is_cancelled: false,
               is_complete: false,
+              phase: 'thumbnailing',
+              total_files: sorted.length,
             },
             images: sorted,
             imageIndexMap,
@@ -588,6 +634,8 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
           if (isFullyIndexed) {
             // Phase 2: Start background delta-sync silently without blocking UI
             get().reconcileArchiveDelta(path, true);
+          } else {
+            invoke('start_archive_thumbnailing', { path, scanId }).catch(() => {});
           }
           return;
         }
@@ -629,7 +677,7 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
         scanId,
         existingPaths,
         initialBytes: initialBytes > 0 ? initialBytes : null,
-      })) as { files: LibraryImage[]; directories: string[] };
+      })) as { files: LibraryImage[]; directories: string[]; is_fully_indexed?: boolean };
 
       if (useLibraryStore.getState().activeScanId !== scanId) {
         return;
@@ -637,9 +685,14 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
 
       const loadedImages = scanResult.files || [];
       const loadedDirs = scanResult.directories || [];
+      const isFullyIndexed = scanResult.is_fully_indexed === true;
 
       const currentScanState = useLibraryStore.getState().scanState;
-      const nextScanState = currentScanState === 'completed' ? 'completed' : currentScanState === 'stopped' ? 'stopped' : 'idle';
+      const isCancelledOrStopped = currentScanState === 'stopped';
+      const shouldStartPhase2 = !isFullyIndexed && !isCancelledOrStopped;
+      const nextScanState = isCancelledOrStopped ? 'stopped' : (shouldStartPhase2 ? 'scanning' : (currentScanState === 'completed' ? 'completed' : 'idle'));
+
+      let finalImagesCount = 0;
       if (isContinuing) {
         set((state) => {
           const map = new Map<string, LibraryImage>();
@@ -649,18 +702,39 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
           for (const img of loadedImages) {
             map.set(normalizePath(img.path), img);
           }
-          const allImages = Array.from(map.values()).sort((a, b) => a.path.localeCompare(b.path));
+          const allImages = Array.from(map.values()).sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+          finalImagesCount = allImages.length;
           const imageIndexMap = new Map<string, number>();
           for (let i = 0; i < allImages.length; i++) {
             imageIndexMap.set(normalizePath(allImages[i].path), i);
           }
           const { next: nextFolders } = mergeFoldersDeduped(state.discoveredFolders, loadedDirs);
-          return { images: allImages, imageIndexMap, discoveredFolders: nextFolders, isLoading: false, scanState: nextScanState };
+          return {
+            images: allImages,
+            imageIndexMap,
+            discoveredFolders: nextFolders,
+            isLoading: false,
+            scanState: nextScanState,
+            isInitialScan: shouldStartPhase2 ? true : state.isInitialScan,
+            scanProgress: shouldStartPhase2 ? {
+              scan_id: scanId,
+              files_found: state.scanProgress?.files_found ?? finalImagesCount,
+              total_bytes: 0,
+              current_dir: path,
+              is_paused: false,
+              is_cancelled: false,
+              is_complete: false,
+              phase: 'thumbnailing',
+              total_files: finalImagesCount,
+            } : state.scanProgress,
+            isFullyIndexed,
+          };
         });
       } else {
         const sorted = (loadedImages && loadedImages.length > 0 ? loadedImages : useLibraryStore.getState().images)
           .slice()
-          .sort((a, b) => a.path.localeCompare(b.path));
+          .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+        finalImagesCount = sorted.length;
         const imageIndexMap = new Map<string, number>();
         for (let i = 0; i < sorted.length; i++) {
           imageIndexMap.set(normalizePath(sorted[i].path), i);
@@ -670,7 +744,34 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
           initialFolders.add(normalizeSlash(path));
         }
         const { next: nextFolders } = mergeFoldersDeduped(initialFolders, loadedDirs);
-        set({ images: sorted, imageIndexMap, discoveredFolders: nextFolders, isLoading: false, scanState: nextScanState });
+        const prevProg = useLibraryStore.getState().scanProgress;
+        set({
+          images: sorted,
+          imageIndexMap,
+          discoveredFolders: nextFolders,
+          isLoading: false,
+          scanState: nextScanState,
+          isInitialScan: shouldStartPhase2,
+          scanProgress: shouldStartPhase2 ? {
+            scan_id: scanId,
+            files_found: prevProg?.files_found ?? finalImagesCount,
+            total_bytes: 0,
+            current_dir: path,
+            is_paused: false,
+            is_cancelled: false,
+            is_complete: false,
+            phase: 'thumbnailing',
+            total_files: finalImagesCount,
+          } : null,
+          isFullyIndexed,
+        });
+      }
+
+      if (shouldStartPhase2) {
+        // Phase 1 (Discovery) completed! Start Phase 2 (Background Thumbnailing)
+        invoke('start_archive_thumbnailing', { path, scanId }).catch((err) => {
+          console.error("Failed to start archive thumbnailing:", err);
+        });
       }
     } catch (e) {
       if (useLibraryStore.getState().activeScanId === scanId) {
@@ -694,6 +795,7 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
   pendingSelectAll: false,
   setPendingSelectAll: (val) => set({ pendingSelectAll: val }),
   setActiveFolderPath: (path) => {
+    invoke('set_active_viewport_folder', { folderPath: path || null }).catch(() => {});
     const norm = path ? normalizePath(path) : null;
     set((state) => ({
       activeFolderPath: path,
@@ -709,6 +811,7 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
   setSelectedFolderPaths: (paths) => {
     const normPaths = new Set(Array.from(paths).map(p => normalizePath(p)));
     const first = normPaths.size > 0 ? Array.from(normPaths)[0] : null;
+    invoke('set_active_viewport_folder', { folderPath: first || null }).catch(() => {});
     set((state) => ({
       selectedFolderPaths: normPaths,
       activeFolderPath: first,
@@ -722,6 +825,7 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
   },
   setActiveImageIndex: (index) => set({ activeImageIndex: index }),
   selectAllInFolder: (folderPath, allFolderPaths) => {
+    invoke('set_active_viewport_folder', { folderPath: folderPath || null }).catch(() => {});
     const normTarget = normalizePath(folderPath);
     const { images } = get();
     const matching = images.filter(img => {

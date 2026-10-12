@@ -198,9 +198,6 @@ function App() {
       lastFlushTime = Date.now();
 
       const store = useLibraryStore.getState();
-      if (dirsToFlush.length > 0) {
-        store.addDiscoveredFolders(dirsToFlush);
-      }
       if (filesToFlush.length > 0 || dirsToFlush.length > 0) {
         store.appendImageChunk(filesToFlush, dirsToFlush);
       }
@@ -218,8 +215,13 @@ function App() {
         }
         if (event.payload.is_cancelled) {
           flushChunkBuffer();
-          store.setScanProgress(event.payload);
-          if (store.images.length > 0 || event.payload.files_found > 0) {
+          const currentCount = useLibraryStore.getState().images.length;
+          const correctedPayload = {
+            ...event.payload,
+            files_found: Math.max(event.payload.files_found || 0, currentCount),
+          };
+          store.setScanProgress(correctedPayload);
+          if (currentCount > 0 || correctedPayload.files_found > 0) {
             store.setScanState('stopped');
           } else {
             store.setScanState('idle');
@@ -234,7 +236,8 @@ function App() {
         store.setScanProgress(event.payload);
         if (event.payload.is_complete) {
           flushChunkBuffer();
-          if (store.scanState === 'scanning' && store.images.length >= 100) {
+          useLibraryStore.getState().setIsFullyIndexed(true);
+          if (store.scanState === 'scanning') {
             store.setScanState('completed');
             store.setIsLoading(false);
             setTimeout(() => {
@@ -278,11 +281,14 @@ function App() {
         }
 
         const now = Date.now();
-        // Pace flush to at most once every 200ms (or on large backlog >= 1500) to keep the main JS thread responsive
-        if (now - lastFlushTime >= 200 || pendingFiles.length >= 1500) {
+        const currentCount = store.images.length;
+        const flushInterval = currentCount >= 15000 ? 1200 : currentCount >= 8000 ? 800 : currentCount >= 3000 ? 400 : 200;
+        const flushThreshold = currentCount >= 15000 ? 3500 : currentCount >= 8000 ? 2500 : 1500;
+        // Pace flush to keep the main JS thread responsive and prevent event-loop stalls as image count grows
+        if (now - lastFlushTime >= flushInterval || pendingFiles.length >= flushThreshold) {
           flushChunkBuffer();
         } else if (flushTimer === null) {
-          const delay = Math.max(16, 200 - (now - lastFlushTime));
+          const delay = Math.max(16, flushInterval - (now - lastFlushTime));
           flushTimer = setTimeout(() => {
             flushChunkBuffer();
           }, delay);

@@ -65,6 +65,10 @@ pub struct ArchiveScanProgress {
     pub is_paused: bool,
     pub is_cancelled: bool,
     pub is_complete: bool,
+    #[serde(default)]
+    pub phase: Option<String>,
+    #[serde(default)]
+    pub total_files: Option<usize>,
 }
 
 #[derive(Clone)]
@@ -146,6 +150,19 @@ pub struct ArchiveScanResult {
     pub is_fully_indexed: bool,
 }
 
+fn get_streaming_discovery_date(name: &str, meta: Option<&std::fs::Metadata>) -> Option<NaiveDateTime> {
+    if let Some(dt) = crate::date_resolver::parse_date_from_filename(name) {
+        return Some(dt);
+    }
+    if let Some(m) = meta {
+        if let Ok(sys_time) = m.modified().or_else(|_| m.created()) {
+            let dt: chrono::DateTime<chrono::Local> = sys_time.into();
+            return Some(dt.naive_local());
+        }
+    }
+    None
+}
+
 pub fn scan_archive_directory_streaming<P, C>(
     dir: &Path,
     existing_paths: Option<&std::collections::HashSet<String>>,
@@ -162,12 +179,12 @@ where
     let initial_count = existing_paths.map(|s| s.len()).unwrap_or(0);
     let mut files = Vec::new();
     let mut all_directories = Vec::new();
+    let mut known_sidecars: std::collections::HashMap<String, CullingState> = std::collections::HashMap::new();
     let supported_exts = SUPPORTED_EXTENSIONS;
 
     let mut current_chunk = Vec::with_capacity(100);
     let mut current_dir_chunk = Vec::new();
     let mut total_bytes = initial_bytes;
-    let mut last_progress_time = Instant::now();
     let mut last_chunk_time = Instant::now();
     let mut current_dir_str = dir.to_string_lossy().into_owned();
 
@@ -180,6 +197,8 @@ where
         is_paused: false,
         is_cancelled: false,
         is_complete: false,
+        phase: Some("discovering".to_string()),
+        total_files: None,
     });
 
     let walker = WalkDir::new(dir)
@@ -188,10 +207,12 @@ where
         .filter_entry(|e| {
             if e.file_type().is_dir() {
                 if let Some(name) = e.file_name().to_str() {
-                    if name.starts_with('.') && name != "." {
-                        return false;
-                    }
-                    if name.eq_ignore_ascii_case("$RECYCLE.BIN") || name.eq_ignore_ascii_case("System Volume Information") {
+                    if (name.starts_with('.') && name != ".")
+                        || name.starts_with("@eaDir")
+                        || name.starts_with(".@__thumb")
+                        || name.eq_ignore_ascii_case("$RECYCLE.BIN")
+                        || name.eq_ignore_ascii_case("System Volume Information")
+                    {
                         return false;
                     }
                 }
@@ -199,10 +220,18 @@ where
             true
         });
 
-    for entry in walker.filter_map(|e| e.ok()) {
+    for res in walker {
         if controller.check_pause_or_cancel() {
             break;
         }
+
+        let entry = match res {
+            Ok(e) => e,
+            Err(err) => {
+                eprintln!("[RapidReady WalkDir Warning] {}", err);
+                continue;
+            }
+        };
 
         let path = entry.path();
         if entry.file_type().is_dir() {
@@ -213,13 +242,15 @@ where
             }
             current_dir_str = path.to_string_lossy().into_owned();
             let chunk_elapsed = last_chunk_time.elapsed().as_millis();
-            if (!current_chunk.is_empty() || !current_dir_chunk.is_empty()) && (current_chunk.len() >= 20 || current_dir_chunk.len() >= 20 || chunk_elapsed >= 500) {
+            let should_emit_dir = (!current_chunk.is_empty() && (current_chunk.len() >= 250 || (files.is_empty() && current_chunk.len() >= 30) || chunk_elapsed >= 400))
+                || (current_dir_chunk.len() >= 100 || chunk_elapsed >= 500);
+            if (!current_chunk.is_empty() || !current_dir_chunk.is_empty()) && should_emit_dir {
+                if !current_chunk.is_empty() {
+                    files.extend(current_chunk.iter().cloned());
+                }
                 on_chunk(std::mem::take(&mut current_chunk), std::mem::take(&mut current_dir_chunk));
-                current_chunk = Vec::with_capacity(100);
+                current_chunk = Vec::with_capacity(300);
                 last_chunk_time = Instant::now();
-            }
-            if last_progress_time.elapsed().as_millis() >= 150 {
-                last_progress_time = Instant::now();
                 on_progress(ArchiveScanProgress {
                     scan_id,
                     files_found: initial_count + files.len(),
@@ -228,6 +259,8 @@ where
                     is_paused: controller.is_paused(),
                     is_cancelled: controller.is_cancelled(),
                     is_complete: false,
+                    phase: Some("discovering".to_string()),
+                    total_files: None,
                 });
             }
             continue;
@@ -235,6 +268,22 @@ where
 
         if path.is_file() {
             if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
+                if ext.eq_ignore_ascii_case("rrdata") {
+                    if let Ok(contents) = std::fs::read_to_string(path) {
+                        let state = crate::culling::parse_sidecar_json(&contents);
+                        let mut orig_str = path.to_string_lossy().into_owned();
+                        if orig_str.ends_with(".rrdata") {
+                            orig_str.truncate(orig_str.len() - 7);
+                        }
+                        let norm_orig = orig_str.replace('\\', "/");
+                        if let Some(f) = current_chunk.iter_mut().find(|f| f.path.replace('\\', "/") == norm_orig) {
+                            f.culling = state.clone();
+                        }
+                        known_sidecars.insert(norm_orig, state);
+                    }
+                    continue;
+                }
+
                 if supported_exts.contains(&ext.to_lowercase().as_str()) {
                     let path_norm = path.to_string_lossy().replace('\\', "/");
                     if let Some(set) = existing_paths {
@@ -252,10 +301,10 @@ where
                         .unwrap_or(0);
                     total_bytes += size;
                     let name = entry.file_name().to_string_lossy().into_owned();
-                    let date = get_fast_creation_date(path, metadata.as_ref());
+                    let date = get_streaming_discovery_date(&name, metadata.as_ref());
                     let is_raw = crate::metadata_resolver::is_raw_path(path);
                     let is_video = crate::metadata_resolver::is_video_path(path);
-                    let culling = read_sidecar(path);
+                    let culling = known_sidecars.remove(&path_norm).unwrap_or_default();
 
                     let item = ArchiveFile {
                         path: path.to_string_lossy().into_owned(),
@@ -273,19 +322,20 @@ where
                         mtime,
                     };
 
-                    current_chunk.push(item.clone());
-                    files.push(item);
+                    current_chunk.push(item);
 
                     let chunk_elapsed = last_chunk_time.elapsed().as_millis();
-                    let should_emit_chunk = current_chunk.len() >= 100
-                        || (current_chunk.len() >= 20 && chunk_elapsed >= 400)
-                        || ((!current_chunk.is_empty() || !current_dir_chunk.is_empty()) && chunk_elapsed >= 800);
+                    let should_emit_chunk = current_chunk.len() >= 250
+                        || (files.is_empty() && (current_chunk.len() >= 30 || chunk_elapsed >= 200))
+                        || ((!current_chunk.is_empty() || !current_dir_chunk.is_empty()) && chunk_elapsed >= 400);
 
                     if should_emit_chunk {
+                        if !current_chunk.is_empty() {
+                            files.extend(current_chunk.iter().cloned());
+                        }
                         on_chunk(std::mem::take(&mut current_chunk), std::mem::take(&mut current_dir_chunk));
-                        current_chunk = Vec::with_capacity(100);
+                        current_chunk = Vec::with_capacity(300);
                         last_chunk_time = Instant::now();
-                        last_progress_time = Instant::now();
                         on_progress(ArchiveScanProgress {
                             scan_id,
                             files_found: initial_count + files.len(),
@@ -294,34 +344,28 @@ where
                             is_paused: controller.is_paused(),
                             is_cancelled: controller.is_cancelled(),
                             is_complete: false,
-                        });
-                    } else if last_progress_time.elapsed().as_millis() >= 150 {
-                        last_progress_time = Instant::now();
-                        on_progress(ArchiveScanProgress {
-                            scan_id,
-                            files_found: initial_count + files.len(),
-                            total_bytes,
-                            current_dir: current_dir_str.clone(),
-                            is_paused: controller.is_paused(),
-                            is_cancelled: controller.is_cancelled(),
-                            is_complete: false,
+                            phase: Some("discovering".to_string()),
+                            total_files: None,
                         });
                     }
                 }
             }
         }
-        if controller.is_cancelled() {
+        if controller.check_pause_or_cancel() {
             break;
         }
     }
 
     if !current_chunk.is_empty() || !current_dir_chunk.is_empty() {
+        if !current_chunk.is_empty() {
+            files.extend(current_chunk.iter().cloned());
+        }
         on_chunk(current_chunk, current_dir_chunk);
     }
 
     let is_cancelled = controller.is_cancelled();
 
-    // Final complete event
+    // Final complete event for discovery phase
     on_progress(ArchiveScanProgress {
         scan_id,
         files_found: initial_count + files.len(),
@@ -329,7 +373,9 @@ where
         current_dir: String::new(),
         is_paused: false,
         is_cancelled,
-        is_complete: !is_cancelled,
+        is_complete: false, // Discovery phase complete; thumbnailing follows in Phase 2
+        phase: Some("discovering".to_string()),
+        total_files: Some(initial_count + files.len()),
     });
 
     if !is_cancelled {
@@ -340,7 +386,7 @@ where
     Ok(ArchiveScanResult {
         files,
         directories: all_directories,
-        is_fully_indexed: !is_cancelled,
+        is_fully_indexed: false, // Initial discovery complete; thumbnails must be built in Phase 2
     })
 }
 
@@ -350,9 +396,15 @@ pub fn scan_archive_directory(dir: &Path) -> Result<ArchiveScanResult> {
 }
 
 pub const SUPPORTED_EXTENSIONS: &[&str] = &[
-    "jpg", "jpeg", "png", "tif", "tiff", "heic", "heif", "hif", "webp", "avif", // Raster
-    "cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2", "pef", "3fr", "x3f", "nrw", "rwl", "fff", "iiq", "crw", "erf", // RAW
-    "mp4", "mov", "m4v", "avi", // Video
+    // Raster Images
+    "jpg", "jpeg", "png", "tif", "tiff", "heic", "heif", "hif", "webp", "avif", "bmp", "gif",
+    // RAW Camera Formats
+    "cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2", "pef", "3fr", "x3f",
+    "nrw", "rwl", "fff", "iiq", "crw", "erf", "sr2", "srf", "mrw", "dcr", "kdc",
+    "mef", "mos", "srw", "gpr", "raw", "bay", "cap", "eip", "dcs", "drf", "k25",
+    // Video Containers
+    "mp4", "mov", "m4v", "avi", "mkv", "mts", "m2ts", "wmv", "webm", "flv",
+    "3gp", "3g2", "mpg", "mpeg", "m2v", "mod", "tod", "vob",
 ];
 
 pub fn is_supported_archive_file(path: &Path) -> bool {

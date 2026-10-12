@@ -263,6 +263,14 @@ export const LibraryGrid = React.memo(function LibraryGrid({
   const isViewingLastImport = useLibraryStore((s) => s.isViewingLastImport);
   const activeCollectionId = useCollectionsStore((s) => s.activeCollectionId);
 
+  // Scroll Anchor: When user scrolls into the grid during active scanning, lock viewport
+  // to the topmost visible image so that prepended/inserted images don't shift the grid under the user's eyes!
+  const scrollAnchorRef = useRef<{
+    path: string;
+    offsetInRow: number;
+    hasScrolled: boolean;
+  } | null>(null);
+
   useEffect(() => {
     const key = `${activeFolderPath}::${isViewingLastImport}::${activeCollectionId}`;
     if (prevFolderKeyRef.current !== null && prevFolderKeyRef.current !== key) {
@@ -270,6 +278,7 @@ export const LibraryGrid = React.memo(function LibraryGrid({
         gridContainerRef.current.scrollTop = 0;
       }
       setGridScrollTop(0);
+      scrollAnchorRef.current = null;
     }
     prevFolderKeyRef.current = key;
   }, [activeFolderPath, isViewingLastImport, activeCollectionId, setGridScrollTop]);
@@ -291,20 +300,45 @@ export const LibraryGrid = React.memo(function LibraryGrid({
   });
 
   // When scan completes or final sorted images commit, force virtualizer to remeasure and re-sync
-  // immediately so all rows reflect final sorted order without requiring manual scrolling
+  // immediately so all rows reflect final sorted order without requiring manual scrolling.
+  // During scanning, lock viewport offset to the anchor image so newly discovered photos don't push the viewport.
   const prevScanStateRef = useRef(scanState);
   const prevDisplayedImagesRef = useRef(displayedImages);
   useLayoutEffect(() => {
     const wasScanning = prevScanStateRef.current === 'scanning' || prevScanStateRef.current === 'connecting';
+    const isScanning = scanState === 'scanning' || scanState === 'connecting';
     const isNowDone = scanState === 'completed' || scanState === 'idle';
     const imagesChangedWhileDone = isNowDone && prevDisplayedImagesRef.current !== displayedImages;
+
+    const el = gridContainerRef.current;
+    if (
+      viewMode === 'grid' &&
+      el &&
+      isScanning &&
+      scrollAnchorRef.current?.hasScrolled &&
+      scrollAnchorRef.current.path
+    ) {
+      const anchorPath = scrollAnchorRef.current.path;
+      const newIndex = displayedImages.findIndex((img) => img.path === anchorPath);
+      if (newIndex >= 0) {
+        const newRow = Math.floor(newIndex / numColumns);
+        const rowHeight = itemHeight + gap;
+        const targetScrollTop = Math.max(0, newRow * rowHeight + scrollAnchorRef.current.offsetInRow);
+
+        if (Math.abs(el.scrollTop - targetScrollTop) > 1) {
+          el.scrollTop = targetScrollTop;
+          setGridScrollTop(targetScrollTop);
+          rowVirtualizer.scrollToOffset(targetScrollTop);
+        }
+      }
+    }
 
     if ((wasScanning && isNowDone) || imagesChangedWhileDone) {
       rowVirtualizer.measure();
     }
     prevScanStateRef.current = scanState;
     prevDisplayedImagesRef.current = displayedImages;
-  }, [scanState, displayedImages, rowVirtualizer]);
+  }, [scanState, displayedImages, rowVirtualizer, viewMode, numColumns, itemHeight, gap, setGridScrollTop]);
 
   // On initial mount of the app, restore saved scroll position if any
   const hasInitialScrolledRef = useRef(false);
@@ -439,6 +473,36 @@ export const LibraryGrid = React.memo(function LibraryGrid({
       prevActiveIndexRef.current = activeImageIndex;
     }
   }, [activeImageIndex, viewMode, numColumns, itemHeight, gap, displayedImages.length, setGridScrollTop]);
+
+  // Realtime Viewport Priority: notify Rust backend of currently visible image paths
+  // so background indexing prioritizes the user's active viewport immediately upon slider jumps or scrolling.
+  const virtualItems = rowVirtualizer.getVirtualItems();
+  const firstRow = virtualItems[0]?.index;
+  const lastRow = virtualItems[virtualItems.length - 1]?.index;
+
+  useEffect(() => {
+    if (viewMode !== 'grid' || virtualItems.length === 0 || displayedImages.length === 0) return;
+
+    const timer = window.setTimeout(() => {
+      const visiblePaths: string[] = [];
+      for (const item of virtualItems) {
+        const startIndex = item.index * numColumns;
+        const endIndex = Math.min(displayedImages.length, startIndex + numColumns);
+        for (let i = startIndex; i < endIndex; i++) {
+          const img = displayedImages[i];
+          if (img) visiblePaths.push(img.path);
+        }
+      }
+
+      if (visiblePaths.length > 0) {
+        invoke('set_active_viewport_paths', { paths: visiblePaths }).catch(() => {});
+      }
+    }, 80);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [firstRow, lastRow, numColumns, displayedImages, viewMode]);
 
   // Sprint 1: Speculative RAM Viewport Caching
   // Debounce 150ms after scroll settles to warm up thumbnails in scroll direction
@@ -575,6 +639,27 @@ export const LibraryGrid = React.memo(function LibraryGrid({
           scrollDirectionRef.current = 'up';
         }
         lastScrollTopRef.current = currentScrollTop;
+
+        // Maintain scroll anchor for stable viewport during archive scan
+        const rowHeight = itemHeight + gap;
+        const visibleRow = Math.floor(currentScrollTop / rowHeight);
+        const offsetInRow = currentScrollTop - visibleRow * rowHeight;
+        const anchorIndex = visibleRow * numColumns;
+        const anchorImg = displayedImages[anchorIndex];
+
+        if (anchorImg && currentScrollTop > 0) {
+          scrollAnchorRef.current = {
+            path: anchorImg.path,
+            offsetInRow,
+            hasScrolled: true,
+          };
+        } else if (currentScrollTop === 0) {
+          scrollAnchorRef.current = {
+            path: '',
+            offsetInRow: 0,
+            hasScrolled: false,
+          };
+        }
 
         // Invalidate active background warmup only when warmup is active; never during scan
         const isScanning = scanState === 'scanning' || scanState === 'connecting';

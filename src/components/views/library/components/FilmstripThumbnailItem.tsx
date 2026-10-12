@@ -47,10 +47,10 @@ export const FilmstripThumbnailItem = React.memo(function FilmstripThumbnailItem
       }`}
     >
       <img 
+        loading="eager"
+        decoding="async"
         src={getRrImageUrl(img.path, false, img.culling?.orientation, 1, img.size, img.mtime)} 
-        className={`w-full h-full object-contain pointer-events-none transition-opacity duration-150 ${
-          loaded ? 'opacity-100' : 'opacity-0'
-        }`} 
+        className="w-full h-full object-contain pointer-events-none relative z-10" 
         alt={img.name} 
         onLoad={() => {
           loadedThumbnailCache.add(cacheKey);

@@ -1,7 +1,7 @@
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 use anyhow::{Context, Result};
 use rusqlite::Connection;
 
@@ -36,25 +36,58 @@ pub struct CacheStats {
     pub total_cached_items: usize,
 }
 
+pub struct PooledReadConn<'a> {
+    conn: Option<Connection>,
+    pool: &'a Mutex<Vec<Connection>>,
+}
+
+impl<'a> std::ops::Deref for PooledReadConn<'a> {
+    type Target = Connection;
+    fn deref(&self) -> &Self::Target {
+        self.conn.as_ref().unwrap()
+    }
+}
+
+impl<'a> std::ops::DerefMut for PooledReadConn<'a> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.conn.as_mut().unwrap()
+    }
+}
+
+impl<'a> Drop for PooledReadConn<'a> {
+    fn drop(&mut self) {
+        if let Some(conn) = self.conn.take() {
+            if let Ok(mut pool) = self.pool.lock() {
+                if pool.len() < 16 {
+                    pool.push(conn);
+                }
+            }
+        }
+    }
+}
+
 pub struct ChunkCache {
     cache_dir: PathBuf,
     chunks_dir: PathBuf,
     previews_dir: PathBuf,
+    db_path: Option<PathBuf>,
+    read_pool: Mutex<Vec<Connection>>,
     conn: Arc<Mutex<Connection>>,
     writer: Mutex<Option<ChunkWriter>>,
     max_chunk_size: u64,
 }
 
-static GLOBAL_CHUNK_CACHE: OnceLock<Arc<ChunkCache>> = OnceLock::new();
+static GLOBAL_CHUNK_CACHE: std::sync::RwLock<Option<Arc<ChunkCache>>> = std::sync::RwLock::new(None);
 
 pub fn init_global_chunk_cache(cache_dir: &Path, db_path: &Path) -> Result<Arc<ChunkCache>> {
     let cache = Arc::new(ChunkCache::new(cache_dir, db_path)?);
-    let _ = GLOBAL_CHUNK_CACHE.set(cache.clone());
+    let mut guard = GLOBAL_CHUNK_CACHE.write().unwrap();
+    *guard = Some(cache.clone());
     Ok(cache)
 }
 
 pub fn get_global_chunk_cache() -> Option<Arc<ChunkCache>> {
-    GLOBAL_CHUNK_CACHE.get().cloned()
+    GLOBAL_CHUNK_CACHE.read().unwrap().clone()
 }
 
 impl ChunkCache {
@@ -69,7 +102,9 @@ impl ChunkCache {
              PRAGMA synchronous = NORMAL;
              PRAGMA busy_timeout = 5000;",
         )?;
-        Self::new_with_conn(cache_dir, Arc::new(Mutex::new(conn)))
+        let mut cache = Self::new_with_conn(cache_dir, Arc::new(Mutex::new(conn)))?;
+        cache.db_path = Some(db_path.to_path_buf());
+        Ok(cache)
     }
 
     pub fn new_with_conn(cache_dir: &Path, conn: Arc<Mutex<Connection>>) -> Result<Self> {
@@ -101,9 +136,45 @@ impl ChunkCache {
             cache_dir: cache_dir.to_path_buf(),
             chunks_dir,
             previews_dir,
+            db_path: None,
+            read_pool: Mutex::new(Vec::new()),
             conn,
             writer: Mutex::new(None),
             max_chunk_size: DEFAULT_MAX_CHUNK_SIZE,
+        })
+    }
+
+    fn get_read_conn(&self) -> Result<PooledReadConn<'_>> {
+        let db_path = match self.db_path {
+            Some(ref p) => p,
+            None => anyhow::bail!("No db_path configured for read pool"),
+        };
+
+        if let Ok(mut pool) = self.read_pool.lock() {
+            if let Some(conn) = pool.pop() {
+                return Ok(PooledReadConn {
+                    conn: Some(conn),
+                    pool: &self.read_pool,
+                });
+            }
+        }
+
+        let conn = Connection::open_with_flags(
+            db_path,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_URI,
+        )
+        .or_else(|_| Connection::open(db_path))
+        .with_context(|| format!("Failed to open read connection for chunk cache at {:?}", db_path))?;
+
+        conn.execute_batch(
+            "PRAGMA journal_mode = WAL;
+             PRAGMA synchronous = NORMAL;
+             PRAGMA busy_timeout = 5000;",
+        )?;
+
+        Ok(PooledReadConn {
+            conn: Some(conn),
+            pool: &self.read_pool,
         })
     }
 
@@ -162,9 +233,23 @@ impl ChunkCache {
 
     /// Reads Tier 1 thumbnail from packed binary chunks.
     pub fn read_chunk_thumbnail(&self, cache_key: &str) -> Result<Option<Vec<u8>>> {
-        let loc = {
+        let loc = if self.db_path.is_some() {
+            let conn = self.get_read_conn()?;
+            let mut stmt = conn.prepare_cached(
+                "SELECT chunk_file_id, byte_offset, byte_length FROM thumbnail_chunks WHERE cache_key = ?1",
+            )?;
+            let mut rows = stmt.query([cache_key])?;
+            if let Some(row) = rows.next()? {
+                let chunk_file_id: u32 = row.get(0)?;
+                let byte_offset: i64 = row.get(1)?;
+                let byte_length: i64 = row.get(2)?;
+                Some((chunk_file_id, byte_offset as u64, byte_length as usize))
+            } else {
+                None
+            }
+        } else {
             let conn = self.conn.lock().unwrap();
-            let mut stmt = conn.prepare(
+            let mut stmt = conn.prepare_cached(
                 "SELECT chunk_file_id, byte_offset, byte_length FROM thumbnail_chunks WHERE cache_key = ?1",
             )?;
             let mut rows = stmt.query([cache_key])?;
@@ -308,9 +393,30 @@ impl ChunkCache {
     /// Checks whether thumbnail or preview is present in cache without reading its full payload.
     pub fn has_thumbnail(&self, cache_key: &str, scale: u32) -> bool {
         if scale < 2 {
-            let loc = {
+            let loc = if self.db_path.is_some() {
+                if let Ok(conn) = self.get_read_conn() {
+                    let mut stmt = match conn.prepare_cached(
+                        "SELECT chunk_file_id FROM thumbnail_chunks WHERE cache_key = ?1",
+                    ) {
+                        Ok(s) => s,
+                        Err(_) => return false,
+                    };
+                    let mut rows = match stmt.query([cache_key]) {
+                        Ok(r) => r,
+                        Err(_) => return false,
+                    };
+                    if let Ok(Some(row)) = rows.next() {
+                        let id: u32 = row.get(0).unwrap_or(0);
+                        Some(id)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
                 let conn = self.conn.lock().unwrap();
-                let mut stmt = match conn.prepare(
+                let mut stmt = match conn.prepare_cached(
                     "SELECT chunk_file_id FROM thumbnail_chunks WHERE cache_key = ?1",
                 ) {
                     Ok(s) => s,
@@ -363,12 +469,17 @@ impl ChunkCache {
             }
         }
 
-        let conn = self.conn.lock().unwrap();
-        let total: Result<i64, _> = conn.query_row(
-            "SELECT COUNT(*) FROM thumbnail_chunks",
-            [],
-            |r| r.get(0),
-        );
+        let total: Result<i64, _> = if self.db_path.is_some() {
+            if let Ok(conn) = self.get_read_conn() {
+                conn.query_row("SELECT COUNT(*) FROM thumbnail_chunks", [], |r| r.get(0))
+            } else {
+                let conn = self.conn.lock().unwrap();
+                conn.query_row("SELECT COUNT(*) FROM thumbnail_chunks", [], |r| r.get(0))
+            }
+        } else {
+            let conn = self.conn.lock().unwrap();
+            conn.query_row("SELECT COUNT(*) FROM thumbnail_chunks", [], |r| r.get(0))
+        };
         stats.total_cached_items = total.unwrap_or(0) as usize + stats.preview_count;
 
         Ok(stats)
@@ -379,6 +490,10 @@ impl ChunkCache {
         {
             let mut writer = self.writer.lock().unwrap();
             *writer = None;
+        }
+
+        if let Ok(mut pool) = self.read_pool.lock() {
+            pool.clear();
         }
 
         let _ = fs::remove_dir_all(&self.chunks_dir);
