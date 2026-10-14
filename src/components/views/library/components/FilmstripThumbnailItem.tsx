@@ -81,11 +81,11 @@ export const FilmstripThumbnailItem = React.memo(function FilmstripThumbnailItem
             {img.name.split('.').pop()?.toUpperCase() || 'VID'}
           </span>
         ) : isRaw ? (
-          <span className="px-1 py-0.2 rounded text-[8px] font-mono font-semibold tracking-wider bg-black/70 text-white/90 border border-white/15 shadow-sm leading-tight inline-block">
+          <span className="px-1 py-0.2 rounded text-[8px] font-mono font-semibold tracking-wider bg-black/80 text-white/95 border border-white/20 shadow-sm leading-tight inline-block">
             RAW
           </span>
         ) : (
-          <span className="px-1 py-0.2 rounded text-[8px] font-mono font-medium tracking-wider bg-black/50 text-txt-tertiary border border-white/5 shadow-sm leading-tight inline-block">
+          <span className="px-1 py-0.2 rounded text-[8px] font-mono font-semibold tracking-wider bg-black/80 text-white/95 border border-white/20 shadow-sm leading-tight inline-block">
             {img.name.split('.').pop()?.toUpperCase() || 'JPG'}
           </span>
         )}

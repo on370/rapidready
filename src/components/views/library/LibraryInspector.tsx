@@ -723,14 +723,14 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
                         </span>
                       )}
                     </div>
-                    <div className="absolute bottom-2 left-2 flex items-center gap-1.5 bg-black/70 backdrop-blur-sm px-2 py-0.5 rounded text-[11px] font-mono text-white z-20">
+                    <div className="absolute bottom-2 left-2 flex items-center gap-1.5 bg-black/80 backdrop-blur-sm border border-white/15 shadow-sm px-2 py-0.5 rounded text-[11px] font-mono text-white z-20">
                       {isVideo ? (
                         <span className="text-accent font-semibold flex items-center gap-1">
                           <Play className="w-2.5 h-2.5 fill-accent" />
                           {extension}
                         </span>
                       ) : (
-                        <span className={isRaw ? "text-accent font-semibold" : "text-txt-secondary"}>{extension}</span>
+                        <span className={isRaw ? "text-accent font-semibold" : "text-white/95 font-semibold"}>{extension}</span>
                       )}
                       <span className="text-white/40">·</span>
                       <span>{(activeImage.size / (1024 * 1024)).toFixed(1)} MB</span>

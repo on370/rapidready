@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronLeft, ChevronRight, Film, Info, Camera } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Film, Info, Camera, Play } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -307,13 +307,18 @@ export const LoupeViewer = React.memo(function LoupeViewer({
               {activeImage?.name}
             </span>
             {activeImage && (
-              isRaw ? (
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold tracking-wide bg-white/10 text-white/90 border border-white/15">
+              isVideo ? (
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold tracking-wide bg-accent/15 text-accent border border-accent/30 flex items-center gap-1">
+                  <Play className="w-2.5 h-2.5 fill-accent" />
+                  {activeImage.name.split('.').pop()?.toUpperCase() || 'VID'}
+                </span>
+              ) : isRaw ? (
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold tracking-wide bg-white/10 text-white/95 border border-white/20">
                   RAW
                 </span>
               ) : (
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-medium tracking-wide bg-black/40 text-txt-tertiary border border-white/5">
-                  JPG
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold tracking-wide bg-white/10 text-white/95 border border-white/20">
+                  {activeImage.name.split('.').pop()?.toUpperCase() || 'JPG'}
                 </span>
               )
             )}

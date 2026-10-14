@@ -504,7 +504,7 @@ export function ImportPreviewStep({ onBack }: ImportPreviewStepProps = {}) {
                               {pair.otherFile.name.split('.').pop()?.toUpperCase() || 'VID'}
                             </span>
                           ) : (
-                            <span className="text-[9px] px-1.5 py-0.5 rounded font-mono font-bold tracking-tight bg-app-deepest text-txt-tertiary border border-app-border">
+                            <span className="text-[9px] px-1.5 py-0.5 rounded font-mono font-bold tracking-tight bg-app-deepest text-txt-secondary border border-app-border">
                               {pair.otherFile.name.split('.').pop()?.toUpperCase() || '?'}
                             </span>
                           )
@@ -651,7 +651,7 @@ export function ImportPreviewStep({ onBack }: ImportPreviewStepProps = {}) {
                       </span>
                     )}
                     {selectedPair.rawFile && selectedPair.jpgFile && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-app-deepest text-txt-tertiary border border-app-border">
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-txt-secondary border border-white/10 font-medium">
                         {t('preview.pairBadge')}
                       </span>
                     )}

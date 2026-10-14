@@ -1,7 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Check, Star, Play } from 'lucide-react';
 import { LibraryImage } from '../../../../stores/libraryStore';
-import { useLibraryUIStore } from '../../../../stores/libraryUIStore';
 import { getRrImageUrl, isRawFilename, isVideoFilename } from '../../../../utils/image';
 import { getColorConfig } from '../../../../constants/culling';
 import { loadedThumbnailCache } from '../utils/thumbnailCache';
@@ -45,8 +44,7 @@ export const GridThumbnailItem = React.memo(function GridThumbnailItem({
 }: GridThumbnailItemProps) {
   const isVideo = img.is_video ?? isVideoFilename(img.name);
   const isRaw = !isVideo && (img.is_raw ?? isRawFilename(img.name));
-  const gridThumbnailSize = useLibraryUIStore((s) => s.gridThumbnailSize);
-  const scale = gridThumbnailSize <= 130 ? 0 : 1;
+  const scale = 1;
   const cacheKey = `${img.path}:${img.culling?.orientation || 1}:${scale}`;
   const isCached = loadedThumbnailCache.has(cacheKey);
   const [shouldLoad, setShouldLoad] = useState(isCached || !_isScrolling);
@@ -139,16 +137,16 @@ export const GridThumbnailItem = React.memo(function GridThumbnailItem({
       {/* Format Badge: Video vs RAW vs JPG */}
       <div className="absolute top-1.5 left-1.5 z-20 pointer-events-none">
         {isVideo ? (
-          <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold tracking-wide bg-black/75 text-accent border border-accent/40 shadow-sm backdrop-blur-xs flex items-center gap-1">
+          <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold tracking-wide bg-black/80 text-accent border border-accent/40 shadow-sm backdrop-blur-xs flex items-center gap-1">
             <Play className="w-2.5 h-2.5 fill-accent text-accent" />
             {img.name.split('.').pop()?.toUpperCase() || 'VID'}
           </span>
         ) : isRaw ? (
-          <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold tracking-wide bg-black/60 text-white/90 border border-white/15 shadow-sm backdrop-blur-xs">
+          <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold tracking-wide bg-black/80 text-white/95 border border-white/20 shadow-sm backdrop-blur-xs">
             RAW
           </span>
         ) : (
-          <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-medium tracking-wide bg-black/40 text-txt-tertiary border border-white/5 shadow-sm backdrop-blur-xs">
+          <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold tracking-wide bg-black/80 text-white/95 border border-white/20 shadow-sm backdrop-blur-xs">
             {img.name.split('.').pop()?.toUpperCase() || 'JPG'}
           </span>
         )}

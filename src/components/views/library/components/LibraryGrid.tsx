@@ -97,7 +97,7 @@ export const LibraryGrid = React.memo(function LibraryGrid({
   const warmupTokenRef = useRef<number>(0);
   const warmupActiveRef = useRef<boolean>(false);
   const warmupTimerRef = useRef<number | null>(null);
-  const scale = gridThumbnailSize <= 130 ? 0 : 1;
+  const scale = 1;
 
   // Listen for background warmup progress events from Rust
   useEffect(() => {
