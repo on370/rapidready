@@ -483,6 +483,16 @@
   - Embedded HTML5 `<video>` player in `LoupeViewer.tsx` with standard shortcuts (`Space` toggle playback, `J`/`K`/`L` reverse/pause/forward scrubbing, `Left`/`Right` frame stepping).
 
 
+- [ ] **Fujifilm RAW (`.raf`) Header Parser & Grid Thumbnail Extraction (TODO):**
+  - **Problem & Diagnosis:**
+    - Fujifilm `.raf` files currently render correctly in the Inspector and Loupe View (since Loupe View requests `scale=100`, triggering `extract_largest_embedded_jpeg` which performs a 40 MB buffer scan and locates the high-resolution JPEG preview).
+    - However, in Grid View (`scale=1`), thumbnails currently fail to render because `extract_embedded_thumbnail` expects a standard TIFF header (`II` or `MM` at byte 0).
+    - Fujifilm RAF files do not begin with a standard TIFF header; they start with a proprietary 16-byte magic (`FUJIFILMCCD-RAW `) and store the offset to their embedded preview JPEG / embedded EXIF header within the RAF header structure (typically at offset 84/120 or in a directory table).
+  - **Resolution Plan:**
+    - Add a dedicated RAF header parser in `thumbnail.rs` (checking `&buf[0..16] == b"FUJIFILMCCD-RAW "`).
+    - Read the embedded preview JPEG offset and length directly from the RAF header table and extract the preview without requiring a 40 MB deep scan.
+    - Feed the resulting JPEG to the standard in-memory caching pipeline, ensuring instant Grid View thumbnails for all Fujifilm cameras (X-T, X-Pro, X100, GFX series).
+
 - [ ] **Extended Vintage & Exotic RAW Formats:**
   - Leica (`.rwl`), Hasselblad Studio (`.fff`), Phase One / Leaf / Mamiya (`.iiq`, `.mos`), Canon Legacy (`.crw`), Sony/Minolta (`.sr2`, `.srf`, `.mrw`), Olympus (`.ori`), Epson (`.erf`).
   - Next-gen raster formats: JPEG XL (`.jxl`), WebP (`.webp`), AVIF (`.avif`).
