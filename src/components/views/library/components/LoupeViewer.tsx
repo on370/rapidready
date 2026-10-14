@@ -82,12 +82,12 @@ export const LoupeViewer = React.memo(function LoupeViewer({
     setRightCount(0);
   }, [activeImageIndex]);
 
-  // Debounce preloading slightly (120ms) so rapid key repeat skips intermediate frames,
-  // but normal human culling rhythm (~300-800ms) preloads immediately into RAM cache
+  // Debounce preloading and viewport image (100ms) so rapid key repeat skips intermediate frames,
+  // while human culling rhythm (~300-800ms) displays immediately and preloads into RAM cache
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedActiveIndex(activeImageIndex);
-    }, 120);
+    }, 100);
     return () => clearTimeout(timer);
   }, [activeImageIndex]);
 
@@ -156,10 +156,14 @@ export const LoupeViewer = React.memo(function LoupeViewer({
     };
   }, [debouncedActiveIndex, activeImageIndex, displayedImages, scanState]);
 
-  // Lazy-load metadata for active image if needed
+  // Debounced image for the heavy main Loupe viewport to avoid intermediate thrashing during rapid navigation
+  const loupeActiveImage = displayedImages[debouncedActiveIndex] || activeImage;
+  const isLoupeVideo = loupeActiveImage ? (loupeActiveImage.is_video ?? isVideoFilename(loupeActiveImage.name)) : false;
+
+  // Lazy-load metadata for debounced active image if needed
   useEffect(() => {
-    if (!activeImage) return;
-    if (activeImage.camera === undefined || activeImage.is_monochrome_preview === undefined) {
+    if (!loupeActiveImage) return;
+    if (loupeActiveImage.camera === undefined || loupeActiveImage.is_monochrome_preview === undefined) {
       let isMounted = true;
       invoke<{
         date: string | null;
@@ -174,17 +178,17 @@ export const LoupeViewer = React.memo(function LoupeViewer({
         latitude?: number | null;
         longitude?: number | null;
         altitude?: number | null;
-      }>('get_image_metadata', { path: activeImage.path })
+      }>('get_image_metadata', { path: loupeActiveImage.path })
         .then((meta) => {
           if (isMounted && meta) {
-            useLibraryStore.getState().updateImageMetadata(activeImage.path, {
+            useLibraryStore.getState().updateImageMetadata(loupeActiveImage.path, {
               camera: meta.camera || null,
               lens: meta.lens || null,
               iso: meta.iso || null,
               aperture: meta.aperture || null,
               shutter: meta.shutter || null,
-              date: meta.date || activeImage.date,
-              is_raw: meta.is_raw ?? activeImage.is_raw,
+              date: meta.date || loupeActiveImage.date,
+              is_raw: meta.is_raw ?? loupeActiveImage.is_raw,
               is_monochrome_sensor: meta.is_monochrome_sensor ?? false,
               is_monochrome_preview: meta.is_monochrome_preview ?? false,
               latitude: meta.latitude ?? null,
@@ -199,7 +203,7 @@ export const LoupeViewer = React.memo(function LoupeViewer({
         isMounted = false;
       };
     }
-  }, [activeImage?.path]);
+  }, [loupeActiveImage?.path]);
 
   const isVideo = activeImage ? (activeImage.is_video ?? isVideoFilename(activeImage.name)) : false;
   const isRaw = activeImage && !isVideo ? (activeImage.is_raw ?? isRawFilename(activeImage.name)) : false;
@@ -209,24 +213,24 @@ export const LoupeViewer = React.memo(function LoupeViewer({
       <div 
         className="flex-1 flex items-center justify-center bg-app-deepest p-6 min-h-0 relative"
         onContextMenu={(e) => {
-          if (activeImage) {
-            onContextMenu(e, activeImage.path, activeImageIndex);
+          if (loupeActiveImage) {
+            onContextMenu(e, loupeActiveImage.path, debouncedActiveIndex);
           }
         }}
       >
-        {activeImage ? (
+        {loupeActiveImage ? (
           <>
             <ZoomableImage 
-              src={getRrImageUrl(activeImage.path, true, activeImage.culling?.orientation, undefined, activeImage.size, activeImage.mtime)} 
-              previewSrc={getRrImageUrl(activeImage.path, false, activeImage.culling?.orientation, 2, activeImage.size, activeImage.mtime)}
-              alt={activeImage.name} 
+              src={getRrImageUrl(loupeActiveImage.path, true, loupeActiveImage.culling?.orientation, undefined, loupeActiveImage.size, loupeActiveImage.mtime)} 
+              previewSrc={getRrImageUrl(loupeActiveImage.path, false, loupeActiveImage.culling?.orientation, 2, loupeActiveImage.size, loupeActiveImage.mtime)}
+              alt={loupeActiveImage.name} 
               onContextMenu={(e) => {
-                onContextMenu(e, activeImage.path, activeImageIndex);
+                onContextMenu(e, loupeActiveImage.path, debouncedActiveIndex);
               }}
             />
 
             {/* Video Poster Frame Indicator */}
-            {isVideo && (
+            {isLoupeVideo && (
               <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 pointer-events-none flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/80 backdrop-blur-md border border-white/20 text-white shadow-2xl">
                 <Film className="w-3.5 h-3.5 text-accent" />
                 <span className="text-xs font-semibold tracking-wide text-white/95">Video · Poster Frame</span>

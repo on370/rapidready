@@ -783,7 +783,7 @@ pub async fn reconcile_archive_delta(
                     &path_clone,
                     1,
                     &controller_clone,
-                    |_, _, _| {},
+                    |_, _, _, _| {},
                 );
             }
         }
@@ -853,7 +853,9 @@ pub async fn start_archive_thumbnailing(
         let total_cached = catalog.get_cached_count(&path_clone).unwrap_or(0);
         let ctrl_prog = controller_clone.clone();
         let last_reported_done = Arc::new(AtomicUsize::new(0));
+        let last_reported_bytes = Arc::new(AtomicU64::new(0));
         let last_done_clone = last_reported_done.clone();
+        let last_bytes_clone = last_reported_bytes.clone();
 
         let count = rapidready_core::thumbnail::generate_missing_thumbnails_for_archive(
             &catalog,
@@ -861,12 +863,13 @@ pub async fn start_archive_thumbnailing(
             &path_clone,
             1, // scale 1: micro-thumbnail
             &controller_clone,
-            move |done, total, current_file| {
+            move |done, total, current_file, bytes_processed| {
                 last_done_clone.store(done, Ordering::SeqCst);
+                last_bytes_clone.store(bytes_processed, Ordering::SeqCst);
                 let _ = app_clone.emit("archive_scan_progress", rapidready_core::archive::ArchiveScanProgress {
                     scan_id,
                     files_found: done,
-                    total_bytes: total as u64,
+                    total_bytes: bytes_processed,
                     current_dir: if !current_file.is_empty() { current_file.to_string() } else { format!("{}/{}", done, total) },
                     is_paused: ctrl_prog.is_paused(),
                     is_cancelled: ctrl_prog.is_cancelled(),
@@ -883,11 +886,12 @@ pub async fn start_archive_thumbnailing(
         } else {
             total_cached
         };
+        let final_bytes = last_reported_bytes.load(Ordering::SeqCst);
 
         let _ = app_final.emit("archive_scan_progress", rapidready_core::archive::ArchiveScanProgress {
             scan_id,
             files_found: final_count,
-            total_bytes: 0,
+            total_bytes: final_bytes,
             current_dir: String::new(),
             is_paused: false,
             is_cancelled,

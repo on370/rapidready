@@ -294,6 +294,7 @@ impl ChunkCache {
             let writer = guard.as_mut().expect("Writer must be initialized");
 
             if writer.current_offset + data_len > self.max_chunk_size {
+                let _ = writer.current_file.flush();
                 let next_id = writer.current_chunk_id + 1;
                 let chunk_path = self.chunks_dir.join(format!("chunk_{:04}.bin", next_id));
                 let next_file = OpenOptions::new()
@@ -310,7 +311,6 @@ impl ChunkCache {
 
             let start_offset = writer.current_offset;
             writer.current_file.write_all(data)?;
-            writer.current_file.flush()?;
             writer.current_offset += data_len;
             (writer.current_chunk_id, start_offset)
         };

@@ -37,6 +37,7 @@ export function ZoomableImage({ src, previewSrc, alt, onContextMenu }: ZoomableI
 
   // Reset state & progressive load: show preview immediately, load full-res in background
   useEffect(() => {
+    let canceled = false;
     setLoupeScale(0);
     setPosition({ x: 0, y: 0 });
 
@@ -49,9 +50,17 @@ export function ZoomableImage({ src, previewSrc, alt, onContextMenu }: ZoomableI
         setCurrentSrc(previewSrc);
       }
       img.onload = () => {
-        setCurrentSrc(src);
+        if (!canceled) {
+          setCurrentSrc(src);
+        }
       };
     }
+
+    return () => {
+      canceled = true;
+      img.onload = null;
+      img.src = '';
+    };
   }, [src, previewSrc, setLoupeScale]);
 
   const clampAndSetPosition = useCallback((x: number, y: number, currentScale = scale) => {

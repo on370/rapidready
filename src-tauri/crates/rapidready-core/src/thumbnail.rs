@@ -1780,7 +1780,7 @@ pub fn generate_missing_thumbnails_for_archive<P>(
     on_progress: P,
 ) -> Result<usize>
 where
-    P: FnMut(usize, usize, &str) + Send,
+    P: FnMut(usize, usize, &str, u64) + Send,
 {
     let candidates = catalog.get_thumbnail_candidates_for_root(root)?;
     if candidates.is_empty() {
@@ -1812,7 +1812,7 @@ where
     if total_missing == 0 {
         let _ = catalog.set_archive_indexing_status(root, true);
         let mut cb = on_progress;
-        cb(total_archive_files, total_archive_files, "");
+        cb(total_archive_files, total_archive_files, "", 0);
         return Ok(0);
     }
 
@@ -1832,11 +1832,12 @@ where
 
     let queue = Mutex::new(missing);
     let completed = AtomicUsize::new(0);
+    let processed_bytes = AtomicU64::new(0);
     let on_progress_mutex = Mutex::new(on_progress);
     let last_report_time = Mutex::new(std::time::Instant::now());
 
     if let Ok(mut cb) = on_progress_mutex.lock() {
-        cb(already_cached, total_archive_files, "");
+        cb(already_cached, total_archive_files, "", 0);
     }
 
     let worker_count = std::thread::available_parallelism()
@@ -1911,8 +1912,9 @@ where
                     // Skip if thumbnail was already created (e.g. on-demand by UI rr-image handler)
                     if chunk_cache.has_thumbnail(&key, scale) {
                         let done = completed.fetch_add(1, Ordering::SeqCst) + 1;
+                        let bytes_accum = processed_bytes.fetch_add(item.size, Ordering::Relaxed) + item.size;
                         let should_report = if let Ok(mut last) = last_report_time.lock() {
-                            if done == total_missing || done % 10 == 0 || last.elapsed() >= std::time::Duration::from_millis(100) {
+                            if done == total_missing || last.elapsed() >= std::time::Duration::from_millis(150) {
                                 *last = std::time::Instant::now();
                                 true
                             } else {
@@ -1923,7 +1925,7 @@ where
                         };
                         if should_report {
                             if let Ok(mut cb) = on_progress_mutex.lock() {
-                                cb(already_cached + done, total_archive_files, &item.path);
+                                cb(already_cached + done, total_archive_files, &item.path, bytes_accum);
                             }
                         }
                         continue;
@@ -1943,10 +1945,11 @@ where
                     }
 
                     let done = completed.fetch_add(1, Ordering::SeqCst) + 1;
+                    let bytes_accum = processed_bytes.fetch_add(item.size, Ordering::Relaxed) + item.size;
 
                     let should_report = {
                         if let Ok(mut last) = last_report_time.lock() {
-                            if done == total_missing || done % 10 == 0 || last.elapsed() >= std::time::Duration::from_millis(100) {
+                            if done == total_missing || last.elapsed() >= std::time::Duration::from_millis(150) {
                                 *last = std::time::Instant::now();
                                 true
                             } else {
@@ -1959,7 +1962,7 @@ where
 
                     if should_report {
                         if let Ok(mut cb) = on_progress_mutex.lock() {
-                            cb(already_cached + done, total_archive_files, &item.path);
+                            cb(already_cached + done, total_archive_files, &item.path, bytes_accum);
                         }
                     }
 
@@ -1972,7 +1975,7 @@ where
 
     let total_done = completed.load(Ordering::SeqCst);
     if let Ok(mut cb) = on_progress_mutex.lock() {
-        cb(already_cached + total_done, total_archive_files, "");
+        cb(already_cached + total_done, total_archive_files, "", processed_bytes.load(Ordering::Relaxed));
     }
 
     if !controller.is_cancelled() && total_done >= total_missing {
@@ -2595,7 +2598,7 @@ mod tests {
             &root_str,
             1,
             &controller,
-            |done, total, _| {
+            |done, total, _, _| {
                 progress_count += 1;
                 assert!(done <= total);
             },
@@ -2612,7 +2615,7 @@ mod tests {
             &root_str,
             1,
             &controller,
-            |_, _, _| {},
+            |_, _, _, _| {},
         ).unwrap();
         assert_eq!(processed2, 0, "No thumbnails need generation when already indexed");
 
