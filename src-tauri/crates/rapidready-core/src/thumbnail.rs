@@ -182,6 +182,10 @@ pub fn parse_tiff_header_slice(buf: &[u8], base_offset: u32) -> HeaderTiffInfo {
 
         let mut ifd_jpeg_off = None;
         let mut ifd_jpeg_len = None;
+        let mut ifd_is_explicit_jpeg = false;
+        let mut ifd_strip_off = None;
+        let mut ifd_strip_len = None;
+        let mut ifd_compression = None;
 
         for i in 0..max_safe {
             let entry = ifd_off + 2 + i * 12;
@@ -193,6 +197,9 @@ pub fn parse_tiff_header_slice(buf: &[u8], base_offset: u32) -> HeaderTiffInfo {
             let val = read_tiff_u32(buf, entry + 8, is_le).unwrap_or(0);
 
             match tag {
+                0x0103 => {
+                    ifd_compression = Some(val);
+                }
                 0x0112 => {
                     let orient = read_tiff_u16(buf, entry + 8, is_le).unwrap_or(1) as u32;
                     if (1..=8).contains(&orient) && info.orientation.is_none() {
@@ -201,20 +208,21 @@ pub fn parse_tiff_header_slice(buf: &[u8], base_offset: u32) -> HeaderTiffInfo {
                 }
                 0x0201 => {
                     ifd_jpeg_off = Some(base_offset + val);
+                    ifd_is_explicit_jpeg = true;
                 }
                 0x0202 => {
                     ifd_jpeg_len = Some(val);
                 }
                 0x0111 => {
                     // StripOffsets: Canon CR2 / TIFF embedded preview JPEG offset
-                    if ifd_jpeg_off.is_none() {
-                        ifd_jpeg_off = Some(base_offset + val);
+                    if ifd_strip_off.is_none() {
+                        ifd_strip_off = Some(base_offset + val);
                     }
                 }
                 0x0117 => {
                     // StripByteCounts: Canon CR2 / TIFF embedded preview JPEG length
-                    if ifd_jpeg_len.is_none() {
-                        ifd_jpeg_len = Some(val);
+                    if ifd_strip_len.is_none() {
+                        ifd_strip_len = Some(val);
                     }
                 }
                 0x014A => {
@@ -236,8 +244,17 @@ pub fn parse_tiff_header_slice(buf: &[u8], base_offset: u32) -> HeaderTiffInfo {
             }
         }
 
-        if let (Some(off), Some(len)) = (ifd_jpeg_off, ifd_jpeg_len) {
-            if len > 500 {
+        if ifd_is_explicit_jpeg {
+            if let (Some(off), Some(len)) = (ifd_jpeg_off, ifd_jpeg_len) {
+                if len > 500 && len <= 8_000_000 {
+                    candidates.push((off, len));
+                }
+            }
+        } else if let (Some(off), Some(len)) = (ifd_strip_off, ifd_strip_len) {
+            // StripOffsets (0x0111) is ONLY a valid JPEG stream if Compression is 6 (old JPEG) or 7 (new JPEG).
+            // Uncompressed RAW sensor strips (Compression 1) or full raw sensor streams (> 8 MB) must be ignored.
+            let is_jpeg_comp = matches!(ifd_compression, Some(6) | Some(7));
+            if is_jpeg_comp && len > 500 && len <= 8_000_000 {
                 candidates.push((off, len));
             }
         }
@@ -258,8 +275,9 @@ pub fn parse_tiff_header_slice(buf: &[u8], base_offset: u32) -> HeaderTiffInfo {
         .filter(|(_, len)| *len >= 40_000 && *len <= 1_500_000)
         .min_by_key(|(_, len)| *len)
         .or_else(|| {
+            // Second priority: Large/Full preview JPEG (1.5 MB .. 8 MB) located near file start (<= 2 MB offset, e.g. Canon CR2 5472x3648 IFD0 preview at ~95 KB)
             candidates.iter()
-                .filter(|(_, len)| *len > 1_500_000 && *len <= 3_500_000)
+                .filter(|(off, len)| *off <= 2_000_000 && *len > 1_500_000 && *len <= 8_000_000)
                 .min_by_key(|(_, len)| *len)
         });
 
@@ -279,10 +297,10 @@ pub fn parse_tiff_header_slice(buf: &[u8], base_offset: u32) -> HeaderTiffInfo {
         if let Some(&(off, len)) = in_memory_candidate {
             info.thumb_offset = Some(off);
             info.thumb_length = Some(len);
-        } else if let Some(&(off, len)) = candidates.iter().filter(|(_, len)| *len <= 3_500_000).min_by_key(|(_, len)| *len) {
+        } else if let Some(&(off, len)) = candidates.iter().filter(|(off, len)| *off <= 2_000_000 && *len <= 3_500_000).min_by_key(|(_, len)| *len) {
             info.thumb_offset = Some(off);
             info.thumb_length = Some(len);
-        } else if let Some(&(off, len)) = candidates.first() {
+        } else if let Some(&(off, len)) = candidates.iter().find(|(off, _)| *off <= 2_000_000) {
             info.thumb_offset = Some(off);
             info.thumb_length = Some(len);
         }
@@ -1275,13 +1293,13 @@ pub fn get_preview_jpeg_with_orient_and_hints(
     // For scale 0 (micro-icons) or RAW files, extract the embedded preview:
     if is_raw || (is_jpeg && scale == 0) {
         if let Some(fast_bytes) = extract_embedded_thumbnail(path, target_orient) {
-            // Direct-store camera previews <= 2.6 MB directly without CPU re-encoding:
-            // Camera hardware already produced an optimal preview (1024px..1620px, e.g. Canon CR2 2.06MB, Sony ARW 504KB)
-            // with orientation already injected by extract_embedded_thumbnail.
-            // On Retina/4K displays, previews up to 1620px provide pristine pixel-perfect sharpness.
-            // Bypassing ImageIO drops CPU time per image from ~45ms to 0.001ms across all platforms!
+            // Direct-store medium camera previews <= 1.5 MB directly without CPU re-encoding:
+            // Camera hardware already produced an optimal preview (720px..1620px, e.g. Sony ARW 504KB, CR3 400KB, DNG 54KB).
+            // For full-sensor camera previews > 1.5 MB (e.g. Canon CR2 5472x3648, 2.5-5.5 MB):
+            // Downscale to target_px (720px) to keep chunk cache compact (~80-120 KB vs 3.5 MB per image).
+            // Loupe View and 100% Zoom (scale >= 100) bypass downscaling and preserve full sensor resolution.
             #[cfg(target_os = "macos")]
-            let final_bytes = if scale < 100 && fast_bytes.len() > 2_600_000 {
+            let final_bytes = if scale < 100 && fast_bytes.len() > 1_500_000 {
                 let downscaled = imageio::extract_thumbnail_from_data(&fast_bytes, target_px).unwrap_or(fast_bytes);
                 if _resolved_orient != 1 {
                     inject_orientation_into_jpeg(&downscaled, _resolved_orient as u16)
@@ -1292,7 +1310,28 @@ pub fn get_preview_jpeg_with_orient_and_hints(
                 fast_bytes
             };
             #[cfg(not(target_os = "macos"))]
-            let final_bytes = fast_bytes;
+            let final_bytes = if scale < 100 && fast_bytes.len() > 1_500_000 {
+                // Windows / Linux fallback downscaling using image crate:
+                // (Optimized SIMD decoding via turbojpeg/zune-jpeg tracked in ROADMAP.md backlog)
+                if let Ok(dyn_img) = image::load_from_memory(&fast_bytes) {
+                    let resized = dyn_img.thumbnail(target_px, target_px);
+                    let mut buf = std::io::Cursor::new(Vec::new());
+                    if resized.into_rgb8().write_to(&mut buf, image::ImageFormat::Jpeg).is_ok() {
+                        let out = buf.into_inner();
+                        if _resolved_orient != 1 {
+                            inject_orientation_into_jpeg(&out, _resolved_orient as u16)
+                        } else {
+                            out
+                        }
+                    } else {
+                        fast_bytes
+                    }
+                } else {
+                    fast_bytes
+                }
+            } else {
+                fast_bytes
+            };
 
             record_thumbnail_cache(&cache_key, blake3_key.as_deref(), scale, &final_bytes);
             return Ok(final_bytes);
@@ -2649,9 +2688,16 @@ mod tests {
         let cr2_path = workspace_root.join("testdata/dest/2014/2014-05-01/IMG_2978.CR2");
         if cr2_path.exists() {
             let thumb = extract_embedded_thumbnail(&cr2_path, None).expect("Must extract CR2 thumb");
-            assert!(thumb.len() > 1000);
+            assert!(thumb.len() > 1_000_000, "CR2 extracted preview must be the high-res IFD0 JPEG (>1MB), not the 160x120 micro-thumb");
             assert_eq!(thumb[0], 0xFF);
             assert_eq!(thumb[1], 0xD8);
+
+            // Verify scale 1 thumbnail generation (downscaled to compact ~50-200 KB)
+            let scale1_thumb = get_preview_jpeg(&cr2_path, 1).expect("Must generate scale 1 thumbnail");
+            assert!(scale1_thumb.len() > 10_000, "Scale 1 thumbnail must be valid");
+            assert!(scale1_thumb.len() < 500_000, "Scale 1 thumbnail must be downscaled to compact size (<500 KB)");
+            assert_eq!(scale1_thumb[0], 0xFF);
+            assert_eq!(scale1_thumb[1], 0xD8);
         }
 
         // 4. Sony ARW RAW

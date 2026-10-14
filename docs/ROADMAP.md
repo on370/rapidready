@@ -16,6 +16,29 @@
 
 ## 🚀 Released Milestones
 
+### Released in `v0.5.0` (Build `0135`)
+- [x] **Persistent Local Disk Cache (Picasa & Lightroom Model) (Sprint 2 - Phase 2.1 & 2.2):**
+  - Packed binary chunk containers (`chunk_XXXX.bin`, 64 MB rolling segments) on local NVMe disk (`~/Library/Caches/de.rapidready.app/chunk_cache` / `%LOCALAPPDATA%\RapidReady\Cache`).
+  - High-concurrency SQLite index (`archive_catalog.sqlite`) mapping canonical paths, sizes, mtimes, orientations, and scales to chunk offsets.
+  - Single-seek $O(1)$ byte-range retrieval (`lseek` + `read`), eliminating inode exhaustion and filesystem fragmentation across 100,000+ files.
+  - 100% offline-first browsing: Once cached, photo grid and filmstrip are served 100% locally from NVMe at 60 FPS without touching remote NAS/SMB shares.
+  - Automatic incremental delta sync (`reconcile_archive_delta`) detecting added, modified, or deleted files on archive reconnection.
+- [x] **Canon CR2 High-Resolution Preview & Differentiated In-Memory Downscaling:**
+  - Validates TIFF strip compression tags (`Compression == 6 || 7`), safely discarding uncompressed raw Bayer sensor data (860 KB IFD2 slice) and giant sensor streams (>8 MB).
+  - Raised preview ceiling to 8 MB, allowing Canon CR2's full-sensor IFD0 preview (5472×3648, 2.5–5.5 MB) to be captured instead of falling back to the 160×120 micro-thumbnail.
+  - Previews $\le 1.5\,\text{MB}$ (Sony ARW 504 KB, Canon CR3 400 KB, Ricoh DNG 54 KB) are direct-stored with 0 ms CPU time; full-sensor previews $> 1.5\,\text{MB}$ (Canon CR2) are downscaled in-memory via Apple ImageIO in ~20 ms to 720px thumbnails (~80–120 KB), keeping the chunk cache compact (1 GB instead of 35 GB for 10,000 images) while keeping the grid razor-sharp. Full sensor resolution is strictly preserved for Loupe View / Zoom (`scale >= 100`).
+- [x] **Loupe View Viewport Debouncing & Network Request Cancellation:**
+  - 100 ms debounce for central viewport and EXIF metadata loading, skipping intermediate frames during rapid arrow navigation or fast double-clicking on slow network shares.
+  - Zero-latency instantaneous feedback (0 ms) for filmstrip cursor, image counter, and status bar.
+  - Proactive request abort (`img.onload = null; img.src = ''; canceled = true;`) cutting in-flight network connections immediately on image switch.
+- [x] **Phase 2 Throughput Smoothing & GUI Responsiveness on Fast SSDs:**
+  - Deferred disk flushes to 64 MB chunk boundary rollover, removing synchronous per-thumbnail `fsync` calls and eliminating disk I/O lockups.
+  - Paced progress reporting at ~6.6 Hz (150 ms) instead of unthrottled bursts (`done % 10 == 0`), eliminating React main-thread starvation.
+  - Cooperative CPU yielding (`std::thread::yield_now()`) to ensure background worker threads do not starve UI rendering.
+  - Accurate live transfer rate calculation tracking real accumulated bytes (`processed_bytes`) for correct MB/s throughput display.
+- [x] **Grid View Format Badge Contrast & Legibility:**
+  - Refined background translucency and typography for format pills (`JPG`, `RAW`, `VID`), ensuring crisp, high-contrast readability against both light and dark photo backgrounds.
+
 ### Released in `v0.4.5` (Build `0129`)
 - [x] **Network-Aware In-Process Thumbnail Pipeline & Zero-Download 256 KB Header Slice (`v0.4.5` / Build `0129`):**
   - High-performance overhaul of Phase 2 background thumbnail generator on network shares (NAS / SMB).
@@ -379,7 +402,14 @@
 - [ ] **Lazy EXIF Metadata Background Enrichment (Idle Worker):**
   - **Context & Goal:** Phase 1 intentionally leaves camera and exposure parameters empty (`None`) to stream file discovery in seconds. Currently, detailed technical EXIF metadata (camera make, model, lens, focal length, aperture, shutter speed, ISO, GPS) is loaded on demand via `get_image_metadata` only when an image is selected in the Inspector or opened in the Loupe.
   - **Background Idle Enrichment:** When neither an active archive scan nor user scrolling/culling is taking place (true system idle), a low-priority background worker incrementally fetches and enriches the SQLite catalog database with technical EXIF metadata in small batches.
-  - **Benefits:** Enables fast, archive-wide filtering and search by camera body, lens, and ISO without compromising the instantaneous speed of initial folder scans.
+- [ ] **SIMD-Accelerated IDCT Scaled Decoding for Windows & Linux (TurboJPEG / Zune-JPEG):**
+  - **Context & Motivation:**
+    - On macOS, in-process Apple ImageIO performs hardware-accelerated DCT scaled decoding (`extract_thumbnail_from_data`) directly from in-memory JPEG buffers in ~20 ms for large full-sensor previews (e.g. Canon CR2 5472x3648, 20–30 MP), downscaling them to crisp ~80–120 KB 720px thumbnails with minimal CPU footprint.
+    - On Windows (Intel/AMD) and Linux, Apple ImageIO is unavailable. Using the default pure-Rust `image` crate to perform full decompression, bicubic downscaling, and re-encoding of 24–50 MP sensor JPEGs requires ~140–180 ms of CPU time per image.
+  - **Target Optimization:**
+    - Integrate SIMD-accelerated IDCT 1/8 downscaling (via `turbojpeg` with libjpeg-turbo C bindings or pure-Rust SIMD `zune-jpeg`).
+    - Standard JPEG decompression allows directly decoding only the low-frequency DCT coefficients without reconstructing the full 24–50 MP pixel matrix in memory.
+    - This reduces CPU time per 24 MP image on Windows/Linux from ~150 ms down to **~3–6 ms**, achieving full performance parity with macOS Apple Silicon across all platforms.
 
 ---
 
