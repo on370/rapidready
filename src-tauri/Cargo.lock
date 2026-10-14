@@ -3499,7 +3499,7 @@ dependencies = [
 
 [[package]]
 name = "rapid-ready"
-version = "0.4.5"
+version = "0.5.0"
 dependencies = [
  "cc",
  "libc",
@@ -3520,7 +3520,7 @@ dependencies = [
 
 [[package]]
 name = "rapidready-core"
-version = "0.4.5"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "blake3",

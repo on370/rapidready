@@ -17,7 +17,7 @@ pub fn compute_cache_key(
     orientation: u32,
 ) -> String {
     let norm_path = crate::archive_catalog::normalize_canonical_path(&path.to_string_lossy());
-    let raw = format!("{}_{}_{}_scale{}_rot{}", norm_path, file_size, mtime, scale, orientation);
+    let raw = format!("{}_{}_{}_scale{}_rot{}_v2", norm_path, file_size, mtime, scale, orientation);
     blake3::hash(raw.as_bytes()).to_hex().to_string()
 }
 

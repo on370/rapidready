@@ -56,7 +56,7 @@ pub fn run() {
 
             use tauri::Manager;
             let app_dir = app.path().app_data_dir()?;
-            let cache_dir = app.path().app_cache_dir()?.join("disk_cache_v1");
+            let cache_dir = app.path().app_cache_dir()?.join("disk_cache_v2");
             let catalog = std::sync::Arc::new(rapidready_core::archive_catalog::ArchiveCatalog::new(&app_dir)?);
             rapidready_core::archive_catalog::init_global_catalog(catalog.clone());
             let _ = rapidready_core::chunk_cache::init_global_chunk_cache(&cache_dir, &app_dir.join("archive_catalog.db"));

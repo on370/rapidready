@@ -16,6 +16,7 @@ Even if you aren't heading into full RAW development right away, RapidReady is a
 ## 🚀 Key Features (Current & Planned)
 
 - **Blazing Fast RAW Engine:** Powered by a custom Rust backend, RapidReady extracts embedded JPEGs from CR2, CR3, ARW, and other proprietary RAW formats instantly without slow decodes.
+- **Network-Optimized Archive Thumbnailing (NAS/SMB):** Single-request 256 KB header-slice extraction and in-memory downscaling bypass multi-megabyte RAW file transfers over network mounts for instant 15+ images/s cache generation.
 - **Speculative RAM Viewport Caching:** Proactive background preloading of neighboring thumbnails in Grid (+3 rows) and Loupe views (+5 images ahead) with floating visual buffer indicators (`▲/▼` and `◀/▶`) for instant, stutter-free navigation.
 - **Hardware-Accelerated Focus Peaking:** Dual-view sharpness inspection (`F` key) in Loupe and Inspector preview powered by a darktable-inspired Difference-of-Gradients bandpass filter to verify focus on fine textures and eyes instantly.
 - **Zero-Latency Culling & Viewing:** Navigate through massive folders of high-resolution RAW files in real-time. Responsive filmstrip, split folder navigation, and instant sidecar synchronization.

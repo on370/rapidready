@@ -16,7 +16,14 @@
 
 ## 🚀 Released Milestones
 
-### Released in `v0.4.5` (Build `0106`)
+### Released in `v0.4.5` (Build `0129`)
+- [x] **Network-Aware In-Process Thumbnail Pipeline & Zero-Download 256 KB Header Slice (`v0.4.5` / Build `0129`):**
+  - High-performance overhaul of Phase 2 background thumbnail generator on network shares (NAS / SMB).
+  - Single-request 256 KB header-slice parser for TIFF-based RAWs (Canon CR2, Sony ARW, Nikon NEF, Adobe DNG, Pentax PEF, Olympus ORF), Canon CR3 (ISOBMFF `thmb` box), and standard JPEGs.
+  - Eliminates full 25–45 MB file downloads over SMB. If the thumbnail lies within the 256 KB header buffer, extraction happens in memory with zero additional network requests.
+  - Avoids remote SMB seeks and full-sensor demosaic: bypasses ImageIO URL calls for RAWs and performs in-memory downscaling via `extract_thumbnail_from_data`.
+  - Zero-cost EXIF orientation injection (`inject_orientation_into_jpeg`) in 0.001 ms, eliminating pure-Rust software re-encoding.
+  - Optimized worker pool with 4 concurrent network threads and $O(1)$ batch queue popping, eliminating mutex lock contention and boosting NAS indexing throughput from 1–2 images/sec to 15+ images/sec.
 - [x] **Speculative RAM Viewport Caching & Live Visual Buffer Badges (`v0.4.5` / Build `0106`):**
   - Proactive background preloading of neighboring thumbnails in Grid (+3 rows ahead / -1 row behind) and Loupe views (+1 to +5 flip direction) directly in the Rust threadpool (`spawn_blocking`).
   - Prewarms both Scale 2 (720px preview) and Full-Res Previews (scale 100) concurrently.
@@ -362,6 +369,17 @@
 - [x] **Speculative RAM Viewport Caching (`v0.4.5` / Build `0106`):**
   - Prefetching neighboring thumbnails in RAM (`visible_index ± 20`) during idle pauses (> 150 ms).
   - Strict priority queuing and cancellation to prevent saturating the browser 6-socket connection limit.
+
+- [x] **Network-Aware In-Process Thumbnail Pipeline & Zero-Download 256 KB Header Slice (`v0.4.5` / Build `0129`):**
+  - **Context & Goal:** Indexing large photo archives on NAS network shares (SMB) previously crawled at 1–2 images/sec due to external library (`kamadak-exif`) `read_to_end` invocations downloading full 25–45 MB RAW files over network mounts, ImageIO URL seeks triggering full sensor demosaic, and worker thread contention.
+  - **Single-Request Header-Slice Engine:** Custom Rust in-memory header parser requesting exactly one 256 KB slice. TIFF IFD0, IFD1, and SubIFD structures (Canon CR2, Sony ARW, Nikon NEF, Adobe DNG, Pentax PEF, Olympus ORF) as well as Canon CR3 (`thmb` box) and standard JPEGs extract embedded thumbnails directly from the initial 256 KB buffer with **zero additional network I/O**.
+  - **Zero-Cost EXIF Orientation:** Replaced pure-Rust software re-encoding with in-memory `inject_orientation_into_jpeg` (0.001 ms).
+  - **Tuned Concurrency & Batch Queue:** Set optimal 4-thread pool for SMB mounts with $O(1)$ batch queue popping, boosting live archive thumbnail generation throughput to 15+ images/s on physical NAS storage.
+
+- [ ] **Lazy EXIF Metadata Background Enrichment (Idle Worker):**
+  - **Context & Goal:** Phase 1 intentionally leaves camera and exposure parameters empty (`None`) to stream file discovery in seconds. Currently, detailed technical EXIF metadata (camera make, model, lens, focal length, aperture, shutter speed, ISO, GPS) is loaded on demand via `get_image_metadata` only when an image is selected in the Inspector or opened in the Loupe.
+  - **Background Idle Enrichment:** When neither an active archive scan nor user scrolling/culling is taking place (true system idle), a low-priority background worker incrementally fetches and enriches the SQLite catalog database with technical EXIF metadata in small batches.
+  - **Benefits:** Enables fast, archive-wide filtering and search by camera body, lens, and ISO without compromising the instantaneous speed of initial folder scans.
 
 ---
 

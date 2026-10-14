@@ -924,6 +924,9 @@ pub async fn rebuild_archive_catalog(
 ) -> Result<(), String> {
     let catalog = catalog_state.catalog.clone();
     tauri::async_runtime::spawn_blocking(move || {
+        if let Some(chunk_cache) = rapidready_core::chunk_cache::get_global_chunk_cache() {
+            let _ = chunk_cache.clear_cache();
+        }
         catalog.rebuild_archive_catalog(&path).map_err(|e| e.to_string())
     })
     .await

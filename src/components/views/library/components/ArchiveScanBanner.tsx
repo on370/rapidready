@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Loader2, Pause, Play, X, RotateCw, Folder, Check, Zap, HelpCircle } from 'lucide-react';
+import { Loader2, Pause, Play, X, RotateCw, Folder, Check, HelpCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLibraryStore } from '../../../../stores/libraryStore';
 import { useThroughput } from '../../../../utils/throughput';
@@ -208,7 +208,6 @@ export function ArchiveScanBanner({ onRestartScan }: ArchiveScanBannerProps) {
         {/* Header */}
         <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
           <span className="flex items-center gap-1.5 font-semibold text-amber-300 text-[11px]">
-            <Zap className="w-3.5 h-3.5 text-amber-400" />
             <span>{badgeText}</span>
           </span>
           <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
@@ -306,7 +305,6 @@ export function ArchiveScanBanner({ onRestartScan }: ArchiveScanBannerProps) {
               {/* Dynamic Phase Pill & Stats Hover Trigger */}
               <div className="relative group/help flex items-center gap-1.5 cursor-help flex-shrink-0">
                 <div className="bg-amber-400/10 text-amber-300 border border-amber-400/25 rounded-full px-2 py-0.5 text-[10px] font-medium flex items-center gap-1 flex-shrink-0 whitespace-nowrap shadow-sm hover:border-amber-400/50 transition-colors">
-                  <Zap className="w-2.5 h-2.5 text-amber-400 flex-shrink-0" />
                   <span>{badgeText}</span>
                 </div>
 

@@ -46,7 +46,7 @@ export const GridThumbnailItem = React.memo(function GridThumbnailItem({
   const isVideo = img.is_video ?? isVideoFilename(img.name);
   const isRaw = !isVideo && (img.is_raw ?? isRawFilename(img.name));
   const gridThumbnailSize = useLibraryUIStore((s) => s.gridThumbnailSize);
-  const scale = gridThumbnailSize <= 130 ? 0 : gridThumbnailSize > 220 ? 2 : 1;
+  const scale = gridThumbnailSize <= 130 ? 0 : 1;
   const cacheKey = `${img.path}:${img.culling?.orientation || 1}:${scale}`;
   const isCached = loadedThumbnailCache.has(cacheKey);
   const [shouldLoad, setShouldLoad] = useState(isCached || !_isScrolling);

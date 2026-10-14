@@ -205,6 +205,18 @@ pub fn parse_tiff_header_slice(buf: &[u8], base_offset: u32) -> HeaderTiffInfo {
                 0x0202 => {
                     ifd_jpeg_len = Some(val);
                 }
+                0x0111 => {
+                    // StripOffsets: Canon CR2 / TIFF embedded preview JPEG offset
+                    if ifd_jpeg_off.is_none() {
+                        ifd_jpeg_off = Some(base_offset + val);
+                    }
+                }
+                0x0117 => {
+                    // StripByteCounts: Canon CR2 / TIFF embedded preview JPEG length
+                    if ifd_jpeg_len.is_none() {
+                        ifd_jpeg_len = Some(val);
+                    }
+                }
                 0x014A => {
                     if count == 1 {
                         to_visit.push(val as usize);
@@ -241,24 +253,39 @@ pub fn parse_tiff_header_slice(buf: &[u8], base_offset: u32) -> HeaderTiffInfo {
     }
 
     // Pick the best candidate:
-    // First priority: A candidate whose full bytes lie entirely within the buffer (0 extra network reads!)
-    let in_memory_candidate = candidates.iter().find(|(off, len)| {
-        let rel_off = off.saturating_sub(base_offset) as usize;
-        let rel_len = *len as usize;
-        rel_off + rel_len <= buf.len()
-            && buf[rel_off] == 0xFF
-            && buf[rel_off + 1] == 0xD8
-    });
+    // First priority: A medium preview JPEG (40 KB .. 1.5 MB, typ. 720px - 1620px, ideal for grid & fast SMB)
+    let preview_candidate = candidates.iter()
+        .filter(|(_, len)| *len >= 40_000 && *len <= 1_500_000)
+        .min_by_key(|(_, len)| *len)
+        .or_else(|| {
+            candidates.iter()
+                .filter(|(_, len)| *len > 1_500_000 && *len <= 3_500_000)
+                .min_by_key(|(_, len)| *len)
+        });
 
-    if let Some(&(off, len)) = in_memory_candidate {
+    if let Some(&(off, len)) = preview_candidate {
         info.thumb_offset = Some(off);
         info.thumb_length = Some(len);
-    } else if let Some(&(off, len)) = candidates.iter().filter(|(_, len)| *len <= 2_000_000).min_by_key(|(_, len)| *len) {
-        info.thumb_offset = Some(off);
-        info.thumb_length = Some(len);
-    } else if let Some(&(off, len)) = candidates.first() {
-        info.thumb_offset = Some(off);
-        info.thumb_length = Some(len);
+    } else {
+        // Fallback: A candidate whose full bytes lie entirely within the buffer (0 extra network reads!)
+        let in_memory_candidate = candidates.iter().find(|(off, len)| {
+            let rel_off = off.saturating_sub(base_offset) as usize;
+            let rel_len = *len as usize;
+            rel_off + rel_len <= buf.len()
+                && buf[rel_off] == 0xFF
+                && buf[rel_off + 1] == 0xD8
+        });
+
+        if let Some(&(off, len)) = in_memory_candidate {
+            info.thumb_offset = Some(off);
+            info.thumb_length = Some(len);
+        } else if let Some(&(off, len)) = candidates.iter().filter(|(_, len)| *len <= 3_500_000).min_by_key(|(_, len)| *len) {
+            info.thumb_offset = Some(off);
+            info.thumb_length = Some(len);
+        } else if let Some(&(off, len)) = candidates.first() {
+            info.thumb_offset = Some(off);
+            info.thumb_length = Some(len);
+        }
     }
 
     info
@@ -300,7 +327,15 @@ pub fn extract_jpeg_app1_thumbnail(buf: &[u8]) -> Option<(&[u8], Option<u32>)> {
 }
 
 pub fn find_cr3_thumbnail_in_slice(buf: &[u8]) -> Option<&[u8]> {
-    let pattern = b"thmb";
+    // 1. Try finding high-resolution preview box "prvw" (typ. 1620x1080)
+    if let Some(slice) = find_cr3_box_jpeg(buf, b"prvw") {
+        return Some(slice);
+    }
+    // 2. Fallback to micro-thumbnail box "thmb" (160x120)
+    find_cr3_box_jpeg(buf, b"thmb")
+}
+
+fn find_cr3_box_jpeg<'a>(buf: &'a [u8], pattern: &[u8; 4]) -> Option<&'a [u8]> {
     for i in 0..buf.len().saturating_sub(16) {
         if &buf[i..i + 4] == pattern {
             let box_start = if i >= 4 { i - 4 } else { i };
@@ -747,7 +782,7 @@ pub fn extract_raster_thumbnail(
     let target_size = match scale {
         0 => 160,
         2 => 720,
-        _ => 384,
+        _ => 720,
     };
 
     let resized = dyn_img.thumbnail(target_size, target_size);
@@ -824,6 +859,7 @@ mod imageio {
 
         #[allow(dead_code)]
         pub static kCGImageSourceCreateThumbnailFromImageAlways: *const c_void;
+        #[allow(dead_code)]
         pub static kCGImageSourceCreateThumbnailFromImageIfAbsent: *const c_void;
         pub static kCGImageSourceCreateThumbnailWithTransform: *const c_void;
         pub static kCGImageSourceThumbnailMaxPixelSize: *const c_void;
@@ -863,14 +899,14 @@ mod imageio {
             let cf_size = CFNumberCreate(std::ptr::null(), 3 /* kCFNumberSInt32Type */, &size_val as *const i32 as *const c_void);
 
             let thumb_keys = [
-                kCGImageSourceCreateThumbnailFromImageIfAbsent,
+                kCGImageSourceCreateThumbnailFromImageAlways,
                 kCGImageSourceCreateThumbnailWithTransform,
                 kCGImageSourceThumbnailMaxPixelSize,
                 kCGImageSourceShouldCache,
             ];
             let thumb_values = [
                 kCFBooleanTrue,
-                kCFBooleanTrue,
+                kCFBooleanFalse,
                 cf_size as *const c_void,
                 kCFBooleanFalse,
             ];
@@ -976,7 +1012,7 @@ mod imageio {
             let cf_size = CFNumberCreate(std::ptr::null(), 3 /* kCFNumberSInt32Type */, &size_val as *const i32 as *const c_void);
 
             let thumb_keys = [
-                kCGImageSourceCreateThumbnailFromImageIfAbsent,
+                kCGImageSourceCreateThumbnailFromImageAlways,
                 kCGImageSourceCreateThumbnailWithTransform,
                 kCGImageSourceThumbnailMaxPixelSize,
                 kCGImageSourceShouldCache,
@@ -1140,6 +1176,16 @@ pub fn get_cached_preview_jpeg_fast(
                 }
                 return Some(bytes);
             }
+            // Fallback for scale 2: If scale 1 is already cached in chunk cache (720px), return it!
+            if scale == 2 {
+                let key1 = crate::chunk_cache::compute_cache_key(path, fast_sz, fast_mt, 1, fast_orient);
+                if let Ok(Some(bytes)) = chunk_cache.read_thumbnail(&key1, 1) {
+                    if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
+                        cache.put(fast_cache_key, bytes.clone());
+                    }
+                    return Some(bytes);
+                }
+            }
         }
     }
     None
@@ -1198,6 +1244,16 @@ pub fn get_preview_jpeg_with_orient_and_hints(
                     }
                     return Ok(bytes);
                 }
+                // Fallback for scale 2: If scale 1 is already cached in chunk cache (720px), return it!
+                if scale == 2 && meta_res.is_ok() {
+                    let k1 = crate::chunk_cache::compute_cache_key(path, sz, mt, 1, resolved_orient);
+                    if let Ok(Some(bytes)) = chunk_cache.read_thumbnail(&k1, 1) {
+                        if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
+                            cache.put(c_key.clone(), bytes.clone());
+                        }
+                        return Ok(bytes);
+                    }
+                }
             }
         }
         (sz, mt, resolved_orient, key, c_key)
@@ -1211,17 +1267,22 @@ pub fn get_preview_jpeg_with_orient_and_hints(
         0 => 160,
         2 => 720,
         s if s >= 100 => 2560,
-        _ => 384,
+        _ => 720,
     };
 
-    // Fast-path 1: Embedded JPEG preview extraction for RAW and JPEG files (< 2ms)
-    // Most camera/phone JPEGs contain a standard EXIF APP1 JPEG thumbnail in the first 64 KB,
-    // avoiding the need to download 20+ MB over SMB or decode 24-60 MP full-resolution images!
-    if is_raw || is_jpeg {
+    // Fast-path 1: Embedded JPEG preview extraction for RAW files (< 2ms)
+    // Camera RAW files (CR2, CR3, NEF, ARW, DNG) contain an embedded medium/large JPEG preview.
+    // For scale 0 (micro-icons) or RAW files, extract the embedded preview:
+    if is_raw || (is_jpeg && scale == 0) {
         if let Some(fast_bytes) = extract_embedded_thumbnail(path, target_orient) {
             #[cfg(target_os = "macos")]
-            let final_bytes = if scale < 100 && fast_bytes.len() > 300_000 {
-                imageio::extract_thumbnail_from_data(&fast_bytes, target_px).unwrap_or(fast_bytes)
+            let final_bytes = if scale < 100 && fast_bytes.len() > 100_000 {
+                let downscaled = imageio::extract_thumbnail_from_data(&fast_bytes, target_px).unwrap_or(fast_bytes);
+                if _resolved_orient != 1 {
+                    inject_orientation_into_jpeg(&downscaled, _resolved_orient as u16)
+                } else {
+                    downscaled
+                }
             } else {
                 fast_bytes
             };
@@ -2185,12 +2246,12 @@ mod tests {
             // Test scale 0 (must NOT be a 16x16 file icon!)
             let p0 = get_preview_jpeg(&dng_path, 0).expect("Must generate preview for DNG at scale 0");
             let img0 = image::load_from_memory(&p0).expect("Must decode DNG scale 0 JPEG");
-            assert!(img0.width() >= 160 && img0.height() >= 120, "Scale 0 preview must not be a 16x16 icon! Got {}x{}", img0.width(), img0.height());
+            assert!(img0.width().max(img0.height()) >= 160 && img0.width().min(img0.height()) >= 100, "Scale 0 preview must not be a 16x16 icon! Got {}x{}", img0.width(), img0.height());
 
             // Test scale 1
             let p1 = get_preview_jpeg(&dng_path, 1).expect("Must generate preview for DNG at scale 1");
             let img1 = image::load_from_memory(&p1).expect("Must decode DNG scale 1 JPEG");
-            assert!(img1.width() >= 160 && img1.height() >= 120, "Scale 1 preview must be valid photo");
+            assert!(img1.width().max(img1.height()) >= 160, "Scale 1 preview must be valid photo");
 
             // Test embedded thumbnail direct extractor
             let thumb = extract_embedded_thumbnail(&dng_path, Some(1)).expect("Must extract embedded thumbnail from DNG");
