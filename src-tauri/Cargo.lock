@@ -3499,7 +3499,7 @@ dependencies = [
 
 [[package]]
 name = "rapid-ready"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "cc",
  "libc",
@@ -3520,13 +3520,14 @@ dependencies = [
 
 [[package]]
 name = "rapidready-core"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "anyhow",
  "blake3",
  "chrono",
  "image",
  "kamadak-exif",
+ "libc",
  "lru",
  "rayon",
  "regex",

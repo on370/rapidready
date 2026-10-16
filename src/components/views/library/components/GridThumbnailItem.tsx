@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef } from 'react';
 import { Check, Star, Play } from 'lucide-react';
 import { LibraryImage } from '../../../../stores/libraryStore';
 import { getRrImageUrl, isRawFilename, isVideoFilename } from '../../../../utils/image';
@@ -9,7 +9,6 @@ export interface GridThumbnailItemProps {
   img: LibraryImage;
   isActive: boolean;
   isSelected: boolean;
-  isScrolling?: boolean;
   onClick: (e: React.MouseEvent) => void;
   onDoubleClick: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
@@ -28,7 +27,6 @@ export const GridThumbnailItem = React.memo(function GridThumbnailItem({
   img,
   isActive,
   isSelected,
-  isScrolling: _isScrolling = false,
   onClick,
   onDoubleClick,
   onContextMenu,
@@ -47,24 +45,8 @@ export const GridThumbnailItem = React.memo(function GridThumbnailItem({
   const scale = 1;
   const cacheKey = `${img.path}:${img.culling?.orientation || 1}:${scale}`;
   const isCached = loadedThumbnailCache.has(cacheKey);
-  const [shouldLoad, setShouldLoad] = useState(isCached || !_isScrolling);
   const imgRef = useRef<HTMLImageElement>(null);
   const placeholderRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!shouldLoad && (isCached || !_isScrolling)) {
-      setShouldLoad(true);
-    }
-  }, [isCached, _isScrolling, shouldLoad]);
-
-  // Cancel in-flight HTTP request if tile scrolls off-screen before completing
-  useEffect(() => {
-    return () => {
-      if (imgRef.current && !loadedThumbnailCache.has(cacheKey)) {
-        imgRef.current.src = "";
-      }
-    };
-  }, [cacheKey]);
 
   return (
     <div 
@@ -93,40 +75,35 @@ export const GridThumbnailItem = React.memo(function GridThumbnailItem({
       {isDropTarget && dropPosition === 'after' && (
         <div className="absolute right-0 top-0 bottom-0 w-1.5 bg-accent z-30 rounded-l shadow-lg shadow-accent/50 pointer-events-none animate-pulse" />
       )}
-      {shouldLoad && (
-        <img 
-          ref={imgRef}
-          draggable={false}
-          loading="eager"
-          decoding="async"
-          src={getRrImageUrl(img.path, false, img.culling?.orientation, scale, img.size, img.mtime)} 
-          className={`w-full h-full object-contain relative z-10 pointer-events-none transition-opacity duration-150 ${isCached ? 'opacity-100' : 'opacity-0'}`} 
-          alt={img.name} 
-          onLoad={(e) => {
-            loadedThumbnailCache.add(cacheKey);
-            const target = e.currentTarget as HTMLImageElement;
-            target.classList.remove('opacity-0');
-            target.classList.add('opacity-100');
-            if (placeholderRef.current) {
-              placeholderRef.current.style.display = 'none';
-            }
-          }}
-          onError={(e) => {
-            // If thumbnail generation failed (e.g. file momentarily locked by external process or mid-write), retry once after a short pause
-            const target = e.currentTarget as HTMLImageElement;
-            const retryCount = Number(target.dataset.retryCount || 0);
-            if (retryCount < 2) {
-              target.dataset.retryCount = String(retryCount + 1);
-              setTimeout(() => {
-                if (imgRef.current) {
-                  const baseSrc = getRrImageUrl(img.path, false, img.culling?.orientation, scale, img.size, img.mtime);
-                  imgRef.current.src = `${baseSrc}&retry=${Date.now()}`;
-                }
-              }, 600 * (retryCount + 1));
-            }
-          }}
-        />
-      )}
+      <img 
+        ref={imgRef}
+        draggable={false}
+        loading="eager"
+        decoding="async"
+        src={getRrImageUrl(img.path, false, img.culling?.orientation, scale, img.size, img.mtime)} 
+        className="w-full h-full object-contain relative z-10 pointer-events-none" 
+        alt={img.name} 
+        onLoad={() => {
+          loadedThumbnailCache.add(cacheKey);
+          if (placeholderRef.current) {
+            placeholderRef.current.style.display = 'none';
+          }
+        }}
+        onError={(e) => {
+          // If thumbnail generation failed (e.g. file momentarily locked by external process or mid-write), retry once after a short pause
+          const target = e.currentTarget as HTMLImageElement;
+          const retryCount = Number(target.dataset.retryCount || 0);
+          if (retryCount < 2) {
+            target.dataset.retryCount = String(retryCount + 1);
+            setTimeout(() => {
+              if (imgRef.current) {
+                const baseSrc = getRrImageUrl(img.path, false, img.culling?.orientation, scale, img.size, img.mtime);
+                imgRef.current.src = `${baseSrc}&retry=${Date.now()}`;
+              }
+            }, 600 * (retryCount + 1));
+          }
+        }}
+      />
       <div 
         ref={placeholderRef}
         style={{ display: isCached ? 'none' : 'flex' }}

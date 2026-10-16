@@ -1,7 +1,8 @@
+use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use anyhow::{Context, Result};
 use rusqlite::Connection;
 
@@ -25,6 +26,13 @@ pub struct ChunkWriter {
     pub current_chunk_id: u32,
     pub current_file: File,
     pub current_offset: u64,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct ChunkLocation {
+    pub chunk_file_id: u32,
+    pub byte_offset: u64,
+    pub byte_length: u32,
 }
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
@@ -75,6 +83,8 @@ pub struct ChunkCache {
     conn: Arc<Mutex<Connection>>,
     writer: Mutex<Option<ChunkWriter>>,
     max_chunk_size: u64,
+    index: RwLock<HashMap<String, ChunkLocation>>,
+    open_chunk_files: Mutex<HashMap<u32, Arc<File>>>,
 }
 
 static GLOBAL_CHUNK_CACHE: std::sync::RwLock<Option<Arc<ChunkCache>>> = std::sync::RwLock::new(None);
@@ -118,6 +128,7 @@ impl ChunkCache {
             fs::create_dir_all(&previews_dir)?;
         }
 
+        let mut index_map = HashMap::new();
         {
             let db = conn.lock().unwrap();
             db.execute_batch(
@@ -130,6 +141,24 @@ impl ChunkCache {
                 );
                 CREATE INDEX IF NOT EXISTS idx_thumbnail_chunk_file_id ON thumbnail_chunks(chunk_file_id);",
             )?;
+
+            // Load existing chunk index into RAM for zero-SQLite lookups
+            if let Ok(mut stmt) = db.prepare("SELECT cache_key, chunk_file_id, byte_offset, byte_length FROM thumbnail_chunks") {
+                if let Ok(rows) = stmt.query_map([], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        ChunkLocation {
+                            chunk_file_id: row.get(1)?,
+                            byte_offset: row.get::<_, i64>(2)? as u64,
+                            byte_length: row.get::<_, i64>(3)? as u32,
+                        },
+                    ))
+                }) {
+                    for r in rows.flatten() {
+                        index_map.insert(r.0, r.1);
+                    }
+                }
+            }
         }
 
         Ok(Self {
@@ -141,7 +170,23 @@ impl ChunkCache {
             conn,
             writer: Mutex::new(None),
             max_chunk_size: DEFAULT_MAX_CHUNK_SIZE,
+            index: RwLock::new(index_map),
+            open_chunk_files: Mutex::new(HashMap::new()),
         })
+    }
+
+    fn get_chunk_file(&self, chunk_id: u32) -> Result<Arc<File>> {
+        let mut map = self.open_chunk_files.lock().unwrap();
+        if let Some(f) = map.get(&chunk_id) {
+            return Ok(f.clone());
+        }
+        let chunk_path = self.chunks_dir.join(format!("chunk_{:04}.bin", chunk_id));
+        let f = Arc::new(
+            File::open(&chunk_path)
+                .with_context(|| format!("Failed to open chunk file {:?}", chunk_path))?,
+        );
+        map.insert(chunk_id, f.clone());
+        Ok(f)
     }
 
     fn get_read_conn(&self) -> Result<PooledReadConn<'_>> {
@@ -231,48 +276,31 @@ impl ChunkCache {
         Ok(())
     }
 
-    /// Reads Tier 1 thumbnail from packed binary chunks.
+    /// Reads Tier 1 thumbnail from packed binary chunks using zero-SQLite RAM index and pread/seek_read.
     pub fn read_chunk_thumbnail(&self, cache_key: &str) -> Result<Option<Vec<u8>>> {
-        let loc = if self.db_path.is_some() {
-            let conn = self.get_read_conn()?;
-            let mut stmt = conn.prepare_cached(
-                "SELECT chunk_file_id, byte_offset, byte_length FROM thumbnail_chunks WHERE cache_key = ?1",
-            )?;
-            let mut rows = stmt.query([cache_key])?;
-            if let Some(row) = rows.next()? {
-                let chunk_file_id: u32 = row.get(0)?;
-                let byte_offset: i64 = row.get(1)?;
-                let byte_length: i64 = row.get(2)?;
-                Some((chunk_file_id, byte_offset as u64, byte_length as usize))
-            } else {
-                None
+        let loc = self.index.read().unwrap().get(cache_key).copied();
+        if let Some(loc) = loc {
+            let file = match self.get_chunk_file(loc.chunk_file_id) {
+                Ok(f) => f,
+                Err(_) => return Ok(None),
+            };
+            let mut buf = vec![0u8; loc.byte_length as usize];
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::FileExt;
+                file.read_exact_at(&mut buf, loc.byte_offset)?;
             }
-        } else {
-            let conn = self.conn.lock().unwrap();
-            let mut stmt = conn.prepare_cached(
-                "SELECT chunk_file_id, byte_offset, byte_length FROM thumbnail_chunks WHERE cache_key = ?1",
-            )?;
-            let mut rows = stmt.query([cache_key])?;
-            if let Some(row) = rows.next()? {
-                let chunk_file_id: u32 = row.get(0)?;
-                let byte_offset: i64 = row.get(1)?;
-                let byte_length: i64 = row.get(2)?;
-                Some((chunk_file_id, byte_offset as u64, byte_length as usize))
-            } else {
-                None
+            #[cfg(windows)]
+            {
+                use std::os::windows::fs::FileExt;
+                file.seek_read(&mut buf, loc.byte_offset)?;
             }
-        };
-
-        if let Some((chunk_id, offset, length)) = loc {
-            let chunk_path = self.chunks_dir.join(format!("chunk_{:04}.bin", chunk_id));
-            if !chunk_path.exists() {
-                return Ok(None);
+            #[cfg(not(any(unix, windows)))]
+            {
+                let mut f = &*file;
+                f.seek(SeekFrom::Start(loc.byte_offset))?;
+                f.read_exact(&mut buf)?;
             }
-            let mut file = File::open(&chunk_path)
-                .with_context(|| format!("Failed to open chunk file {:?}", chunk_path))?;
-            file.seek(SeekFrom::Start(offset))?;
-            let mut buf = vec![0u8; length];
-            file.read_exact(&mut buf)?;
             return Ok(Some(buf));
         }
         Ok(None)
@@ -331,6 +359,15 @@ impl ChunkCache {
                  created_at = excluded.created_at",
             (cache_key, chunk_id, offset as i64, data.len() as i64, now),
         )?;
+
+        self.index.write().unwrap().insert(
+            cache_key.to_string(),
+            ChunkLocation {
+                chunk_file_id: chunk_id,
+                byte_offset: offset,
+                byte_length: data.len() as u32,
+            },
+        );
 
         Ok(())
     }
@@ -393,51 +430,7 @@ impl ChunkCache {
     /// Checks whether thumbnail or preview is present in cache without reading its full payload.
     pub fn has_thumbnail(&self, cache_key: &str, scale: u32) -> bool {
         if scale < 2 {
-            let loc = if self.db_path.is_some() {
-                if let Ok(conn) = self.get_read_conn() {
-                    let mut stmt = match conn.prepare_cached(
-                        "SELECT chunk_file_id FROM thumbnail_chunks WHERE cache_key = ?1",
-                    ) {
-                        Ok(s) => s,
-                        Err(_) => return false,
-                    };
-                    let mut rows = match stmt.query([cache_key]) {
-                        Ok(r) => r,
-                        Err(_) => return false,
-                    };
-                    if let Ok(Some(row)) = rows.next() {
-                        let id: u32 = row.get(0).unwrap_or(0);
-                        Some(id)
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            } else {
-                let conn = self.conn.lock().unwrap();
-                let mut stmt = match conn.prepare_cached(
-                    "SELECT chunk_file_id FROM thumbnail_chunks WHERE cache_key = ?1",
-                ) {
-                    Ok(s) => s,
-                    Err(_) => return false,
-                };
-                let mut rows = match stmt.query([cache_key]) {
-                    Ok(r) => r,
-                    Err(_) => return false,
-                };
-                if let Ok(Some(row)) = rows.next() {
-                    let id: u32 = row.get(0).unwrap_or(0);
-                    Some(id)
-                } else {
-                    None
-                }
-            };
-            if let Some(chunk_id) = loc {
-                self.chunks_dir.join(format!("chunk_{:04}.bin", chunk_id)).is_file()
-            } else {
-                false
-            }
+            self.index.read().unwrap().contains_key(cache_key)
         } else {
             self.preview_path(cache_key).is_file()
         }
@@ -500,6 +493,11 @@ impl ChunkCache {
         let _ = fs::remove_dir_all(&self.previews_dir);
         let _ = fs::create_dir_all(&self.chunks_dir);
         let _ = fs::create_dir_all(&self.previews_dir);
+
+        self.index.write().unwrap().clear();
+        if let Ok(mut files) = self.open_chunk_files.lock() {
+            files.clear();
+        }
 
         let conn = self.conn.lock().unwrap();
         conn.execute("DELETE FROM thumbnail_chunks", [])?;

@@ -87,6 +87,7 @@ export const LibraryGrid = React.memo(function LibraryGrid({
   const setGridScrollTop = useLibraryUIStore((s) => s.setGridScrollTop);
   const setGridColumns = useLibraryUIStore((s) => s.setGridColumns);
   const scanState = useLibraryStore((s) => s.scanState);
+  const isFullyIndexed = useLibraryStore((s) => s.isFullyIndexed);
   const gridContainerRef = useRef<HTMLDivElement>(null);
 
   // Sprint 1: Speculative RAM Viewport Caching refs & buffer counts
@@ -481,7 +482,7 @@ export const LibraryGrid = React.memo(function LibraryGrid({
   const lastRow = virtualItems[virtualItems.length - 1]?.index;
 
   useEffect(() => {
-    if (viewMode !== 'grid' || virtualItems.length === 0 || displayedImages.length === 0) return;
+    if (viewMode !== 'grid' || scanState !== 'scanning' || virtualItems.length === 0 || displayedImages.length === 0) return;
 
     const timer = window.setTimeout(() => {
       const visiblePaths: string[] = [];
@@ -497,18 +498,18 @@ export const LibraryGrid = React.memo(function LibraryGrid({
       if (visiblePaths.length > 0) {
         invoke('set_active_viewport_paths', { paths: visiblePaths }).catch(() => {});
       }
-    }, 80);
+    }, 150);
 
     return () => {
       window.clearTimeout(timer);
     };
-  }, [firstRow, lastRow, numColumns, displayedImages, viewMode]);
+  }, [firstRow, lastRow, numColumns, displayedImages, viewMode, scanState]);
 
   // Sprint 1: Speculative RAM Viewport Caching
   // Debounce 150ms after scroll settles to warm up thumbnails in scroll direction
   useEffect(() => {
-    // Absoluter Schutz: Niemals spekulatives Warmup während eines aktiven Scans!
-    if (viewMode !== 'grid' || displayedImages.length === 0 || scanState === 'scanning' || scanState === 'connecting') return;
+    // Absoluter Schutz: Niemals spekulatives Warmup während eines aktiven Scans oder wenn das Archiv bereits fertig indiziert ist!
+    if (viewMode !== 'grid' || displayedImages.length === 0 || scanState === 'scanning' || scanState === 'connecting' || isFullyIndexed) return;
 
     if (rowVirtualizer.isScrolling) {
       // Scrolling in progress - invalidate active warmup job immediately and clear buffer counts
@@ -618,6 +619,7 @@ export const LibraryGrid = React.memo(function LibraryGrid({
     rowCount,
     scale,
     scanState,
+    isFullyIndexed,
   ]);
 
   return (
@@ -734,7 +736,6 @@ export const LibraryGrid = React.memo(function LibraryGrid({
                       img={img}
                       isActive={isActive}
                       isSelected={isSelected}
-                      isScrolling={rowVirtualizer.isScrolling}
                       onClick={(e) => {
                         isMouseSelectionRef.current = true;
                         mouseSelectionTimeRef.current = Date.now();

@@ -776,15 +776,21 @@ pub async fn reconcile_archive_delta(
         .map_err(|e| e.to_string())?;
 
         if !controller_clone.is_cancelled() {
-            if let Some(chunk_cache) = rapidready_core::chunk_cache::get_global_chunk_cache() {
-                let _ = rapidready_core::thumbnail::generate_missing_thumbnails_for_archive(
-                    &catalog,
-                    &chunk_cache,
-                    &path_clone,
-                    1,
-                    &controller_clone,
-                    |_, _, _, _| {},
-                );
+            let needs_thumbs = !delta_res.added.is_empty()
+                || !delta_res.updated.is_empty()
+                || !catalog.is_archive_fully_indexed(&path_clone).unwrap_or(false);
+
+            if needs_thumbs {
+                if let Some(chunk_cache) = rapidready_core::chunk_cache::get_global_chunk_cache() {
+                    let _ = rapidready_core::thumbnail::generate_missing_thumbnails_for_archive(
+                        &catalog,
+                        &chunk_cache,
+                        &path_clone,
+                        1,
+                        &controller_clone,
+                        |_, _, _, _| {},
+                    );
+                }
             }
         }
 
@@ -1338,81 +1344,7 @@ pub fn rename_folder(old_path: String, new_name: String) -> Result<String, Strin
     Ok(target.to_string_lossy().to_string())
 }
 
-pub fn is_network_or_remote_path(path: &Path) -> bool {
-    #[cfg(target_os = "windows")]
-    {
-        let path_str = path.to_string_lossy();
-        // 1. UNC network path: starts with \\ or // or \??\UNC
-        if path_str.starts_with(r"\\") || path_str.starts_with("//") || path_str.starts_with(r"\??\UNC") {
-            return true;
-        }
-
-        // 2. Mapped drive: check drive root e.g. "Z:\" with GetDriveTypeW (DRIVE_REMOTE = 4)
-        use std::os::windows::ffi::OsStrExt;
-        if let Some(component) = path.components().next() {
-            let mut drive: Vec<u16> = component.as_os_str().encode_wide().collect();
-            if !drive.ends_with(&[b'\\' as u16]) {
-                drive.push(b'\\' as u16);
-            }
-            drive.push(0);
-
-            extern "system" {
-                fn GetDriveTypeW(lpRootPathName: *const u16) -> u32;
-            }
-            unsafe {
-                if GetDriveTypeW(drive.as_ptr()) == 4 {
-                    return true;
-                }
-            }
-        }
-        false
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        use std::ffi::CString;
-        use std::os::unix::ffi::OsStrExt;
-
-        let existing_path = path.ancestors().find(|a| a.exists()).unwrap_or(path);
-
-        if let Ok(c_path) = CString::new(existing_path.as_os_str().as_bytes()) {
-            let mut stat: libc::statfs = unsafe { std::mem::zeroed() };
-            if unsafe { libc::statfs(c_path.as_ptr(), &mut stat) } == 0 {
-                // MNT_LOCAL = 0x00001000 in macOS sys/mount.h
-                const MNT_LOCAL: u32 = 0x00001000;
-                if (stat.f_flags & MNT_LOCAL) == 0 {
-                    return true;
-                }
-                let fstype = unsafe {
-                    std::ffi::CStr::from_ptr(stat.f_fstypename.as_ptr()).to_string_lossy()
-                };
-                if fstype == "smbfs" || fstype == "nfs" || fstype == "afpfs" || fstype == "cifs" || fstype == "webdav" {
-                    return true;
-                }
-            }
-        }
-        false
-    }
-
-    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-    {
-        use std::ffi::CString;
-        use std::os::unix::ffi::OsStrExt;
-
-        let existing_path = path.ancestors().find(|a| a.exists()).unwrap_or(path);
-
-        if let Ok(c_path) = CString::new(existing_path.as_os_str().as_bytes()) {
-            let mut stat: libc::statfs = unsafe { std::mem::zeroed() };
-            if unsafe { libc::statfs(c_path.as_ptr(), &mut stat) } == 0 {
-                let f_type = stat.f_type as i64;
-                if f_type == 0x6969 || f_type == 0x517B || f_type == 0xFF534D42 {
-                    return true;
-                }
-            }
-        }
-        false
-    }
-}
+pub use rapidready_core::metadata_resolver::is_network_or_remote_path;
 
 #[tauri::command]
 pub fn is_network_path(path: String) -> bool {

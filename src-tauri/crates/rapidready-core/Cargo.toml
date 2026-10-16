@@ -1,6 +1,6 @@
 [package]
 name = "rapidready-core"
-version = "0.5.1"
+version = "0.5.2"
 edition = "2024"
 
 [dependencies]
@@ -19,4 +19,7 @@ sysinfo = "0.39.6"
 regex = "1.13.1"
 lru = "0.13"
 rayon = "1.10"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 

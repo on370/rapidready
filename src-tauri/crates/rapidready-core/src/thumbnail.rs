@@ -50,7 +50,7 @@ pub fn is_viewport_active() -> bool {
     }
     let last = LAST_VIEWPORT_ACTIVITY.load(Ordering::Relaxed);
     let now = now_millis();
-    now.saturating_sub(last) < 40
+    now.saturating_sub(last) < 250
 }
 
 /// Cooperatively pauses while viewport activity is taking place.
@@ -604,6 +604,31 @@ pub fn inject_orientation_into_jpeg(jpeg_bytes: &[u8], orient: u16) -> Vec<u8> {
         out.extend_from_slice(&jpeg_bytes[pos..]);
     }
     out
+}
+
+/// Quickly parses (width, height) of a JPEG buffer from its SOF0/SOF2 marker in < 0.001 ms.
+pub fn parse_jpeg_dimensions(data: &[u8]) -> Option<(usize, usize)> {
+    if data.len() < 10 || data[0] != 0xFF || data[1] != 0xD8 {
+        return None;
+    }
+    let limit = data.len().min(65536);
+    let mut pos = 2;
+    while pos + 8 < limit {
+        if data[pos] == 0xFF {
+            let marker = data[pos + 1];
+            if marker == 0xC0 || marker == 0xC2 {
+                if pos + 9 <= limit {
+                    let h = ((data[pos + 5] as usize) << 8) | (data[pos + 6] as usize);
+                    let w = ((data[pos + 7] as usize) << 8) | (data[pos + 8] as usize);
+                    if w > 0 && h > 0 {
+                        return Some((w, h));
+                    }
+                }
+            }
+        }
+        pos += 1;
+    }
+    None
 }
 
 pub fn extract_largest_embedded_jpeg(path: &Path, target_orient: Option<u32>) -> Option<Vec<u8>> {
@@ -1406,17 +1431,25 @@ pub fn get_preview_jpeg_with_orient_and_hints(
     {
         // For RAW files, NEVER call ImageIO with file URLs (prevents remote network seeks and full sensor demosaic over SMB)
         if !is_raw {
-            // Direct-store for standard JPEGs <= 2.6 MB:
-            // Avoids decoding and re-compressing 24-MP JPEGs when file size is already optimal for cache.
-            if is_jpeg && _file_size > 0 && _file_size <= 2_600_000 {
+            // Direct-store for compact standard JPEGs (<= 1920 px and <= 1.5 MB):
+            // Avoids decoding and re-compressing web/preview JPEGs when already optimal for cache.
+            // Full-resolution original camera JPEGs (> 1920 px, e.g. 24 MP) are downscaled to 720px
+            // to keep the chunk cache compact (< 2 GB for 10k JPEGs) and avoid allocating 96 MB RGBA textures in WebKit.
+            if is_jpeg && _file_size > 0 && _file_size <= 1_500_000 {
                 if let Ok(data) = std::fs::read(path) {
-                    let final_bytes = if _resolved_orient != 1 {
-                        inject_orientation_into_jpeg(&data, _resolved_orient as u16)
-                    } else {
-                        data
-                    };
-                    record_thumbnail_cache(&cache_key, blake3_key.as_deref(), scale, &final_bytes);
-                    return Ok(final_bytes);
+                    let is_compact = parse_jpeg_dimensions(&data)
+                        .map(|(w, h)| w.max(h) <= 1920)
+                        .unwrap_or(false);
+
+                    if is_compact {
+                        let final_bytes = if _resolved_orient != 1 {
+                            inject_orientation_into_jpeg(&data, _resolved_orient as u16)
+                        } else {
+                            data
+                        };
+                        record_thumbnail_cache(&cache_key, blake3_key.as_deref(), scale, &final_bytes);
+                        return Ok(final_bytes);
+                    }
                 }
             }
 
@@ -1451,15 +1484,21 @@ pub fn get_preview_jpeg_with_orient_and_hints(
 
     #[cfg(not(target_os = "macos"))]
     {
-        if is_jpeg && _file_size > 0 && _file_size <= 2_600_000 {
+        if is_jpeg && _file_size > 0 && _file_size <= 1_500_000 {
             if let Ok(data) = std::fs::read(path) {
-                let final_bytes = if _resolved_orient != 1 {
-                    inject_orientation_into_jpeg(&data, _resolved_orient as u16)
-                } else {
-                    data
-                };
-                record_thumbnail_cache(&cache_key, blake3_key.as_deref(), scale, &final_bytes);
-                return Ok(final_bytes);
+                let is_compact = parse_jpeg_dimensions(&data)
+                    .map(|(w, h)| w.max(h) <= 1920)
+                    .unwrap_or(false);
+
+                if is_compact {
+                    let final_bytes = if _resolved_orient != 1 {
+                        inject_orientation_into_jpeg(&data, _resolved_orient as u16)
+                    } else {
+                        data
+                    };
+                    record_thumbnail_cache(&cache_key, blake3_key.as_deref(), scale, &final_bytes);
+                    return Ok(final_bytes);
+                }
             }
         }
 
@@ -1935,9 +1974,17 @@ where
         cb(already_cached, total_archive_files, "", 0);
     }
 
-    let worker_count = std::thread::available_parallelism()
-        .map(|n| n.get().clamp(3, 6))
-        .unwrap_or(4);
+    let is_remote = crate::metadata_resolver::is_network_or_remote_path(Path::new(root));
+    let worker_count = if is_remote {
+        std::thread::available_parallelism()
+            .map(|n| n.get().clamp(2, 3))
+            .unwrap_or(2)
+    } else {
+        std::thread::available_parallelism()
+            .map(|n| n.get().clamp(3, 6))
+            .unwrap_or(4)
+    };
+    let active_folder_tracker = Mutex::new(get_active_folder());
 
     std::thread::scope(|s| {
         for _ in 0..worker_count {
@@ -1952,9 +1999,9 @@ where
                             return;
                         }
                     }
-                    // Cooperative preemption: yield CPU execution to interactive UI threads
-                    if is_viewport_active() {
-                        std::thread::yield_now();
+                    // Cooperative preemption: wait while interactive UI scrolling is active
+                    if !wait_while_viewport_active(Some(controller)) {
+                        return;
                     }
 
                     // Grab a batch of up to 8 items in O(1) without holding lock during processing
@@ -1966,11 +2013,46 @@ where
                         if q.is_empty() {
                             Vec::new()
                         } else {
+                            // Dynamic folder re-prioritization: if active folder changed, sort remaining items
+                            let cur_folder = get_active_folder();
+                            if let Ok(mut tracker) = active_folder_tracker.try_lock() {
+                                if *tracker != cur_folder {
+                                    *tracker = cur_folder.clone();
+                                    if let Some(ref folder) = cur_folder {
+                                        let folder_str = folder.as_str();
+                                        q.sort_by_key(|cand| {
+                                            let not_video = !cand.is_video;
+                                            let in_folder = cand.path.starts_with(folder_str);
+                                            (not_video, in_folder)
+                                        });
+                                    }
+                                }
+                            }
+
                             let batch_size = 8.min(q.len());
                             let mut b = Vec::with_capacity(batch_size);
-                            for _ in 0..batch_size {
+
+                            // Viewport priority: immediately take visible items first
+                            if let Some(vp_paths) = get_active_viewport_paths() {
+                                if !vp_paths.is_empty() {
+                                    let vp_set: std::collections::HashSet<&str> =
+                                        vp_paths.iter().map(|s| s.as_str()).collect();
+                                    let mut i = q.len();
+                                    while i > 0 && b.len() < batch_size {
+                                        i -= 1;
+                                        if vp_set.contains(q[i].path.as_str()) {
+                                            b.push(q.swap_remove(i));
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Fill remaining batch slots from the end of the queue
+                            while b.len() < batch_size {
                                 if let Some(item) = q.pop() {
                                     b.push(item);
+                                } else {
+                                    break;
                                 }
                             }
                             b
@@ -1991,8 +2073,8 @@ where
                                 return;
                             }
                         }
-                        if is_viewport_active() {
-                            std::thread::yield_now();
+                        if !wait_while_viewport_active(Some(controller)) {
+                            return;
                         }
 
                     let path_obj = Path::new(&item.path);

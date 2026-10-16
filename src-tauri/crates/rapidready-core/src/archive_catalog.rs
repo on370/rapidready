@@ -4,7 +4,7 @@ use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 use walkdir::WalkDir;
@@ -661,32 +661,49 @@ impl ArchiveCatalog {
         let mut known_dirs_set: HashSet<String> = HashSet::new();
         {
             let pattern = format!("{}/%", norm_root);
-            let conn = self.conn.lock().unwrap();
+            let populate = |conn: &Connection,
+                            map: &mut HashMap<String, (i64, i64, Option<i64>)>,
+                            dirs: &mut HashSet<String>|
+             -> Result<()> {
+                let mut stmt = conn.prepare(
+                    "SELECT canonical_path, file_size, mtime, sidecar_mtime
+                     FROM archive_files
+                     WHERE archive_root = ?1 OR canonical_path = ?1 OR canonical_path LIKE ?2",
+                )?;
+                let rows = stmt.query_map((&norm_root, &pattern), |row| {
+                    let p: String = row.get(0)?;
+                    let sz: i64 = row.get(1)?;
+                    let mt: i64 = row.get(2)?;
+                    let sc: Option<i64> = row.get(3)?;
+                    Ok((p, (sz, mt, sc)))
+                })?;
+                for r in rows {
+                    let (p, data) = r?;
+                    map.insert(p, data);
+                }
 
-            let mut stmt = conn.prepare(
-                "SELECT canonical_path, file_size, mtime, sidecar_mtime
-                 FROM archive_files
-                 WHERE archive_root = ?1 OR canonical_path = ?1 OR canonical_path LIKE ?2"
-            )?;
-            let rows = stmt.query_map((&norm_root, &pattern), |row| {
-                let p: String = row.get(0)?;
-                let sz: i64 = row.get(1)?;
-                let mt: i64 = row.get(2)?;
-                let sc: Option<i64> = row.get(3)?;
-                Ok((p, (sz, mt, sc)))
-            })?;
-            for r in rows {
-                let (p, data) = r?;
-                known_db_map.insert(p, data);
-            }
+                let mut dir_stmt = conn.prepare(
+                    "SELECT path FROM archive_directories
+                     WHERE archive_root = ?1 OR path = ?1 OR path LIKE ?2",
+                )?;
+                let dir_rows =
+                    dir_stmt.query_map((&norm_root, &pattern), |row| row.get::<_, String>(0))?;
+                for d in dir_rows {
+                    dirs.insert(d?);
+                }
+                Ok(())
+            };
 
-            let mut dir_stmt = conn.prepare(
-                "SELECT path FROM archive_directories
-                 WHERE archive_root = ?1 OR path = ?1 OR path LIKE ?2"
-            )?;
-            let dir_rows = dir_stmt.query_map((&norm_root, &pattern), |row| row.get::<_, String>(0))?;
-            for d in dir_rows {
-                known_dirs_set.insert(d?);
+            if self.db_path.is_some() {
+                if let Ok(conn) = self.get_read_conn() {
+                    populate(&conn, &mut known_db_map, &mut known_dirs_set)?;
+                } else {
+                    let conn = self.conn.lock().unwrap();
+                    populate(&conn, &mut known_db_map, &mut known_dirs_set)?;
+                }
+            } else {
+                let conn = self.conn.lock().unwrap();
+                populate(&conn, &mut known_db_map, &mut known_dirs_set)?;
             }
         }
 
@@ -694,6 +711,8 @@ impl ArchiveCatalog {
         let mut discovered_dirs: HashSet<String> = HashSet::new();
         let mut added_files: Vec<ArchiveFile> = Vec::new();
         let mut updated_files: Vec<ArchiveFile> = Vec::new();
+        let mut sidecar_mtimes_on_disk: HashMap<String, i64> = HashMap::new();
+        let mut unmodified_candidates: Vec<(String, PathBuf, Option<i64>)> = Vec::new();
         let mut last_progress_time = Instant::now();
         let mut scanned_count = 0usize;
         let mut scanned_bytes = 0u64;
@@ -744,68 +763,92 @@ impl ArchiveCatalog {
                 continue;
             }
 
-            if entry.file_type().is_file() && is_supported_archive_file(path) {
-                let norm_path = normalize_canonical_path(&path.to_string_lossy());
-                seen_files.insert(norm_path.clone());
-                scanned_count += 1;
+            if entry.file_type().is_file() {
+                let path_str = path.to_string_lossy();
+                if path_str.ends_with(".rrdata") {
+                    let base_image_str = &path_str[..path_str.len() - 7];
+                    let norm_base = normalize_canonical_path(base_image_str);
+                    let sc_mtime = entry
+                        .metadata()
+                        .ok()
+                        .and_then(|m| m.modified().ok())
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_secs() as i64);
+                    if let Some(mt) = sc_mtime {
+                        sidecar_mtimes_on_disk.insert(norm_base, mt);
+                    }
+                    continue;
+                }
 
-                let meta = entry.metadata().ok();
-                let file_size = meta.as_ref().map(|m| m.len() as i64).unwrap_or(0);
-                let mtime = meta
-                    .as_ref()
-                    .and_then(|m| m.modified().ok())
-                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map(|d| d.as_secs() as i64)
-                    .unwrap_or(0);
+                if is_supported_archive_file(path) {
+                    let norm_path = normalize_canonical_path(&path_str);
+                    seen_files.insert(norm_path.clone());
+                    scanned_count += 1;
 
-                scanned_bytes += file_size.max(0) as u64;
+                    let meta = entry.metadata().ok();
+                    let file_size = meta.as_ref().map(|m| m.len() as i64).unwrap_or(0);
+                    let mtime = meta
+                        .as_ref()
+                        .and_then(|m| m.modified().ok())
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_secs() as i64)
+                        .unwrap_or(0);
 
-                if let Some(&(known_size, known_mtime, known_sidecar_mtime)) = known_db_map.get(&norm_path) {
-                    if file_size == known_size && mtime == known_mtime {
-                        // File unmodified: check if sidecar changed
-                        let sidecar_path = get_sidecar_path(path);
-                        let sidecar_mtime = fs::metadata(&sidecar_path)
-                            .ok()
-                            .and_then(|m| m.modified().ok())
-                            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                            .map(|d| d.as_secs() as i64);
+                    scanned_bytes += file_size.max(0) as u64;
 
-                        if sidecar_mtime != known_sidecar_mtime {
-                            // Sidecar changed: only reload culling
-                            let culling = read_sidecar(path);
-                            let _ = self.update_culling(&norm_path, &culling, sidecar_mtime);
-                            if let Some(mut af) = create_archive_file(path) {
-                                af.culling = culling;
+                    if let Some(&(known_size, known_mtime, known_sidecar_mtime)) = known_db_map.get(&norm_path) {
+                        if file_size == known_size && mtime == known_mtime {
+                            // File unmodified: defer sidecar check until after walk
+                            // (avoids thousands of individual fs::metadata SMB round-trips!)
+                            unmodified_candidates.push((norm_path.clone(), path.to_path_buf(), known_sidecar_mtime));
+                        } else {
+                            // File content modified
+                            if let Some(af) = create_archive_file(path) {
                                 updated_files.push(af);
                             }
                         }
-                        // Zero EXIF decoding or work for identical files!
                     } else {
-                        // File content modified
+                        // Newly discovered file
                         if let Some(af) = create_archive_file(path) {
-                            updated_files.push(af);
+                            added_files.push(af);
                         }
                     }
-                } else {
-                    // Newly discovered file
-                    if let Some(af) = create_archive_file(path) {
-                        added_files.push(af);
+
+                    if last_progress_time.elapsed().as_millis() >= 200 {
+                        last_progress_time = Instant::now();
+                        on_progress(ArchiveScanProgress {
+                            scan_id,
+                            files_found: scanned_count,
+                            total_bytes: scanned_bytes,
+                            current_dir: norm_path.clone(),
+                            is_paused: controller.is_paused(),
+                            is_cancelled: controller.is_cancelled(),
+                            is_complete: false,
+                            phase: Some("syncing".to_string()),
+                            total_files: None,
+                        });
                     }
                 }
+            }
+        }
 
-                if last_progress_time.elapsed().as_millis() >= 200 {
-                    last_progress_time = Instant::now();
-                    on_progress(ArchiveScanProgress {
-                        scan_id,
-                        files_found: scanned_count,
-                        total_bytes: scanned_bytes,
-                        current_dir: norm_path.clone(),
-                        is_paused: controller.is_paused(),
-                        is_cancelled: controller.is_cancelled(),
-                        is_complete: false,
-                        phase: Some("syncing".to_string()),
-                        total_files: None,
-                    });
+        // 2b. Check sidecars for unmodified files in-memory using sidecar_mtimes_on_disk (O(1), zero SMB calls!)
+        for (norm_path, orig_path, known_sidecar_mtime) in unmodified_candidates {
+            if controller.check_pause_or_cancel() {
+                break;
+            }
+            let current_sidecar_mtime = sidecar_mtimes_on_disk.get(&norm_path).copied();
+            if current_sidecar_mtime != known_sidecar_mtime {
+                // Sidecar changed or was added/removed: update culling in DB and emit to updated_files
+                let culling = if current_sidecar_mtime.is_some() {
+                    read_sidecar(&orig_path)
+                } else {
+                    CullingState::default()
+                };
+                let _ = self.update_culling(&norm_path, &culling, current_sidecar_mtime);
+                if let Some(mut af) = create_archive_file(&orig_path) {
+                    af.culling = culling;
+                    updated_files.push(af);
                 }
             }
         }
