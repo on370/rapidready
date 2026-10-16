@@ -247,7 +247,7 @@ export const SourceDrivePicker = React.memo(function SourceDrivePicker() {
                     </div>
                     {scanProgress && scanProgress.total > 0 && (
                       <span className="font-mono text-[11px] text-accent font-bold">
-                        {Math.round(scanProgress.percent)}%
+                        {scanProgress.current >= scanProgress.total ? 100 : Math.min(99, Math.floor(scanProgress.percent))}%
                       </span>
                     )}
                   </div>
@@ -401,7 +401,7 @@ export const SourceDrivePicker = React.memo(function SourceDrivePicker() {
             <span className="text-sm font-medium text-txt-tertiary italic flex items-center gap-1.5">
               <RefreshCw className="w-3 h-3 animate-spin" />
               {scanProgress && scanProgress.total > 0
-                ? `${scanProgress.current} / ${scanProgress.total} (${Math.round(scanProgress.percent)}%)`
+                ? `${scanProgress.current} / ${scanProgress.total} (${scanProgress.current >= scanProgress.total ? 100 : Math.min(99, Math.floor(scanProgress.percent))}%)`
                 : t('source.scanning')}
             </span>
           ) : (

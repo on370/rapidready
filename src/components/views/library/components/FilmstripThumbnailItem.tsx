@@ -50,26 +50,28 @@ export const FilmstripThumbnailItem = React.memo(function FilmstripThumbnailItem
         loading="eager"
         decoding="async"
         src={getRrImageUrl(img.path, false, img.culling?.orientation, 1, img.size, img.mtime)} 
+        style={{ opacity: loaded ? 1 : 0 }}
         className="w-full h-full object-contain pointer-events-none relative z-10" 
-        alt={img.name} 
+        alt="" 
         onLoad={() => {
           loadedThumbnailCache.add(cacheKey);
           setLoaded(true);
         }}
         onError={(e) => {
           const target = e.currentTarget as HTMLImageElement;
+          target.style.opacity = '0';
           const retryCount = Number(target.dataset.retryCount || 0);
-          if (retryCount < 2) {
+          if (retryCount < 6) {
             target.dataset.retryCount = String(retryCount + 1);
             setTimeout(() => {
               const baseSrc = getRrImageUrl(img.path, false, img.culling?.orientation, 1, img.size, img.mtime);
               target.src = `${baseSrc}&retry=${Date.now()}`;
-            }, 500 * (retryCount + 1));
+            }, 250 * (retryCount + 1));
           }
         }}
       />
       {!loaded && (
-        <div className="absolute inset-0 bg-[#161619] flex items-center justify-center pointer-events-none">
+        <div className="absolute inset-0 bg-[#161619] flex items-center justify-center pointer-events-none z-10">
           <div className="w-5 h-5 rounded bg-white/[0.04] animate-pulse" />
         </div>
       )}

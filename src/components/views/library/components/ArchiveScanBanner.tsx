@@ -156,7 +156,9 @@ export function ArchiveScanBanner({ onRestartScan }: ArchiveScanBannerProps) {
 
   const formattedDone = donePhotos.toLocaleString();
   const formattedMax = totalPhotos.toLocaleString();
-  const percent = hasKnownTotal && totalPhotos > 0 ? Math.min(100, Math.round((donePhotos / totalPhotos) * 100)) : null;
+  const percent = hasKnownTotal && totalPhotos > 0
+    ? (donePhotos >= totalPhotos ? 100 : Math.min(99, Math.floor((donePhotos / totalPhotos) * 100)))
+    : null;
   const normalizedDir = (scanProgress?.current_dir || '').replace(/\\/g, '/');
   const shortDir = normalizedDir ? normalizedDir.split('/').filter(Boolean).slice(-2).join('/') : '';
 

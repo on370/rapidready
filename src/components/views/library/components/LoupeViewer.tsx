@@ -144,9 +144,10 @@ export const LoupeViewer = React.memo(function LoupeViewer({
         : Promise.resolve(0),
     ])
       .then(() => {
-        // 2. Warm Full-Res Preview (scale: 100) right after for primary direction
+        // 2. Warm Full-Res Preview (scale: 100) right after for immediate next 1-2 images in primary direction
         if (warmupTokenRef.current === token && primaryPaths.length > 0) {
-          return invoke('warm_thumbnail_cache', { paths: primaryPaths, scale: 100, token });
+          const nextFullresPaths = primaryPaths.slice(0, 2);
+          return invoke('warm_thumbnail_cache', { paths: nextFullresPaths, scale: 100, token });
         }
       })
       .catch(() => {});

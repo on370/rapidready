@@ -1301,7 +1301,7 @@ pub fn get_preview_jpeg_with_orient_and_hints(
 
     // Slow fallback path: File was not yet cached in L2, or metadata was not known.
     // If metadata hints were provided, avoid touching the filesystem/NAS for metadata!
-    let (_file_size, _mtime_sec, _resolved_orient, blake3_key, cache_key) = if let Some((fast_sz, fast_mt, fast_orient)) = fast_metadata {
+    let (_file_size, _mtime_sec, _key_orient, blake3_key, cache_key) = if let Some((fast_sz, fast_mt, fast_orient)) = fast_metadata {
         let key = crate::chunk_cache::compute_cache_key(path, fast_sz, fast_mt, scale, fast_orient);
         let c_key = make_l1_cache_key(path, scale, fast_orient, fast_mt);
         (fast_sz, fast_mt, fast_orient, Some(key), c_key)
@@ -1388,9 +1388,13 @@ pub fn get_preview_jpeg_with_orient_and_hints(
             // Loupe View and 100% Zoom (scale >= 100) bypass downscaling and preserve full sensor resolution.
             #[cfg(target_os = "macos")]
             let final_bytes = if scale < 100 && fast_bytes.len() > 1_500_000 {
+                let orient = parse_header_orientation(&fast_bytes)
+                    .or(target_orient)
+                    .or_else(|| get_effective_orientation(path))
+                    .unwrap_or(1);
                 let downscaled = imageio::extract_thumbnail_from_data(&fast_bytes, target_px).unwrap_or(fast_bytes);
-                if _resolved_orient != 1 {
-                    inject_orientation_into_jpeg(&downscaled, _resolved_orient as u16)
+                if orient != 1 {
+                    inject_orientation_into_jpeg(&downscaled, orient as u16)
                 } else {
                     downscaled
                 }
@@ -1399,6 +1403,10 @@ pub fn get_preview_jpeg_with_orient_and_hints(
             };
             #[cfg(not(target_os = "macos"))]
             let final_bytes = if scale < 100 && fast_bytes.len() > 1_500_000 {
+                let orient = parse_header_orientation(&fast_bytes)
+                    .or(target_orient)
+                    .or_else(|| get_effective_orientation(path))
+                    .unwrap_or(1);
                 // Windows / Linux fallback downscaling using image crate:
                 // (Optimized SIMD decoding via turbojpeg/zune-jpeg tracked in ROADMAP.md backlog)
                 if let Ok(dyn_img) = image::load_from_memory(&fast_bytes) {
@@ -1406,8 +1414,8 @@ pub fn get_preview_jpeg_with_orient_and_hints(
                     let mut buf = std::io::Cursor::new(Vec::new());
                     if resized.into_rgb8().write_to(&mut buf, image::ImageFormat::Jpeg).is_ok() {
                         let out = buf.into_inner();
-                        if _resolved_orient != 1 {
-                            inject_orientation_into_jpeg(&out, _resolved_orient as u16)
+                        if orient != 1 {
+                            inject_orientation_into_jpeg(&out, orient as u16)
                         } else {
                             out
                         }
@@ -1442,8 +1450,9 @@ pub fn get_preview_jpeg_with_orient_and_hints(
                         .unwrap_or(false);
 
                     if is_compact {
-                        let final_bytes = if _resolved_orient != 1 {
-                            inject_orientation_into_jpeg(&data, _resolved_orient as u16)
+                        let explicit_o = target_orient.or_else(|| crate::culling::read_sidecar(path).orientation);
+                        let final_bytes = if let Some(o) = explicit_o {
+                            inject_orientation_into_jpeg(&data, o as u16)
                         } else {
                             data
                         };
@@ -1453,18 +1462,28 @@ pub fn get_preview_jpeg_with_orient_and_hints(
                 }
             }
 
-            let imgio_res = if let Ok(data) = std::fs::read(path) {
-                imageio::extract_thumbnail_from_data(&data, target_px)
-            } else {
-                extract_macos_imageio_thumbnail(path, target_px)
-            };
-            if let Some(mut imgio_bytes) = imgio_res {
-                // ImageIO already bakes the file's embedded EXIF orientation into the thumbnail.
-                // Only apply delta if user explicitly changed orientation in the RapidReady sidecar.
-                if let Some(sidecar_o) = crate::culling::read_sidecar(path).orientation {
+            let read_data_res = std::fs::read(path);
+            let imgio_res = if let Ok(ref data) = read_data_res {
+                if let Some(mut imgio_bytes) = imageio::extract_thumbnail_from_data(data, target_px) {
+                    let eff_orient = target_orient
+                        .or_else(|| parse_header_orientation(data))
+                        .or_else(|| get_effective_orientation(path))
+                        .unwrap_or(1);
+                    if eff_orient != 1 {
+                        imgio_bytes = inject_orientation_into_jpeg(&imgio_bytes, eff_orient as u16);
+                    }
+                    Some(imgio_bytes)
+                } else {
+                    None
+                }
+            } else if let Some(mut imgio_bytes) = extract_macos_imageio_thumbnail(path, target_px) {
+                // Fallback extract_macos_imageio_thumbnail uses WithTransform = True (pixels are already physically rotated).
+                // Only apply delta if user explicitly specified or changed orientation in the RapidReady sidecar.
+                let explicit_o = target_orient.or_else(|| crate::culling::read_sidecar(path).orientation);
+                if let Some(target_o) = explicit_o {
                     let file_orient = read_exif_orientation(path).unwrap_or(1);
                     let file_deg = orientation_to_degrees(file_orient);
-                    let target_deg = orientation_to_degrees(sidecar_o);
+                    let target_deg = orientation_to_degrees(target_o);
                     let delta_deg = (target_deg + 360 - file_deg) % 360;
                     if delta_deg != 0 {
                         let delta_tag = match delta_deg {
@@ -1476,8 +1495,14 @@ pub fn get_preview_jpeg_with_orient_and_hints(
                         imgio_bytes = inject_orientation_into_jpeg(&imgio_bytes, delta_tag);
                     }
                 }
-                record_thumbnail_cache(&cache_key, blake3_key.as_deref(), scale, &imgio_bytes);
-                return Ok(imgio_bytes);
+                Some(imgio_bytes)
+            } else {
+                None
+            };
+
+            if let Some(final_imgio_bytes) = imgio_res {
+                record_thumbnail_cache(&cache_key, blake3_key.as_deref(), scale, &final_imgio_bytes);
+                return Ok(final_imgio_bytes);
             }
         }
     }
@@ -1491,8 +1516,9 @@ pub fn get_preview_jpeg_with_orient_and_hints(
                     .unwrap_or(false);
 
                 if is_compact {
-                    let final_bytes = if _resolved_orient != 1 {
-                        inject_orientation_into_jpeg(&data, _resolved_orient as u16)
+                    let explicit_o = target_orient.or_else(|| crate::culling::read_sidecar(path).orientation);
+                    let final_bytes = if let Some(o) = explicit_o {
+                        inject_orientation_into_jpeg(&data, o as u16)
                     } else {
                         data
                     };
@@ -1642,9 +1668,9 @@ pub fn get_max_preview_jpeg_with_orient_and_hints(
     let is_raw = RAW_EXTENSIONS.contains(&ext.as_str());
     if ext == "jpg" || ext == "jpeg" {
         let bytes = std::fs::read(path).context("Failed to read JPEG")?;
-        let eff_orient = target_orient;
-        let out_bytes = if eff_orient != 1 {
-            inject_orientation_into_jpeg(&bytes, eff_orient as u16)
+        let explicit_o = explicit_orient.or_else(|| crate::culling::read_sidecar(path).orientation);
+        let out_bytes = if let Some(o) = explicit_o {
+            inject_orientation_into_jpeg(&bytes, o as u16)
         } else {
             bytes
         };
@@ -1664,10 +1690,11 @@ pub fn get_max_preview_jpeg_with_orient_and_hints(
     {
         if !is_raw {
             if let Some(mut imgio_bytes) = extract_macos_imageio_thumbnail(path, 2560) {
-                if let Some(sidecar_o) = crate::culling::read_sidecar(path).orientation {
+                let explicit_o = explicit_orient.or_else(|| crate::culling::read_sidecar(path).orientation);
+                if let Some(target_o) = explicit_o {
                     let file_orient = read_exif_orientation(path).unwrap_or(1);
                     let file_deg = orientation_to_degrees(file_orient);
-                    let target_deg = orientation_to_degrees(sidecar_o);
+                    let target_deg = orientation_to_degrees(target_o);
                     let delta_deg = (target_deg + 360 - file_deg) % 360;
                     if delta_deg != 0 {
                         let delta_tag = match delta_deg {
@@ -1777,6 +1804,19 @@ pub fn is_thumbnail_cached_with_hints(
             if chunk_cache.has_thumbnail(&blake3_key, eff_scale) {
                 return true;
             }
+            // Fallback for scale 0 or 2: If scale 1 is cached in chunk cache, consider it cached!
+            if eff_scale == 0 || eff_scale == 2 {
+                let key1 = crate::chunk_cache::compute_cache_key(
+                    path,
+                    fast_sz,
+                    fast_mt,
+                    1,
+                    fast_orient,
+                );
+                if chunk_cache.has_thumbnail(&key1, 1) {
+                    return true;
+                }
+            }
         }
         return false;
     }
@@ -1808,6 +1848,47 @@ pub fn is_thumbnail_cached_with_hints(
             if chunk_cache.has_thumbnail(&blake3_key, eff_scale) {
                 return true;
             }
+            if eff_scale == 0 || eff_scale == 2 {
+                let key1 = crate::chunk_cache::compute_cache_key(
+                    path,
+                    meta.len(),
+                    mtime_sec,
+                    1,
+                    resolved_orient.unwrap_or(1),
+                );
+                if chunk_cache.has_thumbnail(&key1, 1) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Checks strictly whether the thumbnail JPEG is currently resident in L1 RAM (THUMBNAIL_CACHE).
+/// Fast in-memory lookup without touching filesystem or SMB network!
+pub fn is_thumbnail_ram_cached(
+    path: &Path,
+    scale: u32,
+    target_orient: Option<u32>,
+    hint_size: Option<u64>,
+    hint_mtime: Option<i64>,
+) -> bool {
+    let eff_scale = if scale >= 100 { 100 } else { scale };
+    let fast_metadata = if let (Some(sz), Some(mt)) = (hint_size, hint_mtime) {
+        let orient = target_orient.unwrap_or(1);
+        Some((sz, mt, orient))
+    } else if let Some((cat_sz, cat_mt, cat_orient)) = crate::archive_catalog::get_catalog_metadata_hint(path) {
+        let orient = target_orient.or(cat_orient).unwrap_or(1);
+        Some((cat_sz, cat_mt, orient))
+    } else {
+        None
+    };
+
+    if let Some((_, fast_mt, fast_orient)) = fast_metadata {
+        let fast_cache_key = make_l1_cache_key(path, eff_scale, fast_orient, fast_mt);
+        if let Ok(cache) = THUMBNAIL_CACHE.lock() {
+            return cache.contains(&fast_cache_key);
         }
     }
     false
@@ -1839,7 +1920,7 @@ where
     let mut cached_count = 0;
     for path_str in paths {
         let path = Path::new(path_str);
-        if is_thumbnail_cached(path, scale, None) {
+        if is_thumbnail_ram_cached(path, scale, None, None, None) {
             cached_count += 1;
         }
     }
@@ -1864,15 +1945,14 @@ where
             break;
         }
         let path = Path::new(path_str);
-        if !is_thumbnail_cached(path, scale, None) {
+        if !is_thumbnail_ram_cached(path, scale, None, None, None) {
             let _ = get_thumbnail_bytes(path, scale, None);
             std::thread::yield_now();
             cached_count += 1;
 
-            // Throttle progress events: emit at least every 5 items or 100ms, or when finished
-            if cached_count - last_reported >= 5
-                || last_report_time.elapsed() >= std::time::Duration::from_millis(100)
-                || cached_count == total
+            // Throttle progress events: emit at least every 1 item or 50ms, or when finished
+            if cached_count - last_reported >= 1
+                && (last_report_time.elapsed() >= std::time::Duration::from_millis(50) || cached_count == total)
             {
                 on_progress(cached_count, total);
                 last_reported = cached_count;
@@ -1955,13 +2035,17 @@ where
     // 2. Active folder items come at the very end of the vector (popped first of all).
     if let Some(active_folder) = get_active_folder() {
         let folder_str = active_folder.as_str();
-        missing.sort_by_key(|cand| {
-            let not_video = !cand.is_video;
-            let is_active = cand.path.starts_with(folder_str);
-            (not_video, is_active)
+        missing.sort_by(|a, b| {
+            let key_a = (!a.is_video, a.path.starts_with(folder_str), std::cmp::Reverse(&a.path));
+            let key_b = (!b.is_video, b.path.starts_with(folder_str), std::cmp::Reverse(&b.path));
+            key_a.cmp(&key_b)
         });
     } else {
-        missing.sort_by_key(|cand| !cand.is_video);
+        missing.sort_by(|a, b| {
+            let key_a = (!a.is_video, std::cmp::Reverse(&a.path));
+            let key_b = (!b.is_video, std::cmp::Reverse(&b.path));
+            key_a.cmp(&key_b)
+        });
     }
 
     let queue = Mutex::new(missing);
@@ -2020,10 +2104,10 @@ where
                                     *tracker = cur_folder.clone();
                                     if let Some(ref folder) = cur_folder {
                                         let folder_str = folder.as_str();
-                                        q.sort_by_key(|cand| {
-                                            let not_video = !cand.is_video;
-                                            let in_folder = cand.path.starts_with(folder_str);
-                                            (not_video, in_folder)
+                                        q.sort_by(|a, b| {
+                                            let key_a = (!a.is_video, a.path.starts_with(folder_str), std::cmp::Reverse(&a.path));
+                                            let key_b = (!b.is_video, b.path.starts_with(folder_str), std::cmp::Reverse(&b.path));
+                                            key_a.cmp(&key_b)
                                         });
                                     }
                                 }
@@ -2193,6 +2277,82 @@ mod tests {
 
         let processed = warm_thumbnail_cache_with_token(&paths, 1, token, &test_token_atomic);
         assert_eq!(processed, 2, "Warmup should process items while token matches");
+    }
+
+    #[test]
+    fn test_warmup_ram_cache_preloading() {
+        let temp_dir = std::env::temp_dir().join(format!("rapidready_warmup_test_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        let _ = std::fs::create_dir_all(&temp_dir);
+
+        let db_path = temp_dir.join("catalog.db");
+        let cache_dir = temp_dir.join("disk_cache");
+        let catalog = std::sync::Arc::new(crate::archive_catalog::ArchiveCatalog::new_with_db_path(&db_path).unwrap());
+        crate::archive_catalog::init_global_catalog(catalog.clone());
+        let _chunk_cache = crate::chunk_cache::init_global_chunk_cache(&cache_dir, &db_path).unwrap();
+
+        // Create a test image
+        let img_path = temp_dir.join("test_warmup.jpg");
+        let img = image::RgbImage::from_fn(120, 120, |x, y| {
+            image::Rgb([(x % 255) as u8, (y % 255) as u8, 200])
+        });
+        img.save(&img_path).unwrap();
+
+        // Ensure catalog has metadata hint
+        let sz = std::fs::metadata(&img_path).unwrap().len();
+        let mt = std::fs::metadata(&img_path).unwrap().modified().unwrap()
+            .duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as i64;
+        catalog.upsert_archive_files(
+            &temp_dir.to_string_lossy(),
+            &[crate::archive::ArchiveFile {
+                path: img_path.to_string_lossy().to_string(),
+                name: "test_warmup.jpg".to_string(),
+                size: sz,
+                date: None,
+                camera: None,
+                lens: None,
+                iso: None,
+                aperture: None,
+                shutter: None,
+                culling: crate::culling::CullingState::default(),
+                is_raw: false,
+                is_video: false,
+                mtime: mt,
+            }],
+            &[],
+        ).unwrap();
+
+        // Generate thumbnail once so it resides in chunk cache (L2 SSD)
+        let _ = get_preview_jpeg(&img_path, 1).unwrap();
+
+        // Clear L1 RAM cache
+        if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
+            cache.clear();
+        }
+
+        // Before warmup: L2 has it, but L1 RAM does NOT have it
+        assert!(is_thumbnail_cached(&img_path, 1, None), "L2 chunk cache must have thumbnail");
+        assert!(!is_thumbnail_ram_cached(&img_path, 1, None, None, None), "L1 RAM cache must be empty");
+
+        // Run warmup
+        let token_atomic = AtomicU64::new(777);
+        let paths = vec![img_path.to_string_lossy().to_string()];
+        let mut reported_current = 0;
+        let mut reported_total = 0;
+
+        let processed = warm_thumbnail_cache_with_progress(&paths, 1, 777, &token_atomic, |cur, tot| {
+            reported_current = cur;
+            reported_total = tot;
+        });
+
+        assert_eq!(processed, 1);
+        assert_eq!(reported_current, 1);
+        assert_eq!(reported_total, 1);
+
+        // After warmup: image must now be warm in L1 RAM cache!
+        assert!(is_thumbnail_ram_cached(&img_path, 1, None, None, None), "Warmup must load thumbnail into L1 RAM cache");
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 
     #[test]
@@ -2881,6 +3041,68 @@ mod tests {
             assert_eq!(scale1_thumb[0], 0xFF);
             assert_eq!(scale1_thumb[1], 0xD8);
         }
+    }
+
+    #[test]
+    fn test_issue_2_thumb_and_inspector_orientation_consistency() {
+        let temp_dir = std::env::temp_dir().join(format!("rr_orient_test_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let img_path = temp_dir.join("portrait_test.jpg");
+
+        // 1. Create a synthetic test JPEG with EXIF orientation 6 (90° CW Portrait)
+        let img = image::DynamicImage::new_rgb8(2400, 1600); // 2400x1600 (>1920px to force downscaling)
+        let mut raw_jpeg = Vec::new();
+        img.write_to(&mut std::io::Cursor::new(&mut raw_jpeg), image::ImageFormat::Jpeg).unwrap();
+        let portrait_jpeg = inject_orientation_into_jpeg(&raw_jpeg, 6);
+        std::fs::write(&img_path, &portrait_jpeg).unwrap();
+
+        let meta = std::fs::metadata(&img_path).unwrap();
+        let size = meta.len();
+        let mtime = meta.modified().unwrap().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as i64;
+
+        // Ensure file has EXIF orientation 6 and no .rrdata sidecar exists
+        assert_eq!(read_exif_orientation(&img_path), Some(6));
+        assert!(!crate::culling::get_sidecar_path(&img_path).exists());
+
+        // Call get_preview_jpeg_with_orient_and_hints with target_orient = None
+        let thumb_bytes = get_preview_jpeg_with_orient_and_hints(&img_path, 1, None, Some(size), Some(mtime))
+            .expect("Must generate scale 1 thumbnail");
+
+        // Call get_max_preview_jpeg_with_orient_and_hints with explicit_orient = None
+        let inspector_bytes = get_max_preview_jpeg_with_orient_and_hints(&img_path, None, Some(size), Some(mtime))
+            .expect("Must generate inspector preview");
+
+        let thumb_orient = parse_header_orientation(&thumb_bytes);
+        let inspector_orient = parse_header_orientation(&inspector_bytes);
+
+        assert_eq!(thumb_orient, Some(6), "Thumbnail must preserve EXIF orientation 6");
+        assert_eq!(inspector_orient, Some(6), "Inspector preview must preserve EXIF orientation 6");
+        assert_eq!(thumb_orient, inspector_orient, "Thumbnail and inspector must have identical orientation");
+
+        // Also test real RAW file if present in testdata
+        let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let workspace_root = manifest_dir.parent().unwrap().parent().unwrap().parent().unwrap().parent().unwrap();
+        let dng_path = workspace_root.join("testdata/dest/2024/2024-01-13/R0002005.DNG");
+        if dng_path.exists() {
+            let dng_meta = std::fs::metadata(&dng_path).unwrap();
+            let dng_sz = dng_meta.len();
+            let dng_mt = dng_meta.modified().unwrap().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as i64;
+
+            let dng_thumb = get_preview_jpeg_with_orient_and_hints(&dng_path, 1, None, Some(dng_sz), Some(dng_mt))
+                .expect("Must generate DNG thumbnail");
+            let dng_insp = get_max_preview_jpeg_with_orient_and_hints(&dng_path, None, Some(dng_sz), Some(dng_mt))
+                .expect("Must generate DNG inspector preview");
+
+            let dng_thumb_orient = parse_header_orientation(&dng_thumb);
+            let dng_insp_orient = parse_header_orientation(&dng_insp);
+
+            assert_eq!(dng_thumb_orient, Some(6), "DNG thumb must have EXIF orientation 6");
+            assert_eq!(dng_insp_orient, Some(6), "DNG inspector preview must have EXIF orientation 6");
+            assert_eq!(dng_thumb_orient, dng_insp_orient, "DNG thumbnail and inspector must have identical orientation");
+        }
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }
 

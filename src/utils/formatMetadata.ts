@@ -245,3 +245,134 @@ export function areDatesDifferent(dateA?: string | null, dateB?: string | null):
   }
   return Math.abs(tA - tB) > 5000;
 }
+
+const DUMMY_CAMERAS = new Set([
+  'unknown',
+  'unknown camera',
+  'default',
+  'default string',
+  'none',
+  'no camera',
+  'n/a',
+  'na',
+  'null',
+  'nil',
+  '(null)',
+  '<unknown>',
+  '[unknown]',
+  'camera',
+  'digital camera',
+  'standard',
+  'undefined',
+  'not specified',
+  'unspecified',
+]);
+
+const DUMMY_LENSES = new Set([
+  '0.0 mm f/0.0',
+  '0.0mm f/0.0',
+  '0.0 mm f/0',
+  '0mm f/0',
+  '0.0 mm',
+  '0.0mm',
+  '0 mm',
+  '0mm',
+  'f/0.0',
+  'f/0',
+  'no lens',
+  'unknown lens',
+  'not defined',
+  'lens',
+]);
+
+function cleanExifString(raw: string | null | undefined, isLens: boolean): string | null {
+  if (!raw) return null;
+
+  // Split on NUL bytes first
+  let seg = raw.split('\0')[0] || '';
+
+  // Split off kamadak-exif multi-part ASCII fragments like `", "", ""` or `", ""`
+  if (seg.includes('", "')) {
+    seg = seg.split('", "')[0];
+  } else if (seg.includes('","')) {
+    seg = seg.split('","')[0];
+  } else if (seg.includes(', ""')) {
+    seg = seg.split(', ""')[0];
+  } else if (seg.includes(',""')) {
+    seg = seg.split(',""')[0];
+  } else if (seg.includes('",')) {
+    seg = seg.split('",')[0];
+  }
+
+  // Remove control characters and non-printable chars (except space)
+  seg = seg.replace(/[\x00-\x1F\x7F]/g, ' ');
+
+  // Trim quotes, backticks, smart quotes, whitespace
+  const trimmed = seg.trim().replace(/^["'`“”]+|["'`“”]+$/g, '').trim();
+  if (!trimmed) return null;
+
+  // Split into words, collapse whitespace
+  const words = trimmed.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return null;
+
+  // Deduplicate NIKON CORPORATION NIKON
+  if (
+    words.length >= 3 &&
+    words[1].toLowerCase() === 'corporation' &&
+    words[0].toLowerCase() === words[2].toLowerCase()
+  ) {
+    words.splice(1, 2);
+  }
+
+  // Deduplicate consecutive identical words (case-insensitive)
+  const deduped: string[] = [];
+  for (const w of words) {
+    if (deduped.length > 0 && deduped[deduped.length - 1].toLowerCase() === w.toLowerCase()) {
+      continue;
+    }
+    deduped.push(w);
+  }
+
+  const cleaned = deduped.join(' ');
+  if (!cleaned || !/[a-zA-Z0-9]/.test(cleaned)) {
+    return null;
+  }
+
+  const lower = cleaned.toLowerCase();
+  if (DUMMY_CAMERAS.has(lower)) {
+    return null;
+  }
+
+  if (isLens) {
+    if (DUMMY_LENSES.has(lower)) {
+      return null;
+    }
+    if (
+      lower.startsWith('0.0 mm f/0') ||
+      lower.startsWith('0 mm f/0') ||
+      lower.startsWith('0.0mm f/0')
+    ) {
+      return null;
+    }
+  }
+
+  return cleaned;
+}
+
+/**
+ * Sanitizes and cleans camera model strings.
+ * Removes kamadak-exif NUL-padding fragments (e.g. `", "", ..."`),
+ * extraneous quotes, unprintable characters, duplicate manufacturer names,
+ * and filters out generic placeholders (e.g. "Unknown", "Default", "--") returning null.
+ */
+export function formatCameraModel(raw: string | null | undefined): string | null {
+  return cleanExifString(raw, false);
+}
+
+/**
+ * Sanitizes and cleans lens model strings.
+ * Filters out dummy lenses like "0.0 mm f/0.0", "No Lens", "Unknown Lens", etc.
+ */
+export function formatLensModel(raw: string | null | undefined): string | null {
+  return cleanExifString(raw, true);
+}

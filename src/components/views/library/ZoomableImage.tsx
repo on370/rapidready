@@ -340,6 +340,8 @@ export function ZoomableImage({ src, previewSrc, alt, onContextMenu }: ZoomableI
           transform: isZoomed 
             ? `translate(${position.x}px, ${position.y}px) scale(${scale})` 
             : 'scale(1)',
+          width: isZoomed ? 'auto' : '100%',
+          height: isZoomed ? 'auto' : '100%',
           maxWidth: isZoomed ? 'none' : '100%',
           maxHeight: isZoomed ? 'none' : '100%',
           objectFit: isZoomed ? 'none' : 'contain',

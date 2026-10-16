@@ -18,7 +18,8 @@ import { useCollectionsStore, findAlbumById } from "../../../stores/collectionsS
 import { FocusPeakingOverlay } from "./components/FocusPeakingOverlay";
 import { 
   formatShutterSpeed, formatAperture, formatIso, formatFocalLength,
-  formatExposureBias, formatDimensions, formatDisplayDate, areDatesDifferent 
+  formatExposureBias, formatDimensions, formatDisplayDate, areDatesDifferent,
+  formatCameraModel, formatLensModel
 } from "../../../utils/formatMetadata";
 
 interface LibraryInspectorProps {
@@ -149,6 +150,8 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
     return images.find(img => selectedPaths.has(img.path));
   }, [selectedPaths, scopedImages, activeImageIndex, images]);
 
+  const formattedCamera = useMemo(() => formatCameraModel(activeImage?.camera), [activeImage?.camera]);
+  const formattedLens = useMemo(() => formatLensModel(activeImage?.lens), [activeImage?.lens]);
   const formattedIso = useMemo(() => formatIso(activeImage?.iso), [activeImage?.iso]);
   const formattedAperture = useMemo(() => formatAperture(activeImage?.aperture), [activeImage?.aperture]);
   const formattedShutter = useMemo(() => formatShutterSpeed(activeImage?.shutter), [activeImage?.shutter]);
@@ -1130,9 +1133,9 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
                     {t('inspector.camera')}
                   </h3>
                 </div>
-                {isCollapsed('camera') && activeImage.camera && (
-                  <span className="text-[10px] text-txt-tertiary truncate max-w-[140px] font-medium" title={activeImage.camera}>
-                    {activeImage.camera}
+                {isCollapsed('camera') && formattedCamera && (
+                  <span className="text-[10px] text-txt-tertiary truncate max-w-[140px] font-medium" title={formattedCamera}>
+                    {formattedCamera}
                   </span>
                 )}
               </div>
@@ -1141,15 +1144,15 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
                 <div className="space-y-2 text-[11px]">
                   <div>
                     <span className="text-txt-tertiary block text-[10px]">{t('inspector.body')}</span>
-                    <p className="text-txt-primary font-medium truncate" title={activeImage.camera || '—'}>
-                      {activeImage.camera || '—'}
+                    <p className="text-txt-primary font-medium truncate" title={formattedCamera || '—'}>
+                      {formattedCamera || '—'}
                     </p>
                   </div>
                   <div>
                     <span className="text-txt-tertiary block text-[10px]">{t('inspector.lens')}</span>
-                    <p className="text-txt-primary font-medium truncate" title={activeImage.lens || '—'}>
-                      {activeImage.lens || '—'}
-                      {formattedFocalLength && !activeImage.lens?.includes(formattedFocalLength) && (
+                    <p className="text-txt-primary font-medium truncate" title={formattedLens || '—'}>
+                      {formattedLens || '—'}
+                      {formattedFocalLength && (!formattedLens || !formattedLens.includes(formattedFocalLength)) && (
                         <span className="text-txt-tertiary font-mono text-[10px] ml-1.5 font-normal">({formattedFocalLength})</span>
                       )}
                     </p>

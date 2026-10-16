@@ -186,20 +186,32 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
                 exif_modify_date = parse_field_date(f);
             }
 
+            let extract_ascii_field = |f: &exif::Field| -> String {
+                match &f.value {
+                    exif::Value::Ascii(vec) => {
+                        vec.iter()
+                            .find_map(|bytes| {
+                                std::str::from_utf8(bytes).ok()
+                                    .map(|s| s.trim().trim_matches('"').trim())
+                                    .filter(|s| !s.is_empty())
+                            })
+                            .unwrap_or("")
+                            .to_string()
+                    }
+                    _ => f.display_value().to_string(),
+                }
+            };
+
             // 3. Camera Model
             if let Some(field) = exif.fields().find(|f| f.tag == exif::Tag::Model) {
-                let model = field.display_value().to_string().trim().trim_matches('"').to_string();
-                if !model.is_empty() {
-                    meta.camera = Some(model);
-                }
+                let raw = extract_ascii_field(field);
+                meta.camera = clean_camera_model(&raw);
             }
 
             // 4. Lens Model
             if let Some(field) = exif.fields().find(|f| f.tag == exif::Tag::LensModel) {
-                let lens = field.display_value().to_string().trim().trim_matches('"').to_string();
-                if !lens.is_empty() {
-                    meta.lens = Some(lens);
-                }
+                let raw = extract_ascii_field(field);
+                meta.lens = clean_lens_model(&raw);
             }
 
             // 5. ISO
@@ -567,6 +579,148 @@ pub fn clean_exposure_bias(raw: &str) -> String {
     }
 }
 
+fn clean_exif_name(raw: &str, is_lens: bool) -> Option<String> {
+    // 1. Take first non-empty segment before NUL bytes
+    let mut seg = raw.split('\0').next().unwrap_or("");
+
+    // 2. Handle kamadak-exif multi-part ASCII fragments like `", "", ""` or `", ""`
+    if let Some((first, _)) = seg.split_once("\", \"") {
+        seg = first;
+    } else if let Some((first, _)) = seg.split_once("\",\"") {
+        seg = first;
+    } else if let Some((first, _)) = seg.split_once(", \"\"") {
+        seg = first;
+    } else if let Some((first, _)) = seg.split_once(",\"\"") {
+        seg = first;
+    } else if let Some((first, _)) = seg.split_once("\",") {
+        seg = first;
+    }
+
+    // 3. Filter control characters and unprintable characters (c < 32 or 127)
+    let mut s = String::with_capacity(seg.len());
+    for ch in seg.chars() {
+        if ch == '\t' || ch == '\r' || ch == '\n' {
+            s.push(' ');
+        } else if !ch.is_control() && (ch as u32) >= 32 && (ch as u32) != 127 {
+            s.push(ch);
+        }
+    }
+
+    // 4. Trim whitespace, quotes (regular, single, backtick, smart quotes)
+    let trimmed = s.trim().trim_matches(|c| c == '"' || c == '\'' || c == '`' || c == '“' || c == '”').trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    // 5. Split words, collapse whitespace
+    let words: Vec<&str> = trimmed.split_whitespace().collect();
+    if words.is_empty() {
+        return None;
+    }
+
+    let mut words: Vec<String> = words.into_iter().map(|w| w.to_string()).collect();
+
+    // Deduplicate NIKON CORPORATION NIKON -> NIKON
+    if words.len() >= 3 
+        && words[1].eq_ignore_ascii_case("CORPORATION") 
+        && words[0].eq_ignore_ascii_case(&words[2]) 
+    {
+        words.remove(2);
+        words.remove(1);
+    }
+
+    // Deduplicate consecutive identical words (case-insensitive)
+    let mut deduped: Vec<String> = Vec::with_capacity(words.len());
+    for w in words {
+        if deduped.last().map(|prev| prev.eq_ignore_ascii_case(&w)).unwrap_or(false) {
+            continue;
+        }
+        deduped.push(w);
+    }
+
+    let cleaned = deduped.join(" ");
+
+    // Must contain at least one alphanumeric character
+    if !cleaned.chars().any(|c| c.is_alphanumeric()) {
+        return None;
+    }
+
+    let lower = cleaned.to_lowercase();
+
+    const DUMMY_CAMERAS: &[&str] = &[
+        "unknown",
+        "unknown camera",
+        "default",
+        "default string",
+        "none",
+        "no camera",
+        "n/a",
+        "na",
+        "null",
+        "nil",
+        "(null)",
+        "<unknown>",
+        "[unknown]",
+        "camera",
+        "digital camera",
+        "standard",
+        "undefined",
+        "not specified",
+        "unspecified",
+    ];
+
+    if DUMMY_CAMERAS.contains(&lower.as_str()) {
+        return None;
+    }
+
+    if is_lens {
+        const DUMMY_LENSES: &[&str] = &[
+            "0.0 mm f/0.0",
+            "0.0mm f/0.0",
+            "0.0 mm f/0",
+            "0mm f/0",
+            "0.0 mm",
+            "0.0mm",
+            "0 mm",
+            "0mm",
+            "f/0.0",
+            "f/0",
+            "no lens",
+            "unknown lens",
+            "not defined",
+            "lens",
+        ];
+
+        if DUMMY_LENSES.contains(&lower.as_str()) {
+            return None;
+        }
+
+        if lower.starts_with("0.0 mm f/0") 
+            || lower.starts_with("0 mm f/0") 
+            || lower.starts_with("0.0mm f/0")
+            || lower == "0.0 mm f/0.0"
+        {
+            return None;
+        }
+    }
+
+    Some(cleaned)
+}
+
+/// Formats and sanitizes a camera model string cleanly.
+/// Strips NUL-padding fragments (e.g. `", "", ""` from kamadak-exif),
+/// redundant quotes, unprintable control characters, duplicate manufacturer prefixes (e.g. "Canon Canon EOS"),
+/// and filters out generic placeholders (e.g. "Unknown", "Default", "--") returning `None`.
+pub fn clean_camera_model(raw: &str) -> Option<String> {
+    clean_exif_name(raw, false)
+}
+
+/// Formats and sanitizes a lens model string cleanly.
+/// Filters out placeholder lenses like "0.0 mm f/0.0", "No Lens", "Unknown Lens", etc.
+pub fn clean_lens_model(raw: &str) -> Option<String> {
+    clean_exif_name(raw, true)
+}
+
 fn rational_to_f64(r: &exif::Rational) -> Option<f64> {
     if r.denom == 0 {
         None
@@ -867,5 +1021,107 @@ mod tests {
         assert_eq!(clean_exposure_bias("-1"), "-1.0 EV");
         assert_eq!(clean_exposure_bias("-2"), "-2.0 EV");
         assert_eq!(clean_exposure_bias("+0.67 EV"), "+0.7 EV");
+    }
+
+    #[test]
+    fn test_clean_camera_model() {
+        // NUL-padding fragments from kamadak-exif display_value
+        assert_eq!(
+            clean_camera_model(r#""Canon DIGITAL IXUS", "", "", "", "", "", "", "", """#),
+            Some("Canon DIGITAL IXUS".to_string())
+        );
+        assert_eq!(
+            clean_camera_model(r#"Canon DIGITAL IXUS", "", "", "", "", "", "", "", """#),
+            Some("Canon DIGITAL IXUS".to_string())
+        );
+        assert_eq!(
+            clean_camera_model("Canon DIGITAL IXUS\0\0\0\0"),
+            Some("Canon DIGITAL IXUS".to_string())
+        );
+
+        // Duplicate manufacturer prefix
+        assert_eq!(
+            clean_camera_model("Canon Canon EOS R5"),
+            Some("Canon EOS R5".to_string())
+        );
+        assert_eq!(
+            clean_camera_model("NIKON NIKON D850"),
+            Some("NIKON D850".to_string())
+        );
+        assert_eq!(
+            clean_camera_model("NIKON CORPORATION NIKON D850"),
+            Some("NIKON D850".to_string())
+        );
+        assert_eq!(
+            clean_camera_model("SONY SONY ILCE-7M3"),
+            Some("SONY ILCE-7M3".to_string())
+        );
+
+        // Normal cameras
+        assert_eq!(
+            clean_camera_model("Canon EOS 5D Mark IV"),
+            Some("Canon EOS 5D Mark IV".to_string())
+        );
+        assert_eq!(
+            clean_camera_model("ILCE-7RM4"),
+            Some("ILCE-7RM4".to_string())
+        );
+        assert_eq!(
+            clean_camera_model("iPhone 13 Pro"),
+            Some("iPhone 13 Pro".to_string())
+        );
+
+        // Placeholders & junk
+        assert_eq!(clean_camera_model("Unknown"), None);
+        assert_eq!(clean_camera_model("unknown"), None);
+        assert_eq!(clean_camera_model("Default"), None);
+        assert_eq!(clean_camera_model("None"), None);
+        assert_eq!(clean_camera_model("N/A"), None);
+        assert_eq!(clean_camera_model("--"), None);
+        assert_eq!(clean_camera_model("---"), None);
+        assert_eq!(clean_camera_model("?"), None);
+        assert_eq!(clean_camera_model("\"\""), None);
+        assert_eq!(clean_camera_model("   "), None);
+        assert_eq!(clean_camera_model("Camera"), None);
+        assert_eq!(clean_camera_model("Digital Camera"), None);
+        assert_eq!(clean_camera_model("(null)"), None);
+    }
+
+    #[test]
+    fn test_clean_lens_model() {
+        assert_eq!(
+            clean_lens_model(r#""EF24-105mm f/4L IS USM", "", """#),
+            Some("EF24-105mm f/4L IS USM".to_string())
+        );
+        assert_eq!(
+            clean_lens_model("Canon Canon EF 50mm f/1.8 STM"),
+            Some("Canon EF 50mm f/1.8 STM".to_string())
+        );
+        assert_eq!(
+            clean_lens_model("FE 24-70mm F2.8 GM II"),
+            Some("FE 24-70mm F2.8 GM II".to_string())
+        );
+
+        // Dummy / placeholder lenses
+        assert_eq!(clean_lens_model("0.0 mm f/0.0"), None);
+        assert_eq!(clean_lens_model("0.0 mm"), None);
+        assert_eq!(clean_lens_model("0 mm"), None);
+        assert_eq!(clean_lens_model("0mm"), None);
+        assert_eq!(clean_lens_model("0.0mm f/0.0"), None);
+        assert_eq!(clean_lens_model("0.0 mm f/0"), None);
+        assert_eq!(clean_lens_model("No Lens"), None);
+        assert_eq!(clean_lens_model("Unknown Lens"), None);
+        assert_eq!(clean_lens_model("Unknown"), None);
+        assert_eq!(clean_lens_model("None"), None);
+        assert_eq!(clean_lens_model("--"), None);
+    }
+
+    #[test]
+    fn test_ixus_metadata_extraction() {
+        let p = std::path::Path::new("/Volumes/Media/Bilder/flow/2001/2001-03-04/100-0073_AUT.JPG");
+        if p.exists() {
+            let meta = get_image_metadata(p);
+            assert_eq!(meta.camera.as_deref(), Some("Canon DIGITAL IXUS"));
+        }
     }
 }

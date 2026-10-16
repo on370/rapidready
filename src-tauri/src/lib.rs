@@ -142,6 +142,13 @@ pub fn run() {
                     }
                 }
 
+                #[cfg(not(target_os = "windows"))]
+                {
+                    while decoded_path.starts_with("//") {
+                        decoded_path.remove(0);
+                    }
+                }
+
                 let path = std::path::PathBuf::from(decoded_path);
 
                 // FAST PATH: If not fullres, check L1 RAM cache and L2 local NVMe chunk cache.
@@ -166,10 +173,24 @@ pub fn run() {
                 }
 
                 // SLOW PATH: Cache miss on NAS or fullres decode.
-                // Limit concurrent active SMB decodes to max 8 to prevent thread-pool exhaustion
-                // and WebKit IPC stall.
                 static SLOW_DECODE_SEMAPHORE: std::sync::OnceLock<tokio::sync::Semaphore> = std::sync::OnceLock::new();
-                let sem = SLOW_DECODE_SEMAPHORE.get_or_init(|| tokio::sync::Semaphore::new(8));
+                static FULLRES_SEMAPHORE: std::sync::OnceLock<tokio::sync::Semaphore> = std::sync::OnceLock::new();
+                static SLOW_REQ_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+                let _vp_guard = rapidready_core::thumbnail::register_viewport_request();
+
+                let my_seq = if !is_fullres {
+                    SLOW_REQ_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1
+                } else {
+                    0
+                };
+
+                let sem = if is_fullres {
+                    // Dedicated lane for Loupe full-res requests so they NEVER wait behind grid thumbnails!
+                    FULLRES_SEMAPHORE.get_or_init(|| tokio::sync::Semaphore::new(2))
+                } else {
+                    SLOW_DECODE_SEMAPHORE.get_or_init(|| tokio::sync::Semaphore::new(8))
+                };
 
                 let permit = match sem.acquire().await {
                     Ok(p) => p,
@@ -179,8 +200,17 @@ pub fn run() {
                     }
                 };
 
+                // If more than 48 newer thumbnail requests arrived while this request was waiting
+                // for a semaphore permit, the user has already scrolled past this row:
+                // drop immediately in 0ms without touching the NAS!
+                if !is_fullres && SLOW_REQ_SEQ.load(std::sync::atomic::Ordering::Relaxed).saturating_sub(my_seq) > 48 {
+                    responder.respond(Response::builder().status(499).body(Vec::new()).unwrap());
+                    return;
+                }
+
                 let res = tauri::async_runtime::spawn_blocking(move || {
                     let _permit = permit;
+                    let _vp_guard = _vp_guard;
                     let path = &path;
                     if is_fullres {
                         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();

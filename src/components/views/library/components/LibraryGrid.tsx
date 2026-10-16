@@ -284,6 +284,13 @@ export const LibraryGrid = React.memo(function LibraryGrid({
     prevFolderKeyRef.current = key;
   }, [activeFolderPath, isViewingLastImport, activeCollectionId, setGridScrollTop]);
 
+  // Save scroll position on unmount
+  useEffect(() => {
+    return () => {
+      setGridScrollTop(lastScrollTopRef.current);
+    };
+  }, [setGridScrollTop]);
+
   // Adaptive overscan: High-density grids (>8 cols) use 1 row buffer (saves 30-60 offscreen images per stop)
   const adaptiveOverscan = numColumns > 8 ? 1 : 2;
 
@@ -508,8 +515,8 @@ export const LibraryGrid = React.memo(function LibraryGrid({
   // Sprint 1: Speculative RAM Viewport Caching
   // Debounce 150ms after scroll settles to warm up thumbnails in scroll direction
   useEffect(() => {
-    // Absoluter Schutz: Niemals spekulatives Warmup während eines aktiven Scans oder wenn das Archiv bereits fertig indiziert ist!
-    if (viewMode !== 'grid' || displayedImages.length === 0 || scanState === 'scanning' || scanState === 'connecting' || isFullyIndexed) return;
+    // Absoluter Schutz: Niemals spekulatives Warmup während eines aktiven Scans!
+    if (viewMode !== 'grid' || displayedImages.length === 0 || scanState === 'scanning' || scanState === 'connecting') return;
 
     if (rowVirtualizer.isScrolling) {
       // Scrolling in progress - invalidate active warmup job immediately and clear buffer counts
@@ -530,6 +537,7 @@ export const LibraryGrid = React.memo(function LibraryGrid({
     // 150ms idle debounce
     warmupTimerRef.current = window.setTimeout(() => {
       warmupTimerRef.current = null;
+      setGridScrollTop(lastScrollTopRef.current);
       const virtualItems = rowVirtualizer.getVirtualItems();
       if (virtualItems.length === 0) return;
 
@@ -676,8 +684,6 @@ export const LibraryGrid = React.memo(function LibraryGrid({
         }
         setTopCount((c) => (c === 0 ? c : 0));
         setBottomCount((c) => (c === 0 ? c : 0));
-
-        setGridScrollTop(currentScrollTop);
       }}
       onContextMenu={(e) => {
         if (e.target === e.currentTarget) e.preventDefault();

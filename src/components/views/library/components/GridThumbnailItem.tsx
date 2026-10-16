@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { Check, Star, Play } from 'lucide-react';
 import { LibraryImage } from '../../../../stores/libraryStore';
 import { getRrImageUrl, isRawFilename, isVideoFilename } from '../../../../utils/image';
@@ -48,6 +48,15 @@ export const GridThumbnailItem = React.memo(function GridThumbnailItem({
   const imgRef = useRef<HTMLImageElement>(null);
   const placeholderRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    const imgEl = imgRef.current;
+    return () => {
+      if (imgEl && !imgEl.complete) {
+        imgEl.src = '';
+      }
+    };
+  }, []);
+
   return (
     <div 
       draggable={draggable}
@@ -81,33 +90,35 @@ export const GridThumbnailItem = React.memo(function GridThumbnailItem({
         loading="eager"
         decoding="async"
         src={getRrImageUrl(img.path, false, img.culling?.orientation, scale, img.size, img.mtime)} 
+        style={{ opacity: isCached ? 1 : 0 }}
         className="w-full h-full object-contain relative z-10 pointer-events-none" 
-        alt={img.name} 
-        onLoad={() => {
+        alt="" 
+        onLoad={(e) => {
           loadedThumbnailCache.add(cacheKey);
+          e.currentTarget.style.opacity = '1';
           if (placeholderRef.current) {
             placeholderRef.current.style.display = 'none';
           }
         }}
         onError={(e) => {
-          // If thumbnail generation failed (e.g. file momentarily locked by external process or mid-write), retry once after a short pause
           const target = e.currentTarget as HTMLImageElement;
+          target.style.opacity = '0';
           const retryCount = Number(target.dataset.retryCount || 0);
-          if (retryCount < 2) {
+          if (retryCount < 6) {
             target.dataset.retryCount = String(retryCount + 1);
             setTimeout(() => {
               if (imgRef.current) {
                 const baseSrc = getRrImageUrl(img.path, false, img.culling?.orientation, scale, img.size, img.mtime);
                 imgRef.current.src = `${baseSrc}&retry=${Date.now()}`;
               }
-            }, 600 * (retryCount + 1));
+            }, 250 * (retryCount + 1));
           }
         }}
       />
       <div 
         ref={placeholderRef}
         style={{ display: isCached ? 'none' : 'flex' }}
-        className="absolute inset-0 bg-[#161619] items-center justify-center pointer-events-none z-0"
+        className="absolute inset-0 bg-[#161619] items-center justify-center pointer-events-none z-10"
       >
         <div className="w-6 h-6 rounded-md bg-white/[0.03]" />
       </div>

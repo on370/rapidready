@@ -85,7 +85,20 @@ pub struct ArchiveCatalog {
 }
 
 pub fn normalize_canonical_path(path_str: &str) -> String {
-    path_str.replace('\\', "/").trim_end_matches('/').to_string()
+    let s = path_str.replace('\\', "/");
+    let trimmed = s.trim_end_matches('/');
+    #[cfg(not(target_os = "windows"))]
+    {
+        if trimmed.starts_with("//") {
+            let stripped = trimmed.trim_start_matches('/');
+            return format!("/{}", stripped);
+        }
+        trimmed.to_string()
+    }
+    #[cfg(target_os = "windows")]
+    {
+        trimmed.to_string()
+    }
 }
 
 
@@ -1092,5 +1105,16 @@ mod tests {
         assert!(!catalog.is_archive_fully_indexed(&root_str).unwrap());
 
         let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_normalize_canonical_path() {
+        #[cfg(not(target_os = "windows"))]
+        {
+            assert_eq!(normalize_canonical_path("//Volumes/Media/Photos"), "/Volumes/Media/Photos");
+            assert_eq!(normalize_canonical_path("///Volumes/Media/Photos/"), "/Volumes/Media/Photos");
+            assert_eq!(normalize_canonical_path("/Volumes/Media/Photos"), "/Volumes/Media/Photos");
+        }
+        assert_eq!(normalize_canonical_path("C:\\Photos\\Archive\\"), "C:/Photos/Archive");
     }
 }
