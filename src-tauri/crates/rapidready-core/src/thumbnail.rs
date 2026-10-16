@@ -381,6 +381,17 @@ pub fn parse_header_orientation(buf: &[u8]) -> Option<u32> {
     if buf.len() < 8 {
         return None;
     }
+    // 0. Fujifilm RAF
+    if buf.len() >= 92 && &buf[0..16] == b"FUJIFILMCCD-RAW " {
+        let jpeg_offset = u32::from_be_bytes([buf[84], buf[85], buf[86], buf[87]]) as usize;
+        let jpeg_len = u32::from_be_bytes([buf[88], buf[89], buf[90], buf[91]]) as usize;
+        if jpeg_offset > 0 && jpeg_offset < buf.len() {
+            let end = (jpeg_offset + jpeg_len).min(buf.len());
+            if let Some(o) = parse_header_orientation(&buf[jpeg_offset..end]) {
+                return Some(o);
+            }
+        }
+    }
     // 1. JPEG APP1
     if buf.len() >= 4 && buf[0] == 0xFF && buf[1] == 0xD8 {
         let mut pos = 2;
@@ -724,7 +735,32 @@ pub fn extract_embedded_thumbnail(path: &Path, target_orient: Option<u32>) -> Op
         }
     }
 
-    // 4. In-memory pattern scan within the 256 KB buffer (fallback for DNG / exotic RAWs)
+    // 4. Fujifilm RAF (FUJIFILMCCD-RAW)
+    if thumb_bytes.is_none() && header.len() >= 92 && &header[0..16] == b"FUJIFILMCCD-RAW " {
+        let jpeg_offset = u32::from_be_bytes([header[84], header[85], header[86], header[87]]) as usize;
+        let jpeg_len = u32::from_be_bytes([header[88], header[89], header[90], header[91]]) as usize;
+        if jpeg_offset > 0 && jpeg_len > 0 && jpeg_len <= 16 * 1024 * 1024 {
+            if jpeg_offset + jpeg_len <= header.len() {
+                let slice = &header[jpeg_offset..jpeg_offset + jpeg_len];
+                if slice.len() >= 2 && slice[0] == 0xFF && slice[1] == 0xD8 {
+                    if detected_orient.is_none() {
+                        detected_orient = parse_header_orientation(slice);
+                    }
+                    thumb_bytes = Some(slice.to_vec());
+                }
+            } else if file.seek(SeekFrom::Start(jpeg_offset as u64)).is_ok() {
+                let mut data = vec![0u8; jpeg_len];
+                if file.read_exact(&mut data).is_ok() && data.len() >= 2 && data[0] == 0xFF && data[1] == 0xD8 {
+                    if detected_orient.is_none() {
+                        detected_orient = parse_header_orientation(&data);
+                    }
+                    thumb_bytes = Some(data);
+                }
+            }
+        }
+    }
+
+    // 5. In-memory pattern scan within the 256 KB buffer (fallback for DNG / exotic RAWs)
     if thumb_bytes.is_none() {
         let pattern = [0xFF, 0xD8, 0xFF];
         let mut pos = 0;
@@ -2726,6 +2762,22 @@ mod tests {
             let exif = exifreader.read_from_container(&mut cursor).expect("Must read DNG EXIF");
             let orient = exif.get_field(exif::Tag::Orientation, exif::In::PRIMARY).and_then(|f| f.value.get_uint(0));
             assert_eq!(orient, Some(6), "DNG thumb must have EXIF orientation 6");
+        }
+
+        // 6. Fujifilm RAF RAW
+        let raf_path = workspace_root.join("testdata/dest/Fuji-RAW/DSCF8792.RAF");
+        if raf_path.exists() {
+            let thumb = extract_embedded_thumbnail(&raf_path, None).expect("Must extract RAF thumb");
+            assert!(thumb.len() > 1_000_000, "RAF extracted preview must be high-res JPEG (>1MB)");
+            assert_eq!(thumb[0], 0xFF);
+            assert_eq!(thumb[1], 0xD8);
+
+            // Verify scale 1 thumbnail generation (downscaled to compact ~50-200 KB)
+            let scale1_thumb = get_preview_jpeg(&raf_path, 1).expect("Must generate scale 1 thumbnail");
+            assert!(scale1_thumb.len() > 10_000, "Scale 1 thumbnail must be valid");
+            assert!(scale1_thumb.len() < 500_000, "Scale 1 thumbnail must be downscaled to compact size (<500 KB)");
+            assert_eq!(scale1_thumb[0], 0xFF);
+            assert_eq!(scale1_thumb[1], 0xD8);
         }
     }
 }

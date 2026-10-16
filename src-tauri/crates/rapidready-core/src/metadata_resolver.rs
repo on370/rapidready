@@ -1,4 +1,5 @@
 use std::fs::File;
+use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 use chrono::NaiveDateTime;
 
@@ -59,8 +60,20 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
     // Single-pass: Open file ONCE and extract date + EXIF tags simultaneously
     let mut exif_capture_date = None;
     let mut exif_modify_date = None;
-    if let Ok(file) = File::open(path) {
-        let mut bufreader = std::io::BufReader::new(&file);
+    if let Ok(mut file) = File::open(path) {
+        let mut magic16 = [0u8; 16];
+        let mut target_offset = 0u64;
+        if file.read_exact(&mut magic16).is_ok() && &magic16 == b"FUJIFILMCCD-RAW " {
+            let mut dir = [0u8; 92];
+            if file.seek(SeekFrom::Start(0)).is_ok() && file.read_exact(&mut dir).is_ok() {
+                let jpeg_offset = u32::from_be_bytes([dir[84], dir[85], dir[86], dir[87]]) as u64;
+                if jpeg_offset > 0 {
+                    target_offset = jpeg_offset;
+                }
+            }
+        }
+        let _ = file.seek(SeekFrom::Start(target_offset));
+        let mut bufreader = std::io::BufReader::new(file);
         let exifreader = exif::Reader::new();
         
         if let Ok(exif) = exifreader.read_from_container(&mut bufreader) {
@@ -645,6 +658,15 @@ mod tests {
             assert!(meta.is_raw, "R0002005.DNG must be detected as RAW");
             assert!(!meta.is_monochrome_sensor, "RICOH GR III is not a monochrome sensor");
             assert!(!meta.is_monochrome_preview, "R0002005 preview is a color photo");
+        }
+
+        let raf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../testdata/dest/Fuji-RAW/DSCF8792.RAF");
+        if raf_path.exists() {
+            let meta = get_image_metadata(&raf_path);
+            assert!(meta.is_raw, "DSCF8792.RAF must be detected as RAW");
+            assert!(!meta.is_monochrome_sensor, "Fujifilm X-E4 is not a monochrome sensor");
+            assert_eq!(meta.camera.as_deref(), Some("X-E4"));
         }
     }
 

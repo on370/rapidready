@@ -37,13 +37,9 @@ Even if you aren't heading into full RAW development right away, RapidReady is a
 RapidReady is engineered for professional camera workflows, high-speed SD card ingestion, and massive photo archives:
 
 ### Currently Supported Formats
-- **RAW Camera Formats:** Canon (`.cr2`, `.cr3`), Sony (`.arw`), Nikon (`.nef`, `.nrw`), Adobe/Leica/Ricoh (`.dng`), Fujifilm (`.raf` — *see Known Issues below*), Olympus/OM System (`.orf`), Panasonic Lumix (`.rw2`), Pentax (`.pef`), Hasselblad (`.3fr`), Sigma (`.x3f`).
+- **RAW Camera Formats:** Canon (`.cr2`, `.cr3`), Sony (`.arw`), Nikon (`.nef`, `.nrw`), Adobe/Leica/Ricoh (`.dng`), Fujifilm (`.raf`), Olympus/OM System (`.orf`), Panasonic Lumix (`.rw2`), Pentax (`.pef`), Hasselblad (`.3fr`), Sigma (`.x3f`).
 - **Raster & Next-Gen Formats:** JPEG (`.jpg`, `.jpeg`), HEIF/HEIC (`.heic`, `.heif`, `.hif` with RAW+HIF pairing support), WebP (`.webp`), AVIF (`.avif`), PNG (`.png`), TIFF (`.tif`, `.tiff`).
 - **Video Formats (Ingestion & Archive Browsing):** `.mp4`, `.mov`, `.m4v`, `.avi` (native hardware thumbnail extraction, responsive video badges, and poster frame previewing).
-
-> [!NOTE]
-> **Known Issue (v0.5.0):**  
-> **Fujifilm RAW (`.raf`) Grid Thumbnails:** In Grid View, `.raf` files currently do not render micro-thumbnails. Full-resolution preview and metadata inspection in Loupe View and the Inspector work correctly. A dedicated RAF header parser is actively scheduled for the next release (tracked in [`docs/ROADMAP.md`](docs/ROADMAP.md)).
 
 > [!TIP]
 > **Roadmap & Upcoming Media Support:**  

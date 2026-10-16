@@ -203,8 +203,8 @@ export function ArchiveScanBanner({ onRestartScan }: ArchiveScanBannerProps) {
   const bottomClass = viewMode === 'loupe' ? 'bottom-28' : 'bottom-4';
 
   const floatingCard = (
-    <div className="absolute bottom-full mb-2.5 left-1/2 -translate-x-1/2 opacity-0 pointer-events-none group-hover/help:opacity-100 group-hover/help:pointer-events-auto transition-all duration-150 z-50">
-      <div className="bg-[#18181b]/95 backdrop-blur-md border border-white/15 shadow-2xl rounded-2xl p-3 w-80 text-txt-primary select-none flex flex-col gap-2 text-xs leading-relaxed">
+    <div className="absolute bottom-full mb-2.5 left-0 opacity-0 pointer-events-none group-hover/help:opacity-100 group-hover/help:pointer-events-auto transition-all duration-150 z-50">
+      <div className="bg-[#18181b]/95 backdrop-blur-md border border-white/15 shadow-2xl rounded-2xl p-3 w-80 max-w-[calc(100vw-3rem)] text-txt-primary select-none flex flex-col gap-2 text-xs leading-relaxed">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
           <span className="flex items-center gap-1.5 font-semibold text-amber-300 text-[11px]">
@@ -290,35 +290,32 @@ export function ArchiveScanBanner({ onRestartScan }: ArchiveScanBannerProps) {
           {tooltipText}
         </div>
       </div>
-      <div className="w-2 h-2 bg-[#18181b] border-b border-r border-white/15 rotate-45 mx-auto -mt-1" />
+      <div className="w-2 h-2 bg-[#18181b] border-b border-r border-white/15 rotate-45 ml-7 -mt-1" />
     </div>
   );
 
   return (
     <div className={`absolute ${bottomClass} left-4 right-4 z-40 flex flex-col items-center gap-1.5 pointer-events-none animate-in fade-in slide-in-from-bottom-2 duration-150`}>
-      <div className="pointer-events-auto flex items-center h-10 w-[820px] max-w-[calc(100vw-2rem)] px-3.5 rounded-2xl bg-[#18181b]/95 backdrop-blur-md border border-white/10 shadow-2xl text-xs select-none">
+      <div className="pointer-events-auto flex items-center h-10 w-[820px] max-w-full px-3.5 rounded-2xl bg-[#18181b]/95 backdrop-blur-md border border-white/10 shadow-2xl text-xs select-none">
         {scanState === 'scanning' && (
           <>
             <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-2">
               <Loader2 className={`w-3.5 h-3.5 ${isThumbnailing ? 'text-amber-400' : 'text-accent'} animate-spin flex-shrink-0`} />
 
-              {/* Dynamic Phase Pill & Stats Hover Trigger */}
-              <div className="relative group/help flex items-center gap-1.5 cursor-help flex-shrink-0">
-                <div className="bg-amber-400/10 text-amber-300 border border-amber-400/25 rounded-full px-2 py-0.5 text-[10px] font-medium flex items-center gap-1 flex-shrink-0 whitespace-nowrap shadow-sm hover:border-amber-400/50 transition-colors">
-                  <span>{badgeText}</span>
+              {/* Dynamic Phase Pill, Help Icon & Counter Hover Trigger */}
+              <div className="relative group/help flex items-center gap-2 cursor-help flex-shrink-0">
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <div className="bg-amber-400/10 text-amber-300 border border-amber-400/25 rounded-full px-2 py-0.5 text-[10px] font-medium flex items-center gap-1 flex-shrink-0 whitespace-nowrap shadow-sm hover:border-amber-400/50 transition-colors">
+                    <span>{badgeText}</span>
+                  </div>
+
+                  <span className="flex items-center text-amber-300/80 hover:text-amber-200 transition-colors">
+                    <HelpCircle className="w-3.5 h-3.5" />
+                  </span>
                 </div>
 
-                <span className="flex items-center text-amber-300/80 hover:text-amber-200 transition-colors">
-                  <HelpCircle className="w-3.5 h-3.5" />
-                </span>
-
-                {/* Floating Rich Speed & Performance Card */}
-                {floatingCard}
-              </div>
-
-              {isThumbnailing ? (
-                <>
-                  {/* Phase 2: x / MAX Fotos Counter & % */}
+                {isThumbnailing ? (
+                  /* Phase 2: x / MAX Fotos Counter & % */
                   <div className="flex items-baseline gap-1.5 min-w-0 flex-shrink-0">
                     <span className="font-medium text-txt-primary tabular-nums whitespace-nowrap">
                       {formattedDone} / {formattedMax} {photosLabel}
@@ -329,52 +326,34 @@ export function ArchiveScanBanner({ onRestartScan }: ArchiveScanBannerProps) {
                       </span>
                     )}
                   </div>
-
-                  {/* ETA */}
-                  {etaInfo.etaText && (
-                    <div className="hidden sm:flex items-center border-l border-white/10 pl-2.5 ml-0.5 flex-shrink-0 text-[11px]">
-                      <span className="text-amber-300/90 font-medium whitespace-nowrap">{etaInfo.etaText}</span>
-                    </div>
-                  )}
-
-                  {/* Current Processed Folder / File */}
-                  {shortDir && (
-                    <div className="flex items-center gap-1.5 text-txt-tertiary min-w-0 flex-1 truncate border-l border-white/10 pl-2.5 ml-0.5" title={scanProgress?.current_dir || ''}>
-                      <Folder className="w-3.5 h-3.5 flex-shrink-0 opacity-60 text-accent/80" />
-                      <span className="truncate font-mono text-[10px]">{shortDir}</span>
-                    </div>
-                  )}
-                </>
-              ) : isSyncing ? (
-                <>
-                  {/* Sync Mode */}
+                ) : isSyncing ? (
+                  /* Sync Mode */
                   <span className="font-medium text-txt-primary tabular-nums whitespace-nowrap flex-shrink-0">
                     {t('loading.syncingCount', { count: formattedDone, defaultValue: `Prüfe Änderungen... ${formattedDone} Fotos geprüft` })}
                   </span>
-
-                  {/* Current Checked Folder */}
-                  {shortDir && (
-                    <div className="flex items-center gap-1.5 text-txt-tertiary min-w-0 flex-1 truncate border-l border-white/10 pl-2.5 ml-0.5" title={scanProgress?.current_dir || ''}>
-                      <Folder className="w-3.5 h-3.5 flex-shrink-0 opacity-60 text-accent/80" />
-                      <span className="truncate font-mono text-[10px]">{shortDir}</span>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <>
-                  {/* Phase 1: Dateiscan */}
+                ) : (
+                  /* Phase 1: Dateiscan */
                   <span className="font-medium text-txt-primary tabular-nums whitespace-nowrap flex-shrink-0">
                     {t('loading.discoveringCount', { count: formattedDone, defaultValue: `Dateiscan... ${formattedDone} Fotos erfasst` })}
                   </span>
+                )}
 
-                  {/* Current Scanned Folder */}
-                  {shortDir && (
-                    <div className="flex items-center gap-1.5 text-txt-tertiary min-w-0 flex-1 truncate border-l border-white/10 pl-2.5 ml-0.5" title={scanProgress?.current_dir || ''}>
-                      <Folder className="w-3.5 h-3.5 flex-shrink-0 opacity-60 text-accent/80" />
-                      <span className="truncate font-mono text-[10px]">{shortDir}</span>
-                    </div>
-                  )}
-                </>
+                {/* Floating Rich Speed & Performance Card */}
+                {floatingCard}
+              </div>
+
+              {isThumbnailing && etaInfo.etaText && (
+                <div className="hidden sm:flex items-center border-l border-white/10 pl-2.5 ml-0.5 flex-shrink-0 text-[11px]">
+                  <span className="text-amber-300/90 font-medium whitespace-nowrap">{etaInfo.etaText}</span>
+                </div>
+              )}
+
+              {/* Current Processed Folder / File */}
+              {shortDir && (
+                <div className="flex items-center gap-1.5 text-txt-tertiary min-w-0 flex-1 truncate border-l border-white/10 pl-2.5 ml-0.5" title={scanProgress?.current_dir || ''}>
+                  <Folder className="w-3.5 h-3.5 flex-shrink-0 opacity-60 text-accent/80" />
+                  <span className="truncate font-mono text-[10px]">{shortDir}</span>
+                </div>
               )}
             </div>
 
@@ -403,16 +382,24 @@ export function ArchiveScanBanner({ onRestartScan }: ArchiveScanBannerProps) {
           <>
             <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-2">
               <Pause className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
-              <div className="bg-amber-400/10 text-amber-300 border border-amber-400/25 rounded-full px-2 py-0.5 text-[10px] font-medium flex items-center gap-1 flex-shrink-0 whitespace-nowrap shadow-sm">
-                <span>{t('loading.paused', 'Pausiert')}</span>
+              <div className="relative group/help flex items-center gap-2 cursor-help flex-shrink-0">
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <div className="bg-amber-400/10 text-amber-300 border border-amber-400/25 rounded-full px-2 py-0.5 text-[10px] font-medium flex items-center gap-1 flex-shrink-0 whitespace-nowrap shadow-sm hover:border-amber-400/50 transition-colors">
+                    <span>{t('loading.paused', 'Pausiert')}</span>
+                  </div>
+                  <span className="flex items-center text-amber-300/80 hover:text-amber-200 transition-colors">
+                    <HelpCircle className="w-3.5 h-3.5" />
+                  </span>
+                </div>
+                <span className="font-medium text-amber-300 tabular-nums whitespace-nowrap">
+                  {isThumbnailing
+                    ? `${formattedDone} / ${formattedMax} ${photosLabel} (${percent ?? 0} %)`
+                    : isSyncing
+                    ? t('loading.syncingCount', { count: formattedDone, defaultValue: `${formattedDone} Fotos geprüft` })
+                    : t('loading.discoveringPaused', { count: formattedDone, defaultValue: `Dateiscan pausiert (${formattedDone} Fotos)` })}
+                </span>
+                {floatingCard}
               </div>
-              <span className="font-medium text-amber-300 tabular-nums whitespace-nowrap">
-                {isThumbnailing
-                  ? `${formattedDone} / ${formattedMax} ${photosLabel} (${percent ?? 0} %)`
-                  : isSyncing
-                  ? t('loading.syncingCount', { count: formattedDone, defaultValue: `${formattedDone} Fotos geprüft` })
-                  : t('loading.discoveringPaused', { count: formattedDone, defaultValue: `Dateiscan pausiert (${formattedDone} Fotos)` })}
-              </span>
             </div>
 
             <div className="flex items-center gap-1.5 flex-shrink-0 border-l border-white/10 pl-2.5">

@@ -16,6 +16,16 @@
 
 ## 🚀 Released Milestones
 
+### Released in `v0.5.1` (Build `013A`)
+- [x] **Fujifilm RAW (`.raf`) Header Parser & Fast Grid Thumbnail Ingest:**
+  - Dedicated RAF header parser recognizing `FUJIFILMCCD-RAW ` signature and reading the embedded preview JPEG offset (offset 84) and length (offset 88) directly from the directory table.
+  - Generates instant Grid View thumbnails downscaled in-memory to 720px via ImageIO, keeping the local chunk cache compact while rendering full sensor previews in Loupe View.
+  - Native capture date resolution (`date_resolver`) and camera EXIF extraction (`metadata_resolver`) for all Fujifilm cameras (X-T, X-Pro, X100, X-E, GFX series).
+- [x] **Statistics Hover Bubble Alignment & Responsive Layout (GitHub Issue #1):**
+  - Left-aligned floating card (`left-0`) with arrow pointer at `ml-7`, ensuring the statistics bubble expands into the visible center view rather than overflowing under the left archive tree pane on narrow windows.
+  - Constrained scan banner width to `max-w-full` preventing container overflows.
+  - Expanded hover trigger encompassing phase pill, `(?)` icon, and the photo progress counter.
+
 ### Released in `v0.5.0` (Build `0135`)
 - [x] **Persistent Local Disk Cache (Picasa & Lightroom Model) (Sprint 2 - Phase 2.1 & 2.2):**
   - Packed binary chunk containers (`chunk_XXXX.bin`, 64 MB rolling segments) on local NVMe disk (`~/Library/Caches/de.rapidready.app/chunk_cache` / `%LOCALAPPDATA%\RapidReady\Cache`).
@@ -483,7 +493,7 @@
   - Embedded HTML5 `<video>` player in `LoupeViewer.tsx` with standard shortcuts (`Space` toggle playback, `J`/`K`/`L` reverse/pause/forward scrubbing, `Left`/`Right` frame stepping).
 
 
-- [ ] **Fujifilm RAW (`.raf`) Header Parser & Grid Thumbnail Extraction (TODO):**
+- [x] **Fujifilm RAW (`.raf`) Header Parser & Grid Thumbnail Extraction (`v0.5.1` / Build `013A`):**
   - **Problem & Diagnosis:**
     - Fujifilm `.raf` files currently render correctly in the Inspector and Loupe View (since Loupe View requests `scale=100`, triggering `extract_largest_embedded_jpeg` which performs a 40 MB buffer scan and locates the high-resolution JPEG preview).
     - However, in Grid View (`scale=1`), thumbnails currently fail to render because `extract_embedded_thumbnail` expects a standard TIFF header (`II` or `MM` at byte 0).

@@ -108,14 +108,31 @@ fn try_read_tiff_slice(file: &mut File, size: usize) -> Option<NaiveDateTime> {
 pub fn get_creation_date(path: &Path) -> Result<NaiveDateTime> {
     // 1. Try EXIF (kamadak-exif) with tiered header reading
     if let Ok(mut file) = File::open(path) {
-        // Optimization for TIFF/RAW files (Sony ARW, Canon CR2, Nikon NEF, DNG, etc.):
+        // Optimization for RAW files (Sony ARW, Canon CR2, Nikon NEF, DNG, Fujifilm RAF, etc.):
         // Instead of reading the entire multi-megabyte file from slow SD cards,
         // read only the header chunk containing IFD0 and Exif Sub-IFD.
-        let mut magic = [0u8; 4];
-        if file.read_exact(&mut magic).is_ok() {
-            let is_tiff = magic == [0x49, 0x49, 0x2a, 0x00] // II*
-                       || magic == [0x4d, 0x4d, 0x00, 0x2a] // MM*
-                       || (magic[0] == 0x49 && magic[1] == 0x49 && magic[2] == 0x55 && magic[3] == 0x00); // CR2: IIU
+        let mut magic16 = [0u8; 16];
+        if file.read_exact(&mut magic16).is_ok() {
+            // Fujifilm RAF: jump directly to embedded preview JPEG offset
+            if &magic16 == b"FUJIFILMCCD-RAW " {
+                let mut dir = [0u8; 92];
+                if file.seek(SeekFrom::Start(0)).is_ok() && file.read_exact(&mut dir).is_ok() {
+                    let jpeg_offset = u32::from_be_bytes([dir[84], dir[85], dir[86], dir[87]]) as u64;
+                    if jpeg_offset > 0 && file.seek(SeekFrom::Start(jpeg_offset)).is_ok() {
+                        let mut bufreader = BufReader::new(&mut file);
+                        let exifreader = exif::Reader::new();
+                        if let Ok(exif) = exifreader.read_from_container(&mut bufreader) {
+                            if let Some(dt) = extract_date_from_exif(&exif) {
+                                return Ok(dt);
+                            }
+                        }
+                    }
+                }
+            }
+
+            let is_tiff = magic16[0..4] == [0x49, 0x49, 0x2a, 0x00] // II*
+                       || magic16[0..4] == [0x4d, 0x4d, 0x00, 0x2a] // MM*
+                       || (magic16[0] == 0x49 && magic16[1] == 0x49 && magic16[2] == 0x55 && magic16[3] == 0x00); // CR2: IIU
 
             if is_tiff {
                 // Tier 1: 256 KB header slice (covers 99.9% of RAW files in < 1ms)
@@ -209,6 +226,17 @@ mod tests {
         if path.exists() {
             let date = get_creation_date(&path).unwrap();
             assert_eq!(date.format("%Y-%m-%d %H:%M:%S").to_string(), "2014-08-25 16:29:39");
+        }
+    }
+
+    #[test]
+    fn test_get_creation_date_raf() {
+        let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let workspace_root = manifest_dir.parent().unwrap().parent().unwrap().parent().unwrap().parent().unwrap();
+        let path = workspace_root.join("testdata/dest/Fuji-RAW/DSCF8792.RAF");
+        if path.exists() {
+            let date = get_creation_date(&path).unwrap();
+            assert_eq!(date.format("%Y-%m-%d %H:%M:%S").to_string(), "2021-09-21 05:39:26");
         }
     }
 }

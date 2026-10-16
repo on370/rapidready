@@ -5,6 +5,20 @@ All notable changes to RapidReady will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-10-15
+
+Maintenance and compatibility release adding native Fujifilm RAW (`.raf`) header parsing for fast Grid View thumbnail generation, camera EXIF extraction, and date resolution, alongside responsive UI layout fixes for the archive scanning progress banner.
+
+### Fixed
+- **Fujifilm RAW (`.raf`) Grid Thumbnail Generation & Header Parsing (`thumbnail.rs`, `date_resolver.rs`, `metadata_resolver.rs`):**
+  - **Native RAF Container Parsing:** Added dedicated header parser recognizing `FUJIFILMCCD-RAW ` magic and extracting the embedded JPEG preview offset (offset 84) and length (offset 88) directly from the directory table in a single request without requiring a slow 40 MB stream scan.
+  - **Grid View Downscaling & Chunk Caching:** Integrates seamlessly into the in-memory downscaling pipeline: large ~5 MB preview JPEGs are resized in-memory to 720px in ~20 ms for compact chunk cache storage (~80–120 KB), while Loupe View and 100% Zoom strictly preserve the uncompressed full-sensor preview.
+  - **Capture Date & Metadata Resolution:** Enabled native capture date resolution and full EXIF extraction (camera make, model, lens, exposure parameters) for Fujifilm RAF files directly from the embedded APP1 stream.
+- **Archive Scan Banner Statistics Bubble Layout & Overflow (GitHub Issue #1) (`ArchiveScanBanner.tsx`):**
+  - **Bubble Alignment:** Realigned the floating performance and throughput statistics card from centered (`left-1/2`) to `left-0` with arrow pointer at `ml-7`, ensuring the bubble expands into the visible center view rather than overflowing under the left folder tree pane on narrow windows.
+  - **Container Width Clamping:** Constrained scan banner width to `max-w-full` instead of viewport-relative limits, preventing banner overflow beyond the center container boundaries.
+  - **Interactive Hover Target Expansion:** Unified the phase pill badge, the `(?)` help icon, and the photo progress counter into an interactive hover trigger group, displaying the live performance statistics card when hovering over any of these elements in both scanning and paused states.
+
 ## [0.5.0] - 2026-10-14
 
 Major milestone release introducing a persistent local disk cache inspired by Google Picasa and Adobe Lightroom (packaged binary chunk container cache with SQLite indexing for 60 FPS offline-first grid navigation across 100,000+ images), network-aware in-process header extraction for NAS/SMB storage, high-resolution Canon CR2 preview extraction with differentiated in-memory downscaling, zero-latency Loupe View viewport debouncing, and high-throughput Phase 2 I/O smoothing for fast NVMe SSDs.
