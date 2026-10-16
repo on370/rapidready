@@ -368,6 +368,7 @@ export function LibraryLeftSidebar() {
   const isViewingLastImport = useLibraryStore((s) => s.isViewingLastImport);
   const setIsViewingLastImport = useLibraryStore((s) => s.setIsViewingLastImport);
   const isLoading = useLibraryStore((s) => s.isLoading);
+  const isFullyIndexed = useLibraryStore((s) => s.isFullyIndexed);
   const loadArchive = useLibraryStore((s) => s.loadArchive);
 
   const activeCollectionId = useCollectionsStore((s) => s.activeCollectionId);
@@ -1387,15 +1388,39 @@ export function LibraryLeftSidebar() {
                   handleContextMenu(e, tree);
                 }
               }}
-              className="w-full flex items-center justify-between px-3 py-1.5 bg-app-card hover:bg-app-hover border border-app-border rounded-lg transition-colors text-xs text-txt-primary"
+              className="w-full flex items-center justify-between px-3 py-1.5 bg-app-card hover:bg-app-hover border border-app-border rounded-lg transition-colors text-xs text-txt-primary group"
             >
-              <div className="flex items-center gap-2 truncate">
+              <div className="flex items-center gap-2 min-w-0 flex-1 mr-1.5">
                 <HardDrive className="w-3.5 h-3.5 text-accent flex-shrink-0" />
-                <span className="truncate font-medium" title={rootPath || undefined}>
+                <span className="truncate font-medium text-left" title={rootPath || undefined}>
                   {rootPath ? (locations.find(l => normalizePath(l.path) === normalizePath(rootPath))?.name || normalizeSlash(rootPath).split('/').pop()) : t("sidebar.noFolder")}
                 </span>
               </div>
-              <ChevronDown className="w-3.5 h-3.5 text-txt-tertiary flex-shrink-0" />
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                {rootPath && (
+                  <span
+                    className="flex items-center"
+                    title={
+                      isFullyIndexed 
+                        ? t('sidebar.fullyCachedTooltip', 'Archiv ist vollständig im lokalen High-Speed-Cache (100% Offline-Ready, 60 FPS)')
+                        : scanState === 'scanning'
+                          ? t('sidebar.cachingInProgressTooltip', 'Archiv-Cache wird im Hintergrund aufgebaut...')
+                          : t('sidebar.notFullyCachedTooltip', 'Archiv ist noch nicht vollständig gecacht (Vorschauen werden bei Bedarf geladen)')
+                    }
+                  >
+                    <Zap 
+                      className={`w-3.5 h-3.5 transition-colors ${
+                        isFullyIndexed 
+                          ? 'text-accent fill-accent/20' 
+                          : scanState === 'scanning' 
+                            ? 'text-accent animate-pulse' 
+                            : 'text-white/20'
+                      }`} 
+                    />
+                  </span>
+                )}
+                <ChevronDown className="w-3.5 h-3.5 text-txt-tertiary flex-shrink-0" />
+              </div>
             </button>
 
             {dropdownOpen && (

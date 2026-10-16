@@ -15,7 +15,10 @@
     "exactLocationTooltip": "Contains the currently selected photo",
     "ancestorLocationTooltip": "Contains subfolders with the currently selected photo",
     "entireArchive": "Entire Archive",
-    "entireArchiveTooltip": "Show entire archive (Esc)"
+    "entireArchiveTooltip": "Show entire archive (Esc)",
+    "fullyCachedTooltip": "Archive is fully cached in local high-speed storage (100% offline-ready, 60 FPS)",
+    "cachingInProgressTooltip": "Archive cache is building in the background...",
+    "notFullyCachedTooltip": "Archive is not fully cached yet (previews generated on demand)"
   },
   "header": {
     "lastImport": "Latest Import",

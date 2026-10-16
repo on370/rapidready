@@ -22,6 +22,7 @@ Maintenance and compatibility release adding native Fujifilm RAW (`.raf`) header
   - **Bubble Alignment:** Realigned the floating performance and throughput statistics card from centered (`left-1/2`) to `left-0` with arrow pointer at `ml-7`, ensuring the bubble expands into the visible center view rather than overflowing under the left folder tree pane on narrow windows.
   - **Container Width Clamping:** Constrained scan banner width to `max-w-full` instead of viewport-relative limits, preventing banner overflow beyond the center container boundaries.
   - **Interactive Hover Target Expansion:** Unified the phase pill badge, the `(?)` help icon, and the photo progress counter into an interactive hover trigger group, displaying the live performance statistics card when hovering over any of these elements in both scanning and paused states.
+- **Archive Cache Status Indicator (`LibraryLeftSidebar.tsx`):** Added a subtle lightning icon (`Zap`) inside the active archive selector in the left tree sidebar indicating whether an archive is fully cached (100% offline-ready) or currently indexing in the background, complete with informative hover tooltips.
 
 ## [0.5.0] - 2026-10-14
 

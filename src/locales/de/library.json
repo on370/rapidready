@@ -15,7 +15,10 @@
     "exactLocationTooltip": "Enthält das aktuell ausgewählte Foto",
     "ancestorLocationTooltip": "Enthält Unterordner mit dem aktuell ausgewählten Foto",
     "entireArchive": "Gesamtes Archiv",
-    "entireArchiveTooltip": "Gesamtes Archiv anzeigen (Esc)"
+    "entireArchiveTooltip": "Gesamtes Archiv anzeigen (Esc)",
+    "fullyCachedTooltip": "Archiv ist vollständig im lokalen High-Speed-Cache (100% Offline-Ready, 60 FPS)",
+    "cachingInProgressTooltip": "Archiv-Cache wird im Hintergrund aufgebaut...",
+    "notFullyCachedTooltip": "Archiv ist noch nicht vollständig gecacht (Vorschauen werden bei Bedarf geladen)"
   },
   "header": {
     "lastImport": "Letzter Import",

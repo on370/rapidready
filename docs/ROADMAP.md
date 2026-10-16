@@ -29,6 +29,8 @@
   - Left-aligned floating card (`left-0`) with arrow pointer at `ml-7`, ensuring the statistics bubble expands into the visible center view rather than overflowing under the left archive tree pane on narrow windows.
   - Constrained scan banner width to `max-w-full` preventing container overflows.
   - Expanded hover trigger encompassing phase pill, `(?)` icon, and the photo progress counter.
+- [x] **Archive Cache Status Indicator (`LibraryLeftSidebar.tsx`):**
+  - Subtle lightning icon (`Zap`) in the active archive selector in the left tree sidebar displaying whether the archive is fully cached (100% offline-ready in orange) or currently indexing in the background, with localized hover tooltips.
 
 ### Released in `v0.5.0` (Build `0135`)
 - [x] **Persistent Local Disk Cache (Picasa & Lightroom Model) (Sprint 2 - Phase 2.1 & 2.2):**

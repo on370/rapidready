@@ -16,7 +16,7 @@ Even if you aren't heading into full RAW development right away, RapidReady is a
 ## 🚀 Key Features (Current & Planned)
 
 - **Persistent Local Disk Cache (Picasa & Lightroom Architecture):** High-speed 64 MB rolling binary chunk containers (`chunk_XXXX.bin`) with single-seek $O(1)$ byte-range retrieval and SQLite indexing (`archive_catalog.sqlite`) on local NVMe storage provide 100% offline-first 60 FPS grid browsing across 100,000+ images with zero NAS seek overhead.
-- **Blazing Fast RAW Engine:** Powered by a custom Rust backend, RapidReady extracts embedded JPEGs from CR2, CR3, ARW, and other proprietary RAW formats instantly without slow decodes.
+- **Blazing Fast RAW Engine & Universal Safety Net:** Powered by a custom Rust backend, RapidReady extracts embedded JPEGs from CR2, CR3, ARW, RAF, RW2, and other proprietary RAW formats instantly (< 2 ms) with an architectural universal fallback safety net guaranteeing 100% preview availability without blank tiles.
 - **Network-Optimized Archive Thumbnailing (NAS/SMB):** Single-request 256 KB header-slice extraction, differentiated in-memory downscaling, and zero-cost EXIF orientation injection bypass multi-megabyte RAW file transfers over network mounts for instant 15+ images/s cache generation.
 - **Speculative RAM Viewport Caching:** Proactive background preloading of neighboring thumbnails in Grid (+3 rows) and Loupe views (+5 images ahead) with floating visual buffer indicators (`▲/▼` and `◀/▶`) for instant, stutter-free navigation.
 - **Hardware-Accelerated Focus Peaking:** Dual-view sharpness inspection (`F` key) in Loupe and Inspector preview powered by a darktable-inspired Difference-of-Gradients bandpass filter to verify focus on fine textures and eyes instantly.
