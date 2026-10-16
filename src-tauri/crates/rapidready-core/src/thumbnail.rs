@@ -213,6 +213,20 @@ pub fn parse_tiff_header_slice(buf: &[u8], base_offset: u32) -> HeaderTiffInfo {
                 0x0202 => {
                     ifd_jpeg_len = Some(val);
                 }
+                0x002E => {
+                    // Panasonic Lumix: JpgFromRaw offset
+                    ifd_jpeg_off = Some(base_offset + val);
+                    ifd_is_explicit_jpeg = true;
+                }
+                0x002F => {
+                    // Panasonic Lumix: JpgFromRaw length
+                    ifd_jpeg_len = Some(val);
+                }
+                0x0280 => {
+                    // Olympus / Minolta: PreviewImage offset
+                    ifd_jpeg_off = Some(base_offset + val);
+                    ifd_is_explicit_jpeg = true;
+                }
                 0x0111 => {
                     // StripOffsets: Canon CR2 / TIFF embedded preview JPEG offset
                     if ifd_strip_off.is_none() {
@@ -238,6 +252,7 @@ pub fn parse_tiff_header_slice(buf: &[u8], base_offset: u32) -> HeaderTiffInfo {
                     }
                 }
                 0x8769 => {
+                    // ExifIFD
                     to_visit.push(val as usize);
                 }
                 _ => {}
@@ -1325,10 +1340,22 @@ pub fn get_preview_jpeg_with_orient_and_hints(
     };
 
     // Fast-path 1: Embedded JPEG preview extraction for RAW files (< 2ms)
-    // Camera RAW files (CR2, CR3, NEF, ARW, DNG) contain an embedded medium/large JPEG preview.
+    // Camera RAW files (CR2, CR3, NEF, ARW, DNG, RAF, RW2, ORF, PEF, X3F, etc.) contain an embedded preview.
     // For scale 0 (micro-icons) or RAW files, extract the embedded preview:
     if is_raw || (is_jpeg && scale == 0) {
-        if let Some(fast_bytes) = extract_embedded_thumbnail(path, target_orient) {
+        let raw_preview_bytes = extract_embedded_thumbnail(path, target_orient).or_else(|| {
+            // Universal safety net for RAW files:
+            // If the fast 256/768 KB header extraction did not find the preview
+            // (e.g. Sigma X3F FOVb container, deep Olympus ORF preview, or rare exotic RAWs),
+            // fall back to scanning for the embedded JPEG rather than failing and showing an empty black tile!
+            if is_raw {
+                extract_largest_embedded_jpeg(path, target_orient)
+            } else {
+                None
+            }
+        });
+
+        if let Some(fast_bytes) = raw_preview_bytes {
             // Direct-store medium camera previews <= 1.5 MB directly without CPU re-encoding:
             // Camera hardware already produced an optimal preview (720px..1620px, e.g. Sony ARW 504KB, CR3 400KB, DNG 54KB).
             // For full-sensor camera previews > 1.5 MB (e.g. Canon CR2 5472x3648, 2.5-5.5 MB):
@@ -1371,13 +1398,6 @@ pub fn get_preview_jpeg_with_orient_and_hints(
 
             record_thumbnail_cache(&cache_key, blake3_key.as_deref(), scale, &final_bytes);
             return Ok(final_bytes);
-        }
-        // Only extract giant sensor previews (up to 40 MB) when high-resolution loupe/preview is actually requested!
-        if is_raw && scale >= 100 {
-            if let Some(full_bytes) = extract_largest_embedded_jpeg(path, target_orient) {
-                record_thumbnail_cache(&cache_key, blake3_key.as_deref(), scale, &full_bytes);
-                return Ok(full_bytes);
-            }
         }
     }
 

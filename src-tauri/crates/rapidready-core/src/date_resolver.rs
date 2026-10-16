@@ -132,7 +132,9 @@ pub fn get_creation_date(path: &Path) -> Result<NaiveDateTime> {
 
             let is_tiff = magic16[0..4] == [0x49, 0x49, 0x2a, 0x00] // II*
                        || magic16[0..4] == [0x4d, 0x4d, 0x00, 0x2a] // MM*
-                       || (magic16[0] == 0x49 && magic16[1] == 0x49 && magic16[2] == 0x55 && magic16[3] == 0x00); // CR2: IIU
+                       || (magic16[0] == 0x49 && magic16[1] == 0x49 && magic16[2] == 0x55 && magic16[3] == 0x00) // CR2 / RW2: IIU
+                       || &magic16[0..4] == b"IIRO" // Olympus ORF
+                       || &magic16[0..4] == b"IIRS"; // Olympus ORF
 
             if is_tiff {
                 // Tier 1: 256 KB header slice (covers 99.9% of RAW files in < 1ms)

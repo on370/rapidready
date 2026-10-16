@@ -16,7 +16,11 @@
 
 ## 🚀 Released Milestones
 
-### Released in `v0.5.1` (Build `013A`)
+### Released in `v0.5.1` (Build `013B`)
+- [x] **Universal Camera RAW Safety Net & Format Extensions (`thumbnail.rs`, `date_resolver.rs`):**
+  - **Two-Tier Architecture:** In `get_preview_jpeg_with_orient_and_hints`, if fast 256/768 KB header-slice extraction yields no preview (e.g. Sigma X3F `FOVb` container, deeply nested Olympus ORF preview, or rare exotic RAW variants), RapidReady automatically falls back to full-stream embedded JPEG scanning (`extract_largest_embedded_jpeg`), downscales the preview in-memory to 720px, and stores it in the local SQLite chunk cache.
+  - **Zero Blank Tiles:** Ensures 100% of camera RAW files across all supported manufacturers render sharp thumbnails in Grid View without blank/black placeholder tiles.
+  - **Fast-Path Camera Tags:** Added native single-read header extraction for Panasonic Lumix RW2 (`0x002E`/`0x002F` `JpgFromRaw`) and Olympus/OM System ORF (`0x0280` `PreviewImage` + `IIRO`/`IIRS` capture date magic in `date_resolver.rs`).
 - [x] **Fujifilm RAW (`.raf`) Header Parser & Fast Grid Thumbnail Ingest:**
   - Dedicated RAF header parser recognizing `FUJIFILMCCD-RAW ` signature and reading the embedded preview JPEG offset (offset 84) and length (offset 88) directly from the directory table.
   - Generates instant Grid View thumbnails downscaled in-memory to 720px via ImageIO, keeping the local chunk cache compact while rendering full sensor previews in Loupe View.

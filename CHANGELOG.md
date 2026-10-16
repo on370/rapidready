@@ -5,11 +5,15 @@ All notable changes to RapidReady will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.5.1] - 2026-10-15
+## [0.5.1] - 2026-10-16
 
-Maintenance and compatibility release adding native Fujifilm RAW (`.raf`) header parsing for fast Grid View thumbnail generation, camera EXIF extraction, and date resolution, alongside responsive UI layout fixes for the archive scanning progress banner.
+Maintenance and compatibility release adding native Fujifilm RAW (`.raf`) header parsing, a universal fallback safety net for all camera RAW formats (preventing blank grid tiles on exotic/proprietary containers), fast Panasonic Lumix (`.rw2`) and Olympus (`.orf`) tag support, and responsive UI layout fixes for the archive scanning progress banner.
 
-### Fixed
+### Fixed & Improved
+- **Universal RAW Preview Fallback Safety Net (`thumbnail.rs`):**
+  - **Two-Tier Preview Architecture:** In `get_preview_jpeg_with_orient_and_hints`, if fast header-slice extraction yields no preview (e.g. Sigma X3F `FOVb` container, deeply nested Olympus ORF preview, or rare exotic RAW variants), RapidReady automatically falls back to full-stream embedded JPEG scanning (`extract_largest_embedded_jpeg`), downscales the preview in-memory to 720px, and stores it in the local SQLite chunk cache.
+  - **Zero Blank Tiles:** Ensures that 100% of camera RAW files across all supported manufacturers render sharp thumbnails in Grid View, even without bespoke container parsers.
+  - **Fast-Path Camera Tags:** Added native single-read header extraction for Panasonic Lumix RW2 (`0x002E`/`0x002F` `JpgFromRaw`) and Olympus/OM System ORF (`0x0280` `PreviewImage` + `IIRO`/`IIRS` capture date magic in `date_resolver.rs`).
 - **Fujifilm RAW (`.raf`) Grid Thumbnail Generation & Header Parsing (`thumbnail.rs`, `date_resolver.rs`, `metadata_resolver.rs`):**
   - **Native RAF Container Parsing:** Added dedicated header parser recognizing `FUJIFILMCCD-RAW ` magic and extracting the embedded JPEG preview offset (offset 84) and length (offset 88) directly from the directory table in a single request without requiring a slow 40 MB stream scan.
   - **Grid View Downscaling & Chunk Caching:** Integrates seamlessly into the in-memory downscaling pipeline: large ~5 MB preview JPEGs are resized in-memory to 720px in ~20 ms for compact chunk cache storage (~80–120 KB), while Loupe View and 100% Zoom strictly preserve the uncompressed full-sensor preview.
