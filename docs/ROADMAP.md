@@ -16,6 +16,27 @@
 
 ## 🚀 Released Milestones
 
+### Released in `v0.5.2` (Build `0150`)
+- [x] **Speculative RAM Viewport Caching & Live Visual Buffer Indicators Restored (`thumbnail.rs`, `LibraryGrid.tsx`, `LoupeViewer.tsx`):**
+  - **L1 RAM Pre-Warming Architecture:** Introduced `is_thumbnail_ram_cached` in `thumbnail.rs` to clearly differentiate between the high-speed in-memory L1 LRU cache (`THUMBNAIL_CACHE`) and the persistent on-disk L2 chunk cache (`chunk_cache.rs`).
+  - **Local SSD-to-RAM Streaming:** In `warm_thumbnail_cache_with_progress`, pre-cached thumbnails resident on SSD in the chunk cache are proactively and asynchronously streamed into L1 RAM in `< 0.5 ms` without any SMB/NAS network I/O, guaranteeing instant 60 FPS scrolling and zero-latency grid browsing.
+  - **Grid View Lookahead Restored:** Removed the erroneous `isFullyIndexed` gate in `LibraryGrid.tsx`, re-enabling automatic lookahead preloading (+3 rows in scroll direction, 1 row behind) during 150 ms scroll-settle pauses for fully indexed archives.
+  - **Live RAM Buffer Bubbles Restored:** Re-enabled floating dark-glassmorphism buffer count badges indicating cached thumbnails in RAM (`▲ top / ▼ bottom` in Grid View; `◀ left / ▶ right` in Loupe/Filmstrip View).
+  - **Optimized Full-Res Loupe Warmup:** Restricted scale 100 Loupe warmup to the immediate next 1–2 photos in the culling direction, eliminating network bandwidth saturation when culling high-resolution RAW archives over NAS shares.
+- [x] **Thumbnail & Inspector Orientation Synchronization (GitHub Issue #2) (`thumbnail.rs`):**
+  - Consistent orientation across Grid thumbnails, Filmstrip, and Loupe inspector view for portrait images (EXIF orientations 6 and 8) without manual `.rrdata` sidecars.
+  - Injected effective EXIF orientation during in-memory preview downscaling and in macOS ImageIO thumbnail generation.
+  - Automated regression test `test_issue_2_thumb_and_inspector_orientation_consistency`.
+- [x] **Edge-to-Edge Format-Filling Loupe Viewer (`ZoomableImage.tsx`):**
+  - Non-zoomed photo viewport styling updated to `width: 100%`, `height: 100%` with `object-contain`, ensuring 3:2 camera photos utilize the full display viewport area.
+- [x] **Performance & Stability Polish Across Archive Pipeline:**
+  - Canonical path normalization (`normalize_canonical_path`) stripping leading `//Volumes/...` double slashes on macOS.
+  - Viewport full-res semaphore (`FULLRES_SEMAPHORE`, 2 permits) & pruning of stale requests >48 photos behind.
+  - Clean `#161619` placeholder styling with smooth opacity fade-in transition.
+  - Decoupled `setGridScrollTop` from synchronous `onScroll` into a 150 ms idle debounce.
+  - Camera body and lens EXIF metadata string sanitization in `metadata_resolver.rs`.
+  - Progress counter clamped to 99% until complete indexing of all files.
+
 ### Released in `v0.5.1` (Build `013B`)
 - [x] **Universal Camera RAW Safety Net & Format Extensions (`thumbnail.rs`, `date_resolver.rs`):**
   - **Two-Tier Architecture:** In `get_preview_jpeg_with_orient_and_hints`, if fast 256/768 KB header-slice extraction yields no preview (e.g. Sigma X3F `FOVb` container, deeply nested Olympus ORF preview, or rare exotic RAW variants), RapidReady automatically falls back to full-stream embedded JPEG scanning (`extract_largest_embedded_jpeg`), downscales the preview in-memory to 720px, and stores it in the local SQLite chunk cache.

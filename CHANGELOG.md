@@ -5,6 +5,41 @@ All notable changes to RapidReady will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2] - 2026-10-17
+
+Performance, stability, and polish release restoring blazing-fast speculative RAM pre-caching with live buffer indicators, synchronizing thumbnail and inspector orientations across all camera portrait orientations (GitHub Issue #2), providing edge-to-edge format-filling Loupe rendering, concurrency-governed full-resolution streaming, canonical volume path normalization, and sanitized EXIF camera body metadata.
+
+### Added & Restored
+- **Speculative RAM Viewport Caching & Live Visual Buffer Indicators (`thumbnail.rs`, `LibraryGrid.tsx`, `LoupeViewer.tsx`):**
+  - **L1 RAM Pre-Warming Architecture:** Introduced `is_thumbnail_ram_cached` in `thumbnail.rs` to clearly differentiate between the high-speed in-memory L1 LRU cache (`THUMBNAIL_CACHE`) and the persistent on-disk L2 chunk cache (`chunk_cache.rs`).
+  - **Local SSD-to-RAM Streaming:** In `warm_thumbnail_cache_with_progress`, pre-cached thumbnails resident on SSD in the chunk cache are proactively and asynchronously streamed into L1 RAM in `< 0.5 ms` without any SMB/NAS network I/O, guaranteeing instant 60 FPS scrolling and zero-latency grid browsing.
+  - **Grid View Lookahead Restored:** Removed the erroneous `isFullyIndexed` gate in `LibraryGrid.tsx`, re-enabling automatic lookahead preloading (+3 rows in scroll direction, 1 row behind) during 150 ms scroll-settle pauses for fully indexed archives.
+  - **Live RAM Buffer Bubbles Restored:** Re-enabled floating dark-glassmorphism buffer count badges indicating cached thumbnails in RAM (`▲ top / ▼ bottom` in Grid View; `◀ left / ▶ right` in Loupe/Filmstrip View).
+  - **Optimized Full-Res Loupe Warmup:** Restricted scale 100 Loupe warmup to the immediate next 1–2 photos in the culling direction, eliminating network bandwidth saturation when culling high-resolution RAW archives over NAS shares.
+
+### Fixed
+- **Thumbnail & Inspector Orientation Synchronization (GitHub Issue #2) (`thumbnail.rs`):**
+  - **Consistent Orientation Pipeline:** Resolved an issue where portrait photos with EXIF orientation 6 or 8 without manual `.rrdata` rotation sidecars diverged between Grid thumbnails (unrotated 0°) and the Inspector/Loupe view (rotated 90°).
+  - **Slow-Path Metadata Preservation:** Ensured that on the slow thumbnail generation path, effective EXIF orientation is preserved and re-injected via `inject_orientation_into_jpeg` when downscaling large preview JPEGs (e.g. Canon CR2 5 MB previews).
+  - **macOS ImageIO Direct-Store Orientation Injection:** Corrected macOS `extract_thumbnail_from_data` behavior by injecting effective orientation tags into downscaled thumbnails, ensuring perfect parity between Grid tiles, Filmstrip thumbnails, and Loupe view.
+  - **Automated Regression Test:** Added `test_issue_2_thumb_and_inspector_orientation_consistency` to verify identical orientation output across Grid thumbnails and Inspector previews.
+- **Edge-to-Edge Format-Filling Loupe Viewer (`ZoomableImage.tsx`):**
+  - Updated non-zoomed photo viewport styling to `width: 100%`, `height: 100%` with `object-contain`, ensuring standard 3:2 camera photos properly utilize the full display viewport area without artificial letterboxing or vertical borders.
+- **Canonical Volume Path Normalization (`archive_catalog.rs`, `lib.rs`):**
+  - Hardened `normalize_canonical_path` on macOS to strip leading double slashes (`//Volumes/...`), preventing path mismatches between SQLite catalog lookup, chunk cache key hashing, and webview image protocol requests.
+- **Full-Res Viewport Semaphore & Request Pruning (`lib.rs`):**
+  - Added `FULLRES_SEMAPHORE` (2 concurrent permits) to prevent concurrent 30–50 MB RAW preview reads from saturating network sockets during rapid arrow key navigation.
+  - Proactively discards stale requests in the protocol handler when requests fall >48 images behind the active viewport.
+- **Camera Body & Lens Model Sanitization (`metadata_resolver.rs`):**
+  - Added robust string sanitization for camera make, body model, and lens tags, stripping garbage control characters, unprintable ASCII bytes, stray quotes, and dangling punctuation.
+- **Thumbnail Placeholder & Grid Polish (`GridThumbnailItem.tsx`, `FilmstripThumbnailItem.tsx`, `LibraryGrid.tsx`):**
+  - Implemented `#161619` placeholder styling with smooth opacity fade-in transition and empty `alt=""` attributes.
+  - Decoupled `setGridScrollTop` from synchronous `onScroll` into a 150 ms idle debounce, eliminating micro-stutters during high-speed trackpad scrolling.
+- **Natural Top-to-Bottom Indexing Queue Order (`thumbnail.rs`):**
+  - Sorted the background thumbnail queue so `.pop()` extracts items in natural top-to-bottom reading order, ensuring visible top rows are indexed first.
+- **Progress Counter 100% Clamp (`ArchiveScanBanner.tsx`):**
+  - Clamped the archive scanning percentage to `99%` until every file (including videos and complex media) is fully indexed, eliminating the confusing pause at 100% before completion.
+
 ## [0.5.1] - 2026-10-16
 
 Maintenance and compatibility release adding native Fujifilm RAW (`.raf`) header parsing, a universal fallback safety net for all camera RAW formats (preventing blank grid tiles on exotic/proprietary containers), fast Panasonic Lumix (`.rw2`) and Olympus (`.orf`) tag support, and responsive UI layout fixes for the archive scanning progress banner.
