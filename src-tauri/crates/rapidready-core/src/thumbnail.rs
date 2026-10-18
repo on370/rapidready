@@ -1785,7 +1785,6 @@ pub fn get_max_preview_jpeg_with_orient_and_hints(
     };
 
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
-    let is_raw = RAW_EXTENSIONS.contains(&ext.as_str());
     if ext == "jpg" || ext == "jpeg" {
         let bytes = std::fs::read(path).context("Failed to read JPEG")?;
         let explicit_o = explicit_orient.or_else(|| crate::culling::read_sidecar(path).orientation);
@@ -1808,6 +1807,7 @@ pub fn get_max_preview_jpeg_with_orient_and_hints(
     // 2. Native macOS in-process ImageIO fast path (2560px preview for HEIC, PNG, WebP, etc.)
     #[cfg(target_os = "macos")]
     {
+        let is_raw = RAW_EXTENSIONS.contains(&ext.as_str());
         if !is_raw {
             if let Some(mut imgio_bytes) = extract_macos_imageio_thumbnail(path, 2560) {
                 let explicit_o = explicit_orient.or_else(|| crate::culling::read_sidecar(path).orientation);

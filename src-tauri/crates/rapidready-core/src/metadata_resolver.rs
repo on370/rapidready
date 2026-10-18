@@ -72,7 +72,7 @@ pub fn is_network_or_remote_path(path: &Path) -> bool {
             }
             drive.push(0);
 
-            extern "system" {
+            unsafe extern "system" {
                 fn GetDriveTypeW(lpRootPathName: *const u16) -> u32;
             }
             unsafe {

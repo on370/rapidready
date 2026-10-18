@@ -7,7 +7,7 @@ use tauri::http::Response;
 use tauri::Emitter;
 
 #[cfg(target_os = "macos")]
-extern "C" {
+unsafe extern "C" {
     fn set_macos_dock_icon(bytes: *const u8, length: usize);
 }
 
