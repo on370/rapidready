@@ -4,6 +4,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::num::NonZeroUsize;
 use std::sync::LazyLock;
+use std::collections::HashSet;
 use image::{ImageFormat, RgbaImage};
 use thumb_rs::{get_thumbnail, ThumbnailScale};
 use anyhow::{Context, Result};
@@ -53,17 +54,34 @@ pub fn is_viewport_active() -> bool {
     now.saturating_sub(last) < 250
 }
 
-/// Cooperatively pauses while viewport activity is taking place.
-pub fn wait_while_viewport_active(controller: Option<&crate::archive::ScanController>) -> bool {
+/// Cooperatively pauses while viewport activity is taking place, periodically executing a poll callback.
+pub fn wait_while_viewport_active_with_poll<F: FnMut()>(
+    controller: Option<&crate::archive::ScanController>,
+    mut poll: F,
+) -> bool {
+    let mut last_poll = std::time::Instant::now();
+    if is_viewport_active() {
+        poll();
+    }
     while is_viewport_active() {
         if let Some(ctrl) = controller {
             if ctrl.is_cancelled() {
                 return false;
             }
         }
+        if last_poll.elapsed() >= std::time::Duration::from_millis(200) {
+            poll();
+            last_poll = std::time::Instant::now();
+        }
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
+    poll();
     true
+}
+
+/// Cooperatively pauses while viewport activity is taking place.
+pub fn wait_while_viewport_active(controller: Option<&crate::archive::ScanController>) -> bool {
+    wait_while_viewport_active_with_poll(controller, || {})
 }
 
 pub fn set_active_folder(folder: Option<String>) {
@@ -80,20 +98,53 @@ pub fn get_active_folder() -> Option<String> {
     }
 }
 
-static ACTIVE_VIEWPORT_PATHS: LazyLock<Mutex<Option<Vec<String>>>> = LazyLock::new(|| Mutex::new(None));
+#[derive(Clone, Debug)]
+struct ActiveViewport {
+    paths: Vec<String>,
+    set: HashSet<String>,
+}
+
+static ACTIVE_VIEWPORT_PATHS: LazyLock<Mutex<Option<ActiveViewport>>> = LazyLock::new(|| Mutex::new(None));
 
 pub fn set_active_viewport_paths(paths: Vec<String>) {
+    let normalized_paths: Vec<String> = paths
+        .into_iter()
+        .map(|p| crate::archive_catalog::normalize_canonical_path(&p))
+        .collect();
+    let set: HashSet<String> = normalized_paths.iter().cloned().collect();
     if let Ok(mut lock) = ACTIVE_VIEWPORT_PATHS.lock() {
-        *lock = Some(paths);
+        *lock = Some(ActiveViewport {
+            paths: normalized_paths,
+            set,
+        });
     }
 }
 
 pub fn get_active_viewport_paths() -> Option<Vec<String>> {
     if let Ok(lock) = ACTIVE_VIEWPORT_PATHS.lock() {
-        lock.clone()
+        lock.as_ref().map(|v| v.paths.clone())
     } else {
         None
     }
+}
+
+pub fn is_path_in_active_viewport(path: &Path) -> bool {
+    let norm = crate::archive_catalog::normalize_canonical_path(&path.to_string_lossy());
+    if let Ok(lock) = ACTIVE_VIEWPORT_PATHS.lock() {
+        if let Some(ref vp) = *lock {
+            return vp.set.contains(&norm);
+        }
+    }
+    false
+}
+
+pub fn get_active_viewport_count() -> usize {
+    if let Ok(lock) = ACTIVE_VIEWPORT_PATHS.lock() {
+        if let Some(ref vp) = *lock {
+            return vp.paths.len();
+        }
+    }
+    0
 }
 
 // In-memory LRU cache holding up to 10,000 thumbnail/preview JPEGs (~200MB RAM)
@@ -198,7 +249,10 @@ pub fn parse_tiff_header_slice(buf: &[u8], base_offset: u32) -> HeaderTiffInfo {
 
             match tag {
                 0x0103 => {
-                    ifd_compression = Some(val);
+                    // Tag 0x0103 is a TIFF SHORT (16-bit). Some camera firmwares (e.g. Canon EOS 350D / Digic II, Olympus)
+                    // leave the upper 16 bits of the 4-byte value field uninitialized with stack garbage.
+                    let comp = read_tiff_u16(buf, entry + 8, is_le).unwrap_or((val & 0xFFFF) as u16) as u32;
+                    ifd_compression = Some(comp);
                 }
                 0x0112 => {
                     let orient = read_tiff_u16(buf, entry + 8, is_le).unwrap_or(1) as u32;
@@ -262,7 +316,15 @@ pub fn parse_tiff_header_slice(buf: &[u8], base_offset: u32) -> HeaderTiffInfo {
         if ifd_is_explicit_jpeg {
             if let (Some(off), Some(len)) = (ifd_jpeg_off, ifd_jpeg_len) {
                 if len > 500 && len <= 8_000_000 {
-                    candidates.push((off, len));
+                    let rel_off = off.saturating_sub(base_offset) as usize;
+                    let is_valid_jpeg = if rel_off + 2 <= buf.len() {
+                        buf[rel_off] == 0xFF && buf[rel_off + 1] == 0xD8
+                    } else {
+                        true
+                    };
+                    if is_valid_jpeg {
+                        candidates.push((off, len));
+                    }
                 }
             }
         } else if let (Some(off), Some(len)) = (ifd_strip_off, ifd_strip_len) {
@@ -270,7 +332,15 @@ pub fn parse_tiff_header_slice(buf: &[u8], base_offset: u32) -> HeaderTiffInfo {
             // Uncompressed RAW sensor strips (Compression 1) or full raw sensor streams (> 8 MB) must be ignored.
             let is_jpeg_comp = matches!(ifd_compression, Some(6) | Some(7));
             if is_jpeg_comp && len > 500 && len <= 8_000_000 {
-                candidates.push((off, len));
+                let rel_off = off.saturating_sub(base_offset) as usize;
+                let is_valid_jpeg = if rel_off + 2 <= buf.len() {
+                    buf[rel_off] == 0xFF && buf[rel_off + 1] == 0xD8
+                } else {
+                    true
+                };
+                if is_valid_jpeg {
+                    candidates.push((off, len));
+                }
             }
         }
 
@@ -1240,6 +1310,21 @@ fn resolve_fast_metadata(
     }
 }
 
+#[inline]
+fn is_legacy_black_raw_chunk(path: &Path, bytes: &[u8]) -> bool {
+    // Old broken CR2 fallbacks produced an all-black 544x720 JPEG of ~7,007 bytes.
+    // Real embedded or 720px downscaled RAW previews are >15 KB.
+    if bytes.len() < 8_500 {
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        if ext.eq_ignore_ascii_case("cr2") {
+            return parse_jpeg_dimensions(bytes) == Some((544, 720))
+                || parse_jpeg_dimensions(bytes) == Some((720, 544))
+                || bytes.len() <= 7_500;
+        }
+    }
+    false
+}
+
 pub fn get_cached_preview_jpeg_fast(
     path: &Path,
     scale: u32,
@@ -1253,7 +1338,9 @@ pub fn get_cached_preview_jpeg_fast(
         let fast_cache_key = make_l1_cache_key(path, scale, fast_orient, fast_mt);
         if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
             if let Some(cached) = cache.get(&fast_cache_key) {
-                return Some(cached.clone());
+                if !is_legacy_black_raw_chunk(path, cached) {
+                    return Some(cached.clone());
+                }
             }
         }
         let blake3_key = crate::chunk_cache::compute_cache_key(
@@ -1265,19 +1352,23 @@ pub fn get_cached_preview_jpeg_fast(
         );
         if let Some(chunk_cache) = crate::chunk_cache::get_global_chunk_cache() {
             if let Ok(Some(bytes)) = chunk_cache.read_thumbnail(&blake3_key, scale) {
-                if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
-                    cache.put(fast_cache_key, bytes.clone());
+                if !is_legacy_black_raw_chunk(path, &bytes) {
+                    if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
+                        cache.put(fast_cache_key, bytes.clone());
+                    }
+                    return Some(bytes);
                 }
-                return Some(bytes);
             }
             // Fallback for scale 0 or 2: If scale 1 is already cached in chunk cache (720px+), return it!
             if scale == 0 || scale == 2 {
                 let key1 = crate::chunk_cache::compute_cache_key(path, fast_sz, fast_mt, 1, fast_orient);
                 if let Ok(Some(bytes)) = chunk_cache.read_thumbnail(&key1, 1) {
-                    if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
-                        cache.put(fast_cache_key, bytes.clone());
+                    if !is_legacy_black_raw_chunk(path, &bytes) {
+                        if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
+                            cache.put(fast_cache_key, bytes.clone());
+                        }
+                        return Some(bytes);
                     }
-                    return Some(bytes);
                 }
             }
         }
@@ -1322,7 +1413,9 @@ pub fn get_preview_jpeg_with_orient_and_hints(
         let c_key = make_l1_cache_key(path, scale, resolved_orient, mt);
         if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
             if let Some(cached) = cache.get(&c_key) {
-                return Ok(cached.clone());
+                if !is_legacy_black_raw_chunk(path, cached) {
+                    return Ok(cached.clone());
+                }
             }
         }
         let key = if meta_res.is_ok() {
@@ -1333,19 +1426,23 @@ pub fn get_preview_jpeg_with_orient_and_hints(
         if let Some(ref k) = key {
             if let Some(chunk_cache) = crate::chunk_cache::get_global_chunk_cache() {
                 if let Ok(Some(bytes)) = chunk_cache.read_thumbnail(k, scale) {
-                    if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
-                        cache.put(c_key.clone(), bytes.clone());
+                    if !is_legacy_black_raw_chunk(path, &bytes) {
+                        if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
+                            cache.put(c_key.clone(), bytes.clone());
+                        }
+                        return Ok(bytes);
                     }
-                    return Ok(bytes);
                 }
                 // Fallback for scale 0 or 2: If scale 1 is already cached in chunk cache (720px+), return it!
                 if (scale == 0 || scale == 2) && meta_res.is_ok() {
                     let k1 = crate::chunk_cache::compute_cache_key(path, sz, mt, 1, resolved_orient);
                     if let Ok(Some(bytes)) = chunk_cache.read_thumbnail(&k1, 1) {
-                        if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
-                            cache.put(c_key.clone(), bytes.clone());
+                        if !is_legacy_black_raw_chunk(path, &bytes) {
+                            if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
+                                cache.put(c_key.clone(), bytes.clone());
+                            }
+                            return Ok(bytes);
                         }
-                        return Ok(bytes);
                     }
                 }
             }
@@ -1538,18 +1635,41 @@ pub fn get_preview_jpeg_with_orient_and_hints(
     let thumb_scale = ThumbnailScale(scale.max(1));
     let thumb_res = get_thumbnail(path, thumb_scale);
 
-    // If thumb_rs returned a generic OS file icon (e.g. <=32px) or failed:
-    let is_file_icon = match &thumb_res {
-        Ok(t) => t.width <= 32 || t.height <= 32,
+    // If thumb_rs returned a generic OS file icon (e.g. <=32px) or failed, or an all-black bitmap:
+    let is_invalid_thumb = match &thumb_res {
+        Ok(t) => {
+            if t.width <= 32 || t.height <= 32 {
+                true
+            } else if t.rgba.len() >= 4 {
+                // Sample 32 evenly distributed pixels across the buffer:
+                // If every sampled pixel has R == 0, G == 0, B == 0, treat as black/broken!
+                let total_pixels = t.rgba.len() / 4;
+                let sample_step = (total_pixels / 32).max(1);
+                let mut all_black = true;
+                for i in (0..total_pixels).step_by(sample_step) {
+                    let offset = i * 4;
+                    if offset + 2 < t.rgba.len() {
+                        if t.rgba[offset] != 0 || t.rgba[offset + 1] != 0 || t.rgba[offset + 2] != 0 {
+                            all_black = false;
+                            break;
+                        }
+                    }
+                }
+                all_black
+            } else {
+                true
+            }
+        }
         Err(_) => true,
     };
 
-    if is_file_icon {
+    if is_invalid_thumb {
         // Fallback: Pure Rust decoder for standard raster images (PNG, WebP, JPG, JPEG)
         if let Some(raster_bytes) = extract_raster_thumbnail(path, scale, target_orient) {
             record_thumbnail_cache(&cache_key, blake3_key.as_deref(), scale, &raster_bytes);
             return Ok(raster_bytes);
         }
+        return Err(anyhow::anyhow!("thumb_rs returned an all-black or invalid thumbnail"));
     }
 
     let thumb = thumb_res.map_err(|e| anyhow::anyhow!("thumb_rs error: {:?}", e))?;
@@ -1724,8 +1844,25 @@ pub fn get_max_preview_jpeg_with_orient_and_hints(
 
     for scale in scales {
         if let Ok(thumb) = get_thumbnail(path, ThumbnailScale(scale)) {
-            if thumb.rgba.len() >= 4 && thumb.rgba[3] == 0 {
-                continue;
+            if thumb.rgba.len() >= 4 {
+                if thumb.rgba[3] == 0 {
+                    continue;
+                }
+                let total_pixels = thumb.rgba.len() / 4;
+                let sample_step = (total_pixels / 32).max(1);
+                let mut all_black = true;
+                for i in (0..total_pixels).step_by(sample_step) {
+                    let offset = i * 4;
+                    if offset + 2 < thumb.rgba.len() {
+                        if thumb.rgba[offset] != 0 || thumb.rgba[offset + 1] != 0 || thumb.rgba[offset + 2] != 0 {
+                            all_black = false;
+                            break;
+                        }
+                    }
+                }
+                if all_black {
+                    continue;
+                }
             }
             best_thumb = Some(thumb);
             break;
@@ -2068,6 +2205,53 @@ where
             .map(|n| n.get().clamp(3, 6))
             .unwrap_or(4)
     };
+    let poll_active_viewport_cache = || {
+        if let Ok(mut q) = queue.try_lock() {
+            if q.is_empty() {
+                return;
+            }
+            let vp_opt = ACTIVE_VIEWPORT_PATHS.lock().ok().and_then(|g| g.clone());
+            let Some(vp) = vp_opt else { return; };
+            if vp.set.is_empty() {
+                return;
+            }
+
+            let mut i = q.len();
+            let mut newly_completed = 0;
+            let mut newly_bytes = 0u64;
+            let mut last_path = String::new();
+
+            while i > 0 {
+                i -= 1;
+                let norm_q = crate::archive_catalog::normalize_canonical_path(&q[i].path);
+                if vp.set.contains(&norm_q) {
+                    let cand = &q[i];
+                    let path_obj = Path::new(&cand.path);
+                    let key = crate::chunk_cache::compute_cache_key(
+                        path_obj,
+                        cand.size,
+                        cand.mtime,
+                        scale,
+                        cand.orientation.unwrap_or(1),
+                    );
+                    if chunk_cache.has_thumbnail(&key, scale) {
+                        let item = q.swap_remove(i);
+                        newly_completed += 1;
+                        newly_bytes += item.size;
+                        last_path = item.path;
+                    }
+                }
+            }
+
+            if newly_completed > 0 {
+                let done = completed.fetch_add(newly_completed, Ordering::SeqCst) + newly_completed;
+                let bytes_accum = processed_bytes.fetch_add(newly_bytes, Ordering::Relaxed) + newly_bytes;
+                if let Ok(mut cb) = on_progress_mutex.lock() {
+                    cb(already_cached + done, total_archive_files, &last_path, bytes_accum);
+                }
+            }
+        }
+    };
     let active_folder_tracker = Mutex::new(get_active_folder());
 
     std::thread::scope(|s| {
@@ -2084,7 +2268,7 @@ where
                         }
                     }
                     // Cooperative preemption: wait while interactive UI scrolling is active
-                    if !wait_while_viewport_active(Some(controller)) {
+                    if !wait_while_viewport_active_with_poll(Some(controller), poll_active_viewport_cache) {
                         return;
                     }
 
@@ -2117,15 +2301,16 @@ where
                             let mut b = Vec::with_capacity(batch_size);
 
                             // Viewport priority: immediately take visible items first
-                            if let Some(vp_paths) = get_active_viewport_paths() {
-                                if !vp_paths.is_empty() {
-                                    let vp_set: std::collections::HashSet<&str> =
-                                        vp_paths.iter().map(|s| s.as_str()).collect();
-                                    let mut i = q.len();
-                                    while i > 0 && b.len() < batch_size {
-                                        i -= 1;
-                                        if vp_set.contains(q[i].path.as_str()) {
-                                            b.push(q.swap_remove(i));
+                            if let Ok(lock) = ACTIVE_VIEWPORT_PATHS.lock() {
+                                if let Some(ref vp) = *lock {
+                                    if !vp.set.is_empty() {
+                                        let mut i = q.len();
+                                        while i > 0 && b.len() < batch_size {
+                                            i -= 1;
+                                            let norm_q = crate::archive_catalog::normalize_canonical_path(&q[i].path);
+                                            if vp.set.contains(&norm_q) {
+                                                b.push(q.swap_remove(i));
+                                            }
                                         }
                                     }
                                 }
@@ -2157,7 +2342,7 @@ where
                                 return;
                             }
                         }
-                        if !wait_while_viewport_active(Some(controller)) {
+                        if !wait_while_viewport_active_with_poll(Some(controller), poll_active_viewport_cache) {
                             return;
                         }
 
@@ -3104,6 +3289,57 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }
+
+    #[test]
+    fn test_cr2_olympus_short_compression_parsing() {
+        let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let workspace_root = manifest_dir.parent().unwrap().parent().unwrap().parent().unwrap().parent().unwrap();
+        let cr2_path = workspace_root.join("testdata/dest/Olympus-RAW/img_2888.cr2");
+        if cr2_path.exists() {
+            // 1. extract_embedded_thumbnail directly
+            let thumb = extract_embedded_thumbnail(&cr2_path, None);
+            assert!(thumb.is_some(), "Must extract embedded thumbnail from Canon/Olympus CR2");
+            let bytes = thumb.unwrap();
+            assert_eq!(bytes[0], 0xFF);
+            assert_eq!(bytes[1], 0xD8);
+            let img = image::load_from_memory(&bytes).expect("Extracted JPEG must decode cleanly");
+            assert_eq!(img.width(), 1536);
+            assert_eq!(img.height(), 1024);
+
+            // 2. get_preview_jpeg at scale 1 (Grid view)
+            let preview = get_preview_jpeg(&cr2_path, 1).expect("Must generate scale 1 grid preview");
+            let img_preview = image::load_from_memory(&preview).expect("Grid preview JPEG must decode cleanly");
+            assert!(img_preview.width() >= 720 || img_preview.height() >= 720);
+        }
+
+        // 3. Synthetic TIFF header slice with dirty upper 16 bits for Tag 0x0103 (e.g. 0xffdf0006)
+        let mut synth = vec![0u8; 1024];
+        // Header: "II", magic 42, offset 8
+        synth[0..8].copy_from_slice(&[0x49, 0x49, 0x2A, 0x00, 0x08, 0x00, 0x00, 0x00]);
+        // IFD0: 3 entries
+        synth[8..10].copy_from_slice(&3u16.to_le_bytes());
+        // Entry 0: Tag 0x0103, type 3 (SHORT), count 1, value with dirty upper bytes: 0x06, 0x00, 0xDF, 0xFF
+        synth[10..22].copy_from_slice(&[0x03, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x06, 0x00, 0xDF, 0xFF]);
+        // Entry 1: Tag 0x0111 (StripOffsets), type 4 (LONG), count 1, value 500
+        synth[22..34].copy_from_slice(&[0x11, 0x01, 0x04, 0x00, 0x01, 0x00, 0x00, 0x00, 0xF4, 0x01, 0x00, 0x00]);
+        // Entry 2: Tag 0x0117 (StripByteCounts), type 4 (LONG), count 1, value 50000
+        synth[34..46].copy_from_slice(&[0x17, 0x01, 0x04, 0x00, 0x01, 0x00, 0x00, 0x00, 0x50, 0xC3, 0x00, 0x00]);
+        // Put JPEG SOI marker at offset 500
+        synth[500] = 0xFF;
+        synth[501] = 0xD8;
+
+        let info = parse_tiff_header_slice(&synth, 0);
+        assert_eq!(info.thumb_offset, Some(500), "Must parse StripOffsets even with dirty upper 16 bits in Compression tag");
+        assert_eq!(info.thumb_length, Some(50000));
+
+        // 4. Test is_legacy_black_raw_chunk detection
+        let fake_broken_chunk = vec![0u8; 7007];
+        let fake_valid_preview = vec![0u8; 50_000];
+        assert!(is_legacy_black_raw_chunk(Path::new("img_2888.cr2"), &fake_broken_chunk), "7007-byte CR2 chunk must be recognized as legacy black chunk");
+        assert!(!is_legacy_black_raw_chunk(Path::new("img_2888.cr2"), &fake_valid_preview), "Valid embedded preview must not be flagged");
+        assert!(!is_legacy_black_raw_chunk(Path::new("photo.jpg"), &fake_broken_chunk), "Non-CR2 files must not be affected");
+    }
 }
+
 
 

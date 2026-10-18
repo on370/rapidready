@@ -501,15 +501,12 @@ export const LibraryGrid = React.memo(function LibraryGrid({
           if (img) visiblePaths.push(img.path);
         }
       }
-
       if (visiblePaths.length > 0) {
         invoke('set_active_viewport_paths', { paths: visiblePaths }).catch(() => {});
       }
     }, 150);
 
-    return () => {
-      window.clearTimeout(timer);
-    };
+    return () => window.clearTimeout(timer);
   }, [firstRow, lastRow, numColumns, displayedImages, viewMode, scanState]);
 
   // Sprint 1: Speculative RAM Viewport Caching

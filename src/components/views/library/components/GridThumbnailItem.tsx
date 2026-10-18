@@ -104,14 +104,14 @@ export const GridThumbnailItem = React.memo(function GridThumbnailItem({
           const target = e.currentTarget as HTMLImageElement;
           target.style.opacity = '0';
           const retryCount = Number(target.dataset.retryCount || 0);
-          if (retryCount < 6) {
+          if (retryCount < 25) {
             target.dataset.retryCount = String(retryCount + 1);
             setTimeout(() => {
               if (imgRef.current) {
                 const baseSrc = getRrImageUrl(img.path, false, img.culling?.orientation, scale, img.size, img.mtime);
                 imgRef.current.src = `${baseSrc}&retry=${Date.now()}`;
               }
-            }, 250 * (retryCount + 1));
+            }, Math.min(1500, 350 * (retryCount + 1)));
           }
         }}
       />

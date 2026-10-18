@@ -328,13 +328,20 @@ impl ArchiveCatalog {
             })
         };
 
-        if self.db_path.is_some() {
+        let result = if self.db_path.is_some() {
             if let Ok(conn) = self.get_read_conn() {
-                return query_fn(&conn);
+                query_fn(&conn)?
+            } else {
+                let conn = self.conn.lock().unwrap();
+                query_fn(&conn)?
             }
-        }
-        let conn = self.conn.lock().unwrap();
-        query_fn(&conn)
+        } else {
+            let conn = self.conn.lock().unwrap();
+            query_fn(&conn)?
+        };
+
+
+        Ok(result)
     }
 
     /// Fast indexed lookup of size, mtime, and orientation from local SQLite catalog in < 0.02 ms.
@@ -644,6 +651,13 @@ impl ArchiveCatalog {
         Ok(())
     }
 
+    /// Resets is_fully_indexed flag for all archives when entire disk cache is cleared.
+    pub fn reset_all_fully_indexed_flags(&self) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("UPDATE archive_meta SET is_fully_indexed = 0", [])?;
+        Ok(())
+    }
+
     /// Typ B: Inkrementeller Delta-Scan (Hintergrund-Sync).
     /// Recursively traverses directory reading ONLY `(mtime, size)` metadata.
     /// Performs zero EXIF/thumbnail decoding for unchanged files.
@@ -762,9 +776,17 @@ impl ArchiveCatalog {
                 true
             });
 
+        let mut entry_counter = 0usize;
         for entry in walker.filter_map(|e| e.ok()) {
             if controller.check_pause_or_cancel() {
                 break;
+            }
+
+            entry_counter += 1;
+            if entry_counter % 64 == 0 {
+                if !crate::thumbnail::wait_while_viewport_active(Some(controller)) {
+                    break;
+                }
             }
 
             let path = entry.path();

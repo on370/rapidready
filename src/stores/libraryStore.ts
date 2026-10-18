@@ -285,13 +285,31 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
       return nextFolders !== state.discoveredFolders ? { discoveredFolders: nextFolders } : state;
     }
 
-    const startIdx = state.images.length;
-    for (let i = 0; i < validChunk.length; i++) {
-      state.imageIndexMap.set(normalizePath(validChunk[i].path), startIdx + i);
+    const nextImages = [...state.images];
+    const nextMap = new Map(state.imageIndexMap);
+    let changed = false;
+
+    for (const img of validChunk) {
+      const norm = normalizePath(img.path);
+      const existingIdx = nextMap.get(norm);
+      if (existingIdx !== undefined) {
+        nextImages[existingIdx] = { ...nextImages[existingIdx], ...img };
+        changed = true;
+      } else {
+        const newIdx = nextImages.length;
+        nextImages.push(img);
+        nextMap.set(norm, newIdx);
+        changed = true;
+      }
     }
+
+    if (!changed && nextFolders === state.discoveredFolders) {
+      return state;
+    }
+
     return {
-      images: [...state.images, ...validChunk],
-      imageIndexMap: state.imageIndexMap,
+      images: nextImages,
+      imageIndexMap: nextMap,
       discoveredFolders: nextFolders,
     };
   }),
@@ -633,7 +651,12 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
 
           if (isFullyIndexed) {
             // Phase 2: Start background delta-sync silently without blocking UI
-            get().reconcileArchiveDelta(path, true);
+            // Delay by 2000ms so initial viewport grid tiles have 100% free bandwidth
+            setTimeout(() => {
+              if (useLibraryStore.getState().rootPath === path) {
+                useLibraryStore.getState().reconcileArchiveDelta(path, true);
+              }
+            }, 2000);
           } else {
             invoke('start_archive_thumbnailing', { path, scanId }).catch(() => {});
           }

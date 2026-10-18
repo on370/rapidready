@@ -723,13 +723,16 @@ pub async fn get_disk_cache_stats() -> Result<rapidready_core::chunk_cache::Cach
 }
 
 #[tauri::command]
-pub async fn clear_disk_cache() -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(|| {
+pub async fn clear_disk_cache(
+    catalog_state: tauri::State<'_, ArchiveCatalogState>,
+) -> Result<(), String> {
+    let catalog = catalog_state.catalog.clone();
+    tauri::async_runtime::spawn_blocking(move || {
         if let Some(cache) = rapidready_core::chunk_cache::get_global_chunk_cache() {
-            cache.clear_cache().map_err(|e| e.to_string())
-        } else {
-            Ok(())
+            cache.clear_cache().map_err(|e| e.to_string())?;
         }
+        catalog.reset_all_fully_indexed_flags().map_err(|e| e.to_string())?;
+        Ok(())
     })
     .await
     .map_err(|e| e.to_string())?
@@ -776,9 +779,10 @@ pub async fn reconcile_archive_delta(
         .map_err(|e| e.to_string())?;
 
         if !controller_clone.is_cancelled() {
+            let is_indexed = catalog.is_archive_fully_indexed(&path_clone).unwrap_or(false);
             let needs_thumbs = !delta_res.added.is_empty()
                 || !delta_res.updated.is_empty()
-                || !catalog.is_archive_fully_indexed(&path_clone).unwrap_or(false);
+                || !is_indexed;
 
             if needs_thumbs {
                 if let Some(chunk_cache) = rapidready_core::chunk_cache::get_global_chunk_cache() {
@@ -934,8 +938,18 @@ pub async fn rebuild_archive_catalog(
 ) -> Result<(), String> {
     let catalog = catalog_state.catalog.clone();
     tauri::async_runtime::spawn_blocking(move || {
+        // Targeted invalidation of this archive's chunks only! Never wipe other archives globally.
         if let Some(chunk_cache) = rapidready_core::chunk_cache::get_global_chunk_cache() {
-            let _ = chunk_cache.clear_cache();
+            if let Ok(cands) = catalog.get_thumbnail_candidates_for_root(&path) {
+                let mut keys = Vec::with_capacity(cands.len() * 2);
+                for c in cands {
+                    let p = Path::new(&c.path);
+                    let orient = c.orientation.unwrap_or(1);
+                    keys.push(rapidready_core::chunk_cache::compute_cache_key(p, c.size, c.mtime, 1, orient));
+                    keys.push(rapidready_core::chunk_cache::compute_cache_key(p, c.size, c.mtime, 2, orient));
+                }
+                let _ = chunk_cache.remove_entries_for_keys(&keys);
+            }
         }
         catalog.rebuild_archive_catalog(&path).map_err(|e| e.to_string())
     })

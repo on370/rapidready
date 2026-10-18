@@ -200,10 +200,34 @@ pub fn run() {
                     }
                 };
 
-                // If more than 48 newer thumbnail requests arrived while this request was waiting
+                // Re-check fast cache after acquiring permit: if another parallel request
+                // or the background thumbnailer already cached this image while we were waiting,
+                // respond immediately without touching the NAS / slow decode!
+                if !is_fullres {
+                    if let Some(bytes) = rapidready_core::thumbnail::get_cached_preview_jpeg_fast(
+                        &path,
+                        scale,
+                        orient_param,
+                        size_param,
+                        mtime_param,
+                    ) {
+                        drop(permit);
+                        let res = Response::builder()
+                            .header("Content-Type", "image/jpeg")
+                            .header("Access-Control-Allow-Origin", "*")
+                            .header("Cache-Control", "public, max-age=86400, immutable")
+                            .body(bytes)
+                            .unwrap();
+                        responder.respond(res);
+                        return;
+                    }
+                }
+
+                // If more than 256 newer thumbnail requests arrived while this request was waiting
                 // for a semaphore permit, the user has already scrolled past this row:
                 // drop immediately in 0ms without touching the NAS!
-                if !is_fullres && SLOW_REQ_SEQ.load(std::sync::atomic::Ordering::Relaxed).saturating_sub(my_seq) > 48 {
+                if !is_fullres && SLOW_REQ_SEQ.load(std::sync::atomic::Ordering::Relaxed).saturating_sub(my_seq) > 256 {
+                    drop(permit);
                     responder.respond(Response::builder().status(499).body(Vec::new()).unwrap());
                     return;
                 }

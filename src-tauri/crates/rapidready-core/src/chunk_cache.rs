@@ -436,6 +436,32 @@ impl ChunkCache {
         }
     }
 
+    /// Targeted invalidation: removes cache entries for given keys from in-memory index,
+    /// disk preview files, and thumbnail_chunks table, without wiping other archives.
+    pub fn remove_entries_for_keys(&self, keys: &[String]) -> Result<()> {
+        if keys.is_empty() {
+            return Ok(());
+        }
+        {
+            let mut idx = self.index.write().unwrap();
+            for k in keys {
+                idx.remove(k);
+            }
+        }
+        for k in keys {
+            let p = self.preview_path(k);
+            if p.is_file() {
+                let _ = fs::remove_file(p);
+            }
+        }
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare("DELETE FROM thumbnail_chunks WHERE cache_key = ?1")?;
+        for k in keys {
+            let _ = stmt.execute([k]);
+        }
+        Ok(())
+    }
+
     /// Computes total size and item counts for cache statistics.
     pub fn get_stats(&self) -> Result<CacheStats> {
         let mut stats = CacheStats::default();
