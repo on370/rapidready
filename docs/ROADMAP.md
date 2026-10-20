@@ -11,12 +11,29 @@
 ## 🔄 Ongoing Engineering Policies
 - [ ] **README Synchronization:** Verify and update `app/README.md` whenever shipping new features or checking off roadmap items.
 - [ ] **Data Safety & Non-Destructive Ingest:** Source media and camera RAW files must NEVER be modified. All metadata, tags, ratings, and edits reside strictly in non-destructive sidecars.
+- [ ] **Cache & Thumbnail Pipeline Protection (Strict Freeze Guardrail):** The two-tier L1 RAM (`THUMBNAIL_CACHE`) + L2 SSD (`chunk_cache.rs` / `archive_catalog.rs`) thumbnail pipeline, the `rr-image://` protocol fast-path in `lib.rs`, and the virtualized grid/filmstrip preloading in `LibraryGrid.tsx` / `LoupeViewer.tsx` are performance-critical and verified. Unless a task explicitly targets thumbnail caching, **NEVER modify** `chunk_cache.rs`, `archive_catalog.rs`, `thumbnail.rs`, `lib.rs` (`rr-image://` handler), or `LibraryGrid.tsx` (scroll/virtualizer/warmup logic), and **NEVER** introduce synchronous EXIF parsing into Phase 1/Phase 2 directory scanning or thumbnail generation.
 
 ---
 
 ## 🚀 Released Milestones
 
-### Released in `v0.5.2` (Build `0150`)
+### Released in `v0.5.2` (Build `015E`)
+- [x] **Cross-Platform & Windows Build Hardening (`metadata_resolver.rs`, `thumbnail.rs`, `lib.rs`):**
+  - **RFC 3484 (`unsafe_extern_blocks`) Compliance:** Updated Win32 API extern block in `metadata_resolver.rs` to `unsafe extern "system"` and macOS bindings in `lib.rs` to `unsafe extern "C"`, ensuring clean compilation on modern Rust toolchains on Windows.
+  - **Compiler Warning Elimination:** Scoped macOS-specific ImageIO variables in `thumbnail.rs` to `#[cfg(target_os = "macos")]`, eliminating compiler warnings across non-macOS platforms.
+- [x] **Viewport Scalability & Large-Display Grid Optimization (`lib.rs`, `thumbnail.rs`, `GridThumbnailItem.tsx`):**
+  - Expanded protocol handler cancellation window from 48 to 256 in `lib.rs`, preventing high-density viewports (e.g. 13x13 or 18x15 = 169–270 tiles) from prematurely aborting visible requests with HTTP 499 while reliably discarding scrolled-away tiles.
+  - Post-semaphore fast-cache re-check serving concurrent and worker-cached images instantly in 0 ms.
+  - Realtime progress polling during viewport loads (`wait_while_viewport_active_with_poll`), advancing the info dialog counter smoothly in real time without freezing.
+  - Resilient grid retry backoff with up to 25 attempts for slow network shares.
+- [x] **Prevent Global ChunkCache Wipe & Isolated Invalidation (`chunk_cache.rs`, `commands.rs`, `libraryStore.ts`):**
+  - Targeted single-archive rebuild invalidation via `remove_entries_for_keys`, fully protecting other SSD and NAS archives from cache eviction.
+  - Explicit cache reset synchronization (`reset_all_fully_indexed_flags()`) when clearing the disk cache.
+  - Cooperative viewport throttling every 64 entries in delta synchronization.
+  - Grid streaming chunk deduplication (`appendImageChunk`).
+  - Automatic on-read self-healing for legacy black RAW fallback chunks (`is_legacy_black_raw_chunk`).
+- [x] **Older TIFF RAW Thumbnail Extraction (Canon Digic II / Olympus ORF) (`thumbnail.rs`):**
+  - Fixed 16-bit SHORT TIFF Tag `0x0103` (`Compression`) parsing where uninitialized upper 16 bits previously caused valid 1536×1024 JPEG previews in IFD0 to be discarded.
 - [x] **Speculative RAM Viewport Caching & Live Visual Buffer Indicators Restored (`thumbnail.rs`, `LibraryGrid.tsx`, `LoupeViewer.tsx`):**
   - **L1 RAM Pre-Warming Architecture:** Introduced `is_thumbnail_ram_cached` in `thumbnail.rs` to clearly differentiate between the high-speed in-memory L1 LRU cache (`THUMBNAIL_CACHE`) and the persistent on-disk L2 chunk cache (`chunk_cache.rs`).
   - **Local SSD-to-RAM Streaming:** In `warm_thumbnail_cache_with_progress`, pre-cached thumbnails resident on SSD in the chunk cache are proactively and asynchronously streamed into L1 RAM in `< 0.5 ms` without any SMB/NAS network I/O, guaranteeing instant 60 FPS scrolling and zero-latency grid browsing.
@@ -548,6 +565,54 @@
 ---
 
 ### Milestone: Library & Inspector UI Ergonomics
+- [ ] **Vollbild-Präsentationsmodus & Integrierte Diashow ("Presentation & Slideshow Mode"):**
+  - **Context & Goal:**
+    Neben der schnellen Kachel-Übersicht (`Grid`) und der detaillierten Einzelbild-Inspektion (`Loupe`) benötigen Fotografen einen ablenkungsfreien **Vollbild- & Diashow-Modus** (für die finale Auswahlkontrolle, Kundenpräsentationen oder das entspannte Durchblättern auf großen Monitoren). Der Modus kombiniert ein zweistufiges Vollbild-Konzept (App-Fenster-Vollbild vs. echtes OS-Vollbild) mit einer sich automatisch ausblendenden HUD-Steuerleiste und verzögerungsfreiem L1-RAM-Preloading.
+  - **1. Zweistufiges Vollbild-Konzept (Window-Fill vs. OS-Fullscreen):**
+    - **Stufe 1 – App-Vollbild (Standard beim Eintritt in `viewMode = 'fullscreen'`):**
+      - Blendet Top-Header/Navigation, linke Ordner-/Sammlungs-Sidebar (`LibraryLeftSidebar`), `CullingToolbar`, `FilmstripBar` und den rechten `LibraryInspector` komplett aus (`App.tsx` / `LibraryView.tsx` / `LibraryCenter.tsx`).
+      - Das aktive Foto füllt auf tiefschwarzem Hintergrund (`#09090b` bzw. `#000000`) 100 % des RapidReady-Anwendungsfensters (`w-full h-full object-contain select-none`).
+      - **Architektur-Vorgabe:** Als vollwertiger dritter `viewMode: 'grid' | 'loupe' | 'fullscreen'` in `libraryUIStore.ts` implementieren (zusätzlich `previousViewMode: 'grid' | 'loupe'` merken). **WICHTIG:** Kein `.fixed.inset-0`-Modal verwenden, da `useLibraryShortcuts.ts` (Zeile 43: `document.querySelector('.fixed.inset-0, [data-context-menu]')`) sonst sämtliche Tastatur-Shortcuts blockiert!
+    - **Stufe 2 – Echtes OS-Vollbild (optional zuschaltbar):**
+      - Über den Fullscreen-Button in der unteren HUD-Steuerleiste (via Tauri Window API `getCurrentWindow().setFullscreen(true / false)`) oder den nativen grünen macOS-Fensterbutton / `F11` (Windows) wird das echte Betriebssystem-Vollbild umgeschaltet.
+    - **Einheitlicher Ausstieg (`ESC` oder `[ X ]`-Button oben rechts):**
+      - Befindet sich das Anwendungsfenster im echten OS-Fullscreen, setzt `ESC` (bzw. Klick auf `X`) zuerst `setFullscreen(false)` zurück und wechselt gleichzeitig in den gespeicherten `previousViewMode` (`'grid'` oder `'loupe'`) zurück.
+      - Eine laufende Diashow (`isPlaying`) wird beim Verlassen automatisch gestoppt.
+  - **2. Einstieg, View-Switcher & Tastatur-Shortcuts (`CullingToolbar.tsx`, `useLibraryShortcuts.ts`):**
+    - **3er View-Switcher in `CullingToolbar.tsx`:**
+      - Erweiterung des bisherigen 2er-Umschalters (`Grid` | `Loupe`) um einen dritten Button **`Vollbild` / `Fullscreen`** (Icon: `Maximize2` oder `Play`, Tooltip inkl. Shortcut `F`).
+    - **Tastatur-Shortcuts (`useLibraryShortcuts.ts` & `HelpModal.tsx`):**
+      - **`F`:** Schaltet den Vollbild-Modus (`viewMode === 'fullscreen'`) ein bzw. aus (kehrt zu `previousViewMode` zurück).
+      - **`Shift + F`:** Übernimmt das Umschalten von *Focus Peaking* (`toggleFocusPeaking()`), das bisher auf `F` lag (`Cmd/Ctrl + Shift + F` bleibt weiterhin *"Show in Finder / Explorer"*).
+      - **`ESC`:** Verlässt den Vollbild-Modus (und beendet ggf. ein aktives OS-Fullscreen) zurück zu `previousViewMode`.
+      - **`ArrowLeft` (`←`) / `ArrowRight` (`→`) (sowie `k` / `j`):** Springt im gecachten RAM sofort zum vorherigen / nächsten Bild. Falls die Diashow gerade läuft (`isPlaying === true`), wird der Intervall-Timer ab dem manuell gewählten Bild sauber neu gestartet (Reset des Countdown-Timers ohne Stopp der Diashow).
+      - **`Space` (Leertaste):** Schaltet im Vollbild-Modus (`viewMode === 'fullscreen'`) **Play / Pause der Diashow** um (während `Space` in `Grid` und `Loupe` wie bisher ein Bild vorrückt).
+      - **Culling im Vollbild:** Alle Bewertungs-Shortcuts (`P` Pick, `X` Reject, `U` Unflagged, `0–5` Sterne, `6–9` Farblabels) bleiben auch im Vollbild voll funktionsfähig; bei Änderung blitzt für 1,2 s ein dezentes Bestätigungs-Badge (z. B. `★★★` oder `✓ Pick`) am unteren Bildrand auf.
+  - **3. Schwebendes HUD-Control-Deck & Auto-Hide-Ergonomie (`FullscreenViewer.tsx`):**
+    - **Schließen-Button oben rechts (`[ X ]`):**
+      - Dezenter runder Glassmorphism-Button (`top-5 right-5`, `bg-black/60 hover:bg-black/85 backdrop-blur-md border border-white/15 rounded-full p-2.5 text-white/80 hover:text-white`).
+    - **Schwebendes Control-Deck unten mittig:**
+      - Zentrierte Glassmorphism-Pill (`bottom-6 left-1/2 -translate-x-1/2`, `bg-black/70 backdrop-blur-md border border-white/15 rounded-full px-5 py-2.5 shadow-2xl flex items-center gap-3`) mit folgenden Elementen von links nach rechts:
+        1. **Positions-Zähler:** Aktueller Index & Gesamtanzahl in Monospace-Typografie (z. B. `42 / 380`).
+        2. **`|◀` (Bild zurück):** Button (`SkipBack` / `ChevronLeft`) zum vorherigen Bild.
+        3. **`▶ / ⏸` (Kombinierter Play/Pause-Toggle):** Startet bzw. pausiert die Diashow (`Play`-Icon wenn pausiert, `Pause`-Icon mit Akzent-Highlight wenn aktiv).
+        4. **`▶|` (Bild vor):** Button (`SkipForward` / `ChevronRight`) zum nächsten Bild.
+        5. **Intervall-Auswahl (Zeitverzögerung Diashow):** Kompaktes Pulldown / Popover-Menü direkt in der Leiste mit den Stufen **`2s` | `3s` (Default) | `5s` | `10s`** (persistiert in `libraryUIStore`, z. B. `slideshowIntervalSec: 3`).
+        6. **Loop-Toggle (`Repeat`-Icon):** Optionaler Schalter, ob die Diashow nach dem letzten Bild wieder bei Bild 1 beginnt (Default: aktiv).
+        7. **OS-Fullscreen-Toggle (`Maximize` / `Minimize`-Icon):** Schaltet das native Betriebssystem-Vollbild (`getCurrentWindow().setFullscreen(...)`) ein/aus und synchronisiert seinen Status über Window-Resize/Fullscreen-Events.
+    - **Auto-Hide & Mauszeiger-Ausblendung:**
+      - Nach **2,5 Sekunden ohne Mausaktivität** (`mousemove`, `mousedown`, `wheel`) blenden sich sowohl das Control-Deck unten als auch das `[ X ]` oben rechts sanft aus (`opacity-0 pointer-events-none transition-opacity duration-300`).
+      - Gleichzeitig erhält der Vollbild-Container `cursor-none`, sodass auch der OS-Mauszeiger komplett aus dem Bild verschwindet.
+      - Solange sich der Mauszeiger direkt *auf* dem Control-Deck befindet (`onMouseEnter` / `isHoveringControls`) oder das Zeit-Pulldown geöffnet ist, bleibt die Leiste dauerhaft sichtbar.
+      - Jede Mausbewegung oder Maustaste (`onMouseMove` / `onMouseDown`) blendet Mauszeiger, Control-Deck und `[ X ]` sofort (`0 ms`) wieder ein.
+  - **4. Übergänge & Intelligentes L1-RAM-Preloading:**
+    - **Differenzierte Bildübergänge:**
+      - **Manuelles Blättern (`←` / `→` oder Buttons):** Harter, verzögerungsfreier Schnitt (`0 ms` Transition) für maximale Reaktionsgeschwindigkeit beim schnellen Durchsteppen.
+      - **Automatischer Diashow-Wechsel (`isPlaying === true`):** Sanfte Crossfade-Überblendung (`200 ms` `opacity` Transition zwischen vorherigem und neuem Frame) für eine ruhige, hochwertige Präsentationswirkung.
+    - **Zweistufiges Rendering & RAM-Lookahead:**
+      - Nutzt das zweistufige Progressive-Loading (sofortige Anzeige des gecachten Scale-1/Scale-2-Previews aus L1/L2 in `< 0,1 ms`, nahtloses Nachziehen von `fullres=true`).
+      - Während des Vollbild-/Diashow-Modus wärmt der Hintergrund-Preloader (`warm_thumbnail_cache`) in Vorwärtsrichtung die nächsten 3–5 Bilder (inkl. Full-Res-Preview bei aktivem Diashow-Timer) proaktiv in den L1-RAM-Cache vor, sodass jeder Diashow-Wechsel selbst auf NAS-Archiven zu 100 % aus dem RAM erfolgt.
+
 - [ ] **Switchable Masonry Grid Layout (Alternative to Fixed-Ratio Grid):**
   - **Context & Goal:**
     Currently, the Library Grid (`LibraryGrid.tsx`) displays photos in a uniform square tile matrix. While this provides a structured, predictable layout for rapid culling, photographers shooting mixed landscape (3:2, 16:9), portrait (2:3, 4:5), and panorama compositions experience heavy letterboxing/pillarboxing or cropped thumbnail previews. A switchable **Masonry Grid** (dynamically flowing columns or justified aspect-ratio rows, similar to Apple Photos, Lightroom Web, or Unsplash) displays every photo in its natural proportions with zero wasted space.

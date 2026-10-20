@@ -2,8 +2,13 @@ use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 use chrono::NaiveDateTime;
-
 use serde::{Deserialize, Serialize};
+
+mod formatters;
+mod monochrome;
+
+pub use formatters::*;
+pub use monochrome::*;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ImageMetadata {
@@ -285,7 +290,7 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
             let mut height = max_h;
 
             if width.is_none() || height.is_none() || width.unwrap_or(0) < 300 {
-                if let Ok((img_w, img_h)) = image::image_dimensions(path) {
+                if let Some((img_w, img_h)) = get_dimensions_without_exif(path) {
                     width = Some(img_w);
                     height = Some(img_h);
                 }
@@ -371,8 +376,7 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
     // Camera model-based monochrome sensor detection (Leica Monochrom, Pentax K-3 Monochrome, Phase One Achromatic)
     if !meta.is_monochrome_sensor {
         if let Some(ref model) = meta.camera {
-            let lower = model.to_lowercase();
-            if lower.contains("monochrom") || lower.contains("achromatic") {
+            if is_monochrome_camera_model(model) {
                 meta.is_monochrome_sensor = true;
             }
         }
@@ -407,320 +411,6 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
     meta
 }
 
-/// Formats a raw shutter speed/exposure time string into a clean photography representation (e.g. "1/500s", "1/2.5s", "2s", "30s").
-/// Prevents ridiculous floating point decimals like "1/513.765947654489709870987".
-pub fn clean_shutter_speed(exp_str: &str) -> String {
-    let trimmed = exp_str.trim().trim_end_matches('s').trim_end_matches('"').trim();
-    if trimmed.is_empty() {
-        return String::new();
-    }
-
-    if let Some(rest) = trimmed.strip_prefix("1/") {
-        if let Ok(denom) = rest.parse::<f64>() {
-            if denom <= 0.0 {
-                return format!("{}s", trimmed);
-            }
-            if denom >= 10.0 {
-                return format!("1/{}s", denom.round() as i64);
-            } else if (denom - denom.round()).abs() < 0.05 {
-                return format!("1/{}s", denom.round() as i64);
-            } else if denom >= 1.0 {
-                let formatted = format!("{:.1}", denom);
-                let clean = formatted.trim_end_matches(".0");
-                return format!("1/{}s", clean);
-            } else {
-                let secs = 1.0 / denom;
-                if (secs - secs.round()).abs() < 0.05 {
-                    return format!("{}s", secs.round() as i64);
-                } else {
-                    return format!("{:.1}s", secs);
-                }
-            }
-        }
-    } else if let Ok(val) = trimmed.parse::<f64>() {
-        if val <= 0.0 {
-            return format!("{}s", trimmed);
-        }
-        if val < 1.0 {
-            let denom = 1.0 / val;
-            if denom >= 10.0 {
-                return format!("1/{}s", denom.round() as i64);
-            } else if (denom - denom.round()).abs() < 0.05 {
-                return format!("1/{}s", denom.round() as i64);
-            } else {
-                let formatted = format!("{:.1}", denom);
-                let clean = formatted.trim_end_matches(".0");
-                return format!("1/{}s", clean);
-            }
-        } else {
-            if (val - val.round()).abs() < 0.05 {
-                return format!("{}s", val.round() as i64);
-            } else {
-                return format!("{:.1}s", val);
-            }
-        }
-    }
-
-    if trimmed.ends_with('s') {
-        trimmed.to_string()
-    } else {
-        format!("{}s", trimmed)
-    }
-}
-
-/// Formats an aperture value cleanly (e.g. "f/2.8", "f/1.4", "f/4", "f/11").
-pub fn clean_aperture(f_str: &str) -> String {
-    let trimmed = f_str.trim().trim_start_matches("f/").trim_start_matches("F/").trim();
-    if trimmed.is_empty() {
-        return String::new();
-    }
-
-    if let Ok(val) = trimmed.parse::<f64>() {
-        if val <= 0.0 {
-            return format!("f/{}", trimmed);
-        }
-        if val >= 10.0 && (val - val.round()).abs() < 0.1 {
-            return format!("f/{}", val.round() as i64);
-        } else if (val * 10.0).round() % 10.0 == 0.0 {
-            return format!("f/{}", val.round() as i64);
-        } else {
-            return format!("f/{:.1}", val);
-        }
-    }
-
-    if f_str.starts_with("f/") || f_str.starts_with("F/") {
-        f_str.to_string()
-    } else {
-        format!("f/{}", f_str)
-    }
-}
-
-/// Formats a focal length cleanly (e.g. "24 mm", "50 mm", "70.5 mm").
-pub fn clean_focal_length(fl_str: &str) -> String {
-    let trimmed = fl_str.trim();
-    if trimmed.is_empty() {
-        return String::new();
-    }
-    let num_part = trimmed.trim_end_matches("mm").trim_end_matches("MM").trim();
-    if let Ok(val) = num_part.parse::<f64>() {
-        if (val - val.round()).abs() < 0.05 {
-            return format!("{} mm", val.round() as i64);
-        } else {
-            return format!("{:.1} mm", val);
-        }
-    }
-    trimmed.to_string()
-}
-
-/// Formats an ISO value cleanly (e.g. "100", "3200").
-pub fn clean_iso(iso_str: &str) -> String {
-    let trimmed = iso_str.trim().trim_start_matches("ISO").trim_start_matches("iso").trim();
-    if trimmed.is_empty() {
-        return String::new();
-    }
-    if let Ok(val) = trimmed.parse::<f64>() {
-        return format!("{}", val.round() as i64);
-    }
-    trimmed.to_string()
-}
-
-/// Formats an exposure bias / compensation value cleanly (e.g. "±0.0 EV", "+0.7 EV", "-1.3 EV", "+1.0 EV").
-pub fn clean_exposure_bias(raw: &str) -> String {
-    let trimmed = raw.trim().trim_end_matches("EV").trim_end_matches("ev").trim();
-    if trimmed.is_empty() {
-        return String::new();
-    }
-
-    // Direct match for already formatted zero indicators
-    if trimmed == "±0.0" || trimmed == "±0" || trimmed == "+/-0.0" || trimmed == "+/- 0.0" || trimmed == "+-0.0" {
-        return "±0.0 EV".to_string();
-    }
-
-    let val: Option<f64> = if let Some((num_str, denom_str)) = trimmed.split_once('/') {
-        let num_clean = num_str.trim().trim_start_matches('+');
-        let denom_clean = denom_str.trim().trim_start_matches('+');
-        if let (Ok(num), Ok(denom)) = (num_clean.parse::<f64>(), denom_clean.parse::<f64>()) {
-            if denom != 0.0 {
-                Some(num / denom)
-            } else {
-                None
-            }
-        } else {
-            None
-        }
-    } else {
-        let num_clean = trimmed
-            .trim_start_matches('±')
-            .trim_start_matches("+/-")
-            .trim_start_matches("+ / -")
-            .trim_start_matches('+')
-            .trim();
-        num_clean.parse::<f64>().ok()
-    };
-
-    if let Some(ev) = val {
-        if ev.abs() < 0.05 {
-            "±0.0 EV".to_string()
-        } else if ev > 0.0 {
-            format!("+{:.1} EV", ev)
-        } else {
-            format!("{:.1} EV", ev)
-        }
-    } else {
-        if trimmed.starts_with('±') {
-            format!("{} EV", trimmed)
-        } else if trimmed.starts_with('+') || trimmed.starts_with('-') {
-            format!("{} EV", trimmed)
-        } else if trimmed == "0" {
-            "±0.0 EV".to_string()
-        } else {
-            format!("+{} EV", trimmed)
-        }
-    }
-}
-
-fn clean_exif_name(raw: &str, is_lens: bool) -> Option<String> {
-    // 1. Take first non-empty segment before NUL bytes
-    let mut seg = raw.split('\0').next().unwrap_or("");
-
-    // 2. Handle kamadak-exif multi-part ASCII fragments like `", "", ""` or `", ""`
-    if let Some((first, _)) = seg.split_once("\", \"") {
-        seg = first;
-    } else if let Some((first, _)) = seg.split_once("\",\"") {
-        seg = first;
-    } else if let Some((first, _)) = seg.split_once(", \"\"") {
-        seg = first;
-    } else if let Some((first, _)) = seg.split_once(",\"\"") {
-        seg = first;
-    } else if let Some((first, _)) = seg.split_once("\",") {
-        seg = first;
-    }
-
-    // 3. Filter control characters and unprintable characters (c < 32 or 127)
-    let mut s = String::with_capacity(seg.len());
-    for ch in seg.chars() {
-        if ch == '\t' || ch == '\r' || ch == '\n' {
-            s.push(' ');
-        } else if !ch.is_control() && (ch as u32) >= 32 && (ch as u32) != 127 {
-            s.push(ch);
-        }
-    }
-
-    // 4. Trim whitespace, quotes (regular, single, backtick, smart quotes)
-    let trimmed = s.trim().trim_matches(|c| c == '"' || c == '\'' || c == '`' || c == '“' || c == '”').trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-
-    // 5. Split words, collapse whitespace
-    let words: Vec<&str> = trimmed.split_whitespace().collect();
-    if words.is_empty() {
-        return None;
-    }
-
-    let mut words: Vec<String> = words.into_iter().map(|w| w.to_string()).collect();
-
-    // Deduplicate NIKON CORPORATION NIKON -> NIKON
-    if words.len() >= 3 
-        && words[1].eq_ignore_ascii_case("CORPORATION") 
-        && words[0].eq_ignore_ascii_case(&words[2]) 
-    {
-        words.remove(2);
-        words.remove(1);
-    }
-
-    // Deduplicate consecutive identical words (case-insensitive)
-    let mut deduped: Vec<String> = Vec::with_capacity(words.len());
-    for w in words {
-        if deduped.last().map(|prev| prev.eq_ignore_ascii_case(&w)).unwrap_or(false) {
-            continue;
-        }
-        deduped.push(w);
-    }
-
-    let cleaned = deduped.join(" ");
-
-    // Must contain at least one alphanumeric character
-    if !cleaned.chars().any(|c| c.is_alphanumeric()) {
-        return None;
-    }
-
-    let lower = cleaned.to_lowercase();
-
-    const DUMMY_CAMERAS: &[&str] = &[
-        "unknown",
-        "unknown camera",
-        "default",
-        "default string",
-        "none",
-        "no camera",
-        "n/a",
-        "na",
-        "null",
-        "nil",
-        "(null)",
-        "<unknown>",
-        "[unknown]",
-        "camera",
-        "digital camera",
-        "standard",
-        "undefined",
-        "not specified",
-        "unspecified",
-    ];
-
-    if DUMMY_CAMERAS.contains(&lower.as_str()) {
-        return None;
-    }
-
-    if is_lens {
-        const DUMMY_LENSES: &[&str] = &[
-            "0.0 mm f/0.0",
-            "0.0mm f/0.0",
-            "0.0 mm f/0",
-            "0mm f/0",
-            "0.0 mm",
-            "0.0mm",
-            "0 mm",
-            "0mm",
-            "f/0.0",
-            "f/0",
-            "no lens",
-            "unknown lens",
-            "not defined",
-            "lens",
-        ];
-
-        if DUMMY_LENSES.contains(&lower.as_str()) {
-            return None;
-        }
-
-        if lower.starts_with("0.0 mm f/0") 
-            || lower.starts_with("0 mm f/0") 
-            || lower.starts_with("0.0mm f/0")
-            || lower == "0.0 mm f/0.0"
-        {
-            return None;
-        }
-    }
-
-    Some(cleaned)
-}
-
-/// Formats and sanitizes a camera model string cleanly.
-/// Strips NUL-padding fragments (e.g. `", "", ""` from kamadak-exif),
-/// redundant quotes, unprintable control characters, duplicate manufacturer prefixes (e.g. "Canon Canon EOS"),
-/// and filters out generic placeholders (e.g. "Unknown", "Default", "--") returning `None`.
-pub fn clean_camera_model(raw: &str) -> Option<String> {
-    clean_exif_name(raw, false)
-}
-
-/// Formats and sanitizes a lens model string cleanly.
-/// Filters out placeholder lenses like "0.0 mm f/0.0", "No Lens", "Unknown Lens", etc.
-pub fn clean_lens_model(raw: &str) -> Option<String> {
-    clean_exif_name(raw, true)
-}
-
 fn rational_to_f64(r: &exif::Rational) -> Option<f64> {
     if r.denom == 0 {
         None
@@ -744,94 +434,6 @@ fn parse_gps_coord(coord_field: &exif::Field, ref_field: Option<&exif::Field>) -
             }
             return Some(val);
         }
-    }
-    None
-}
-
-/// Checks whether an embedded JPEG preview is monochrome (grayscale or B/W camera picture profile).
-pub fn is_embedded_preview_monochrome(path: &Path) -> bool {
-    let thumb_bytes = match crate::thumbnail::extract_embedded_thumbnail(path, None) {
-        Some(b) => b,
-        None => return false,
-    };
-
-    // 1. Fast SOF marker check: If JPEG has only 1 component, it's definitively grayscale.
-    if let Some(is_grayscale) = check_jpeg_grayscale_header(&thumb_bytes) {
-        if is_grayscale {
-            return true;
-        }
-    }
-
-    // 2. Chroma analysis on decoded thumbnail for 3-component YCbCr/RGB B/W profiles.
-    if let Ok(dyn_img) = image::load_from_memory(&thumb_bytes) {
-        let rgb = dyn_img.to_rgb8();
-        let raw = rgb.as_raw();
-        if raw.is_empty() {
-            return false;
-        }
-
-        let mut colored_samples = 0;
-        let mut total_samples = 0;
-
-        // Sample every 4th pixel (fast stride)
-        for chunk in raw.chunks_exact(3).step_by(4) {
-            total_samples += 1;
-            let r = chunk[0] as i32;
-            let g = chunk[1] as i32;
-            let b = chunk[2] as i32;
-
-            let diff = (r - g).abs().max((g - b).abs()).max((r - b).abs());
-            // Chroma difference > 8 allows for 4:2:0 subsampling and compression artifacts in B/W photos
-            if diff > 8 {
-                colored_samples += 1;
-                // Early exit: if more than 25 sampled pixels have significant color, it's definitely a color preview
-                if colored_samples > 25 {
-                    return false;
-                }
-            }
-        }
-
-        if total_samples > 0 && colored_samples <= 25 {
-            return true;
-        }
-    }
-
-    false
-}
-
-/// Inspects the JPEG header for SOF markers to check if the image has only 1 component (grayscale).
-fn check_jpeg_grayscale_header(bytes: &[u8]) -> Option<bool> {
-    if bytes.len() < 4 || bytes[0] != 0xFF || bytes[1] != 0xD8 {
-        return None;
-    }
-    let mut pos = 2;
-    while pos + 4 < bytes.len() {
-        if bytes[pos] != 0xFF {
-            pos += 1;
-            continue;
-        }
-        let marker = bytes[pos + 1];
-        if marker == 0xD8 || marker == 0xD9 || marker == 0x00 || (marker >= 0xD0 && marker <= 0xD7) {
-            pos += 2;
-            continue;
-        }
-        if pos + 4 > bytes.len() {
-            break;
-        }
-        let length = ((bytes[pos + 2] as usize) << 8) | (bytes[pos + 3] as usize);
-        if length < 2 || pos + 2 + length > bytes.len() {
-            break;
-        }
-        // SOF markers: SOF0 (0xC0), SOF1 (0xC1), SOF2 (0xC2), SOF3 (0xC3),
-        // SOF5..SOF7, SOF9..SOF11, SOF13..SOF15 (excluding DHT 0xC4, JPG 0xC8, DAC 0xCC)
-        if (0xC0..=0xCF).contains(&marker) && marker != 0xC4 && marker != 0xC8 && marker != 0xCC {
-            // Byte 9 of marker payload is number of components
-            if pos + 9 < bytes.len() {
-                let num_components = bytes[pos + 9];
-                return Some(num_components == 1);
-            }
-        }
-        pos += 2 + length;
     }
     None
 }
@@ -914,8 +516,7 @@ mod tests {
         ];
 
         for (model, expected) in models {
-            let lower = model.to_lowercase();
-            let is_mono = lower.contains("monochrom") || lower.contains("achromatic");
+            let is_mono = is_monochrome_camera_model(model);
             assert_eq!(is_mono, expected, "Model: {}", model);
         }
     }

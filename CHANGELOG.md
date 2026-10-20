@@ -5,11 +5,14 @@ All notable changes to RapidReady will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.5.2] - 2026-10-17
+## [0.5.2] - 2026-10-18
 
-Performance, stability, and polish release restoring blazing-fast speculative RAM pre-caching with live buffer indicators, synchronizing thumbnail and inspector orientations across all camera portrait orientations (GitHub Issue #2), providing edge-to-edge format-filling Loupe rendering, concurrency-governed full-resolution streaming, canonical volume path normalization, and sanitized EXIF camera body metadata.
+Performance, stability, and polish release restoring blazing-fast speculative RAM pre-caching with live buffer indicators, synchronizing thumbnail and inspector orientations across all camera portrait orientations (GitHub Issue #2), providing edge-to-edge format-filling Loupe rendering, concurrency-governed full-resolution streaming, canonical volume path normalization, cross-platform Windows compilation hardening, and sanitized EXIF camera body metadata.
 
 ### Added & Restored
+- **Cross-Platform & Windows Build Hardening (`metadata_resolver.rs`, `thumbnail.rs`, `lib.rs`):**
+  - **RFC 3484 (`unsafe_extern_blocks`) Compliance:** Updated Win32 API extern block in `metadata_resolver.rs` to `unsafe extern "system"` and macOS bindings in `lib.rs` to `unsafe extern "C"`, ensuring error-free compilation on modern Rust toolchains on Windows.
+  - **Unused Variables Elimination:** Scoped macOS-specific ImageIO variables in `thumbnail.rs` to `#[cfg(target_os = "macos")]`, eliminating compiler warnings across non-macOS platforms.
 - **Viewport Scalability & Large-Display Grid Optimization (`lib.rs`, `thumbnail.rs`, `GridThumbnailItem.tsx`):**
   - **Scalable 256-Request Sequence Window:** In `lib.rs`, expanded the proven protocol handler lookahead cancellation window from 48 to 256. Prevents high-density grid viewports (e.g. 13x13 to 18x15 = 169–270 tiles) on large displays from prematurely aborting visible images with HTTP 499 while reliably dropping requests when the user scrolls past.
   - **Post-Semaphore Fast-Cache Re-check:** In `lib.rs`, requests re-check `get_cached_preview_jpeg_fast` immediately after acquiring a semaphore permit. If an image was already cached by a concurrent request or background worker during the wait, it is served instantly in 0ms without touching the NAS.
