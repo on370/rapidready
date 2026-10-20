@@ -164,21 +164,38 @@ export const LoupeViewer = React.memo(function LoupeViewer({
   // Lazy-load metadata for debounced active image if needed
   useEffect(() => {
     if (!loupeActiveImage) return;
-    if (loupeActiveImage.camera === undefined || loupeActiveImage.is_monochrome_preview === undefined) {
+    if (loupeActiveImage.camera === undefined || loupeActiveImage.is_monochrome_preview === undefined || loupeActiveImage.exposure_bias === undefined) {
       let isMounted = true;
       invoke<{
         date: string | null;
+        date_modified?: string | null;
         camera: string | null;
         lens: string | null;
         iso: string | null;
         aperture: string | null;
         shutter: string | null;
+        focal_length?: string | null;
+        exposure_bias?: string | null;
+        width?: number | null;
+        height?: number | null;
         is_raw?: boolean;
         is_monochrome_sensor?: boolean;
         is_monochrome_preview?: boolean;
         latitude?: number | null;
         longitude?: number | null;
         altitude?: number | null;
+        focal_length_35mm?: string | null;
+        exposure_program?: string | null;
+        metering_mode?: string | null;
+        white_balance?: string | null;
+        flash?: string | null;
+        color_space?: string | null;
+        subject_distance?: string | null;
+        digital_zoom?: string | null;
+        software?: string | null;
+        body_serial?: string | null;
+        lens_serial?: string | null;
+        subsec_time?: string | null;
       }>('get_image_metadata', { path: loupeActiveImage.path })
         .then((meta) => {
           if (isMounted && meta) {
@@ -188,13 +205,30 @@ export const LoupeViewer = React.memo(function LoupeViewer({
               iso: meta.iso || null,
               aperture: meta.aperture || null,
               shutter: meta.shutter || null,
+              focal_length: meta.focal_length || null,
+              exposure_bias: meta.exposure_bias || null,
+              width: meta.width ?? null,
+              height: meta.height ?? null,
               date: meta.date || loupeActiveImage.date,
+              date_modified: meta.date_modified ?? null,
               is_raw: meta.is_raw ?? loupeActiveImage.is_raw,
               is_monochrome_sensor: meta.is_monochrome_sensor ?? false,
               is_monochrome_preview: meta.is_monochrome_preview ?? false,
               latitude: meta.latitude ?? null,
               longitude: meta.longitude ?? null,
               altitude: meta.altitude ?? null,
+              focal_length_35mm: meta.focal_length_35mm ?? null,
+              exposure_program: meta.exposure_program ?? null,
+              metering_mode: meta.metering_mode ?? null,
+              white_balance: meta.white_balance ?? null,
+              flash: meta.flash ?? null,
+              color_space: meta.color_space ?? null,
+              subject_distance: meta.subject_distance ?? null,
+              digital_zoom: meta.digital_zoom ?? null,
+              software: meta.software ?? null,
+              body_serial: meta.body_serial ?? null,
+              lens_serial: meta.lens_serial ?? null,
+              subsec_time: meta.subsec_time ?? null,
             });
           }
         })

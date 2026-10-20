@@ -26,6 +26,13 @@ export function InspectorFileInfoCard({
   }, [activeImage.width, activeImage.height, activeImage.culling?.orientation]);
 
   const formattedCaptureDate = useMemo(() => formatDisplayDate(activeImage.date), [activeImage.date]);
+  const captureDateTitle = useMemo(() => {
+    if (!formattedCaptureDate) return '—';
+    if (activeImage.subsec_time) {
+      return `${formattedCaptureDate}.${activeImage.subsec_time}`;
+    }
+    return formattedCaptureDate;
+  }, [formattedCaptureDate, activeImage.subsec_time]);
   const formattedModifiedDate = useMemo(() => formatDisplayDate(activeImage.date_modified), [activeImage.date_modified]);
   const hasDifferentModifiedDate = useMemo(() => {
     return areDatesDifferent(activeImage.date, activeImage.date_modified);
@@ -72,7 +79,7 @@ export function InspectorFileInfoCard({
             </div>
             <div className={hasDifferentModifiedDate ? "min-w-0" : "min-w-0 col-span-2"}>
               <span className="text-txt-tertiary block text-[10px]">{t('inspector.dateCaptured', 'Aufnahme')}</span>
-              <p className="text-txt-primary font-medium truncate" title={formattedCaptureDate || '—'}>
+              <p className="text-txt-primary font-medium truncate" title={captureDateTitle}>
                 {formattedCaptureDate || '—'}
               </p>
             </div>

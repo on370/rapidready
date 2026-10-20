@@ -311,3 +311,138 @@ pub fn clean_camera_model(raw: &str) -> Option<String> {
 pub fn clean_lens_model(raw: &str) -> Option<String> {
     clean_exif_name(raw, true)
 }
+
+const KNOWN_BRANDS: &[(&str, &str)] = &[
+    ("SONY", "Sony"),
+    ("FUJIFILM", "Fujifilm"),
+    ("NIKON", "Nikon"),
+    ("CANON", "Canon"),
+    ("PANASONIC", "Panasonic"),
+    ("OLYMPUS", "Olympus"),
+    ("PENTAX", "Pentax"),
+    ("RICOH", "Ricoh"),
+    ("LEICA", "Leica"),
+    ("HASSELBLAD", "Hasselblad"),
+    ("SIGMA", "Sigma"),
+    ("APPLE", "Apple"),
+];
+
+const CORP_SUFFIXES: &[&str] = &[
+    "corporation",
+    "corp.",
+    "corp",
+    "inc.",
+    "inc",
+    "co.,ltd.",
+    "co.,ltd",
+    "co.,",
+    "co.",
+    "co",
+    "ltd.",
+    "ltd",
+    "imaging",
+    "optical",
+    "camera",
+    "digital",
+    "company",
+];
+
+/// Normalizes brand casing to photographic standard (e.g. "SONY" -> "Sony").
+pub fn normalize_brand_name(brand: &str) -> String {
+    for (upper, proper) in KNOWN_BRANDS {
+        if brand.eq_ignore_ascii_case(upper) {
+            return proper.to_string();
+        }
+    }
+    brand.to_string()
+}
+
+fn normalize_make(make: &str) -> String {
+    let words: Vec<&str> = make.split_whitespace().collect();
+    let mut filtered_words = Vec::new();
+    for w in words {
+        let clean_w = w.trim_matches(|c| c == ',' || c == '.' || c == '"' || c == '\'').to_lowercase();
+        let is_suffix = CORP_SUFFIXES.iter().any(|s| {
+            s.eq_ignore_ascii_case(w) || s.eq_ignore_ascii_case(&clean_w)
+        });
+        if !is_suffix && !clean_w.is_empty() {
+            filtered_words.push(w.trim_matches(','));
+        }
+    }
+    let candidate = if filtered_words.is_empty() {
+        make.to_string()
+    } else {
+        filtered_words.join(" ")
+    };
+    normalize_brand_name(&candidate)
+}
+
+fn normalize_model_first_word(model: &str) -> String {
+    let words: Vec<&str> = model.split_whitespace().collect();
+    if words.is_empty() {
+        return model.to_string();
+    }
+    let first = words[0];
+    let norm_first = normalize_brand_name(first);
+    if norm_first != first {
+        let mut res = norm_first;
+        for w in &words[1..] {
+            res.push(' ');
+            res.push_str(w);
+        }
+        res
+    } else {
+        model.to_string()
+    }
+}
+
+/// Combines camera make and model intelligently with deduplication and brand harmonization.
+///
+/// 1. Sanitizes both inputs using `clean_camera_model`.
+/// 2. Strips corporate suffixes (e.g. "CORPORATION", "INC.", "IMAGING", "LTD.") from make.
+/// 3. Normalizes known brand names (e.g. "SONY" -> "Sony", "FUJIFILM" -> "Fujifilm").
+/// 4. Handles case where model already starts with or contains make (e.g. "Canon" + "Canon EOS 6D" -> "Canon EOS 6D").
+/// 5. Handles Apple devices ("Apple" + "iPhone 13 Pro" -> "iPhone 13 Pro").
+/// 6. Combines make and model seamlessly (e.g. "SONY" + "ILCE-7RM4" -> "Sony ILCE-7RM4").
+pub fn combine_camera_make_and_model(raw_make: Option<&str>, raw_model: Option<&str>) -> Option<String> {
+    let clean_make = raw_make.and_then(clean_camera_model);
+    let clean_model = raw_model.and_then(clean_camera_model);
+
+    match (clean_make, clean_model) {
+        (None, None) => None,
+        (Some(make), None) => {
+            let norm_make = normalize_make(&make);
+            clean_camera_model(&norm_make)
+        }
+        (None, Some(model)) => {
+            let norm_model = normalize_model_first_word(&model);
+            clean_camera_model(&norm_model)
+        }
+        (Some(make), Some(model)) => {
+            let norm_make = normalize_make(&make);
+            let norm_model = normalize_model_first_word(&model);
+
+            // Special case Apple: iPhone / iPad
+            if norm_make.eq_ignore_ascii_case("Apple") 
+                && (norm_model.to_lowercase().starts_with("iphone") || norm_model.to_lowercase().starts_with("ipad")) 
+            {
+                return clean_camera_model(&norm_model);
+            }
+
+            let model_lower = norm_model.to_lowercase();
+            let make_lower = norm_make.to_lowercase();
+
+            let starts_with_make = model_lower.starts_with(&make_lower);
+            let contains_make_word = norm_model.split_whitespace().any(|w| {
+                w.trim_matches(|c: char| !c.is_alphanumeric()).eq_ignore_ascii_case(&norm_make)
+            });
+
+            if starts_with_make || contains_make_word {
+                clean_camera_model(&norm_model)
+            } else {
+                let combined = format!("{} {}", norm_make, norm_model);
+                clean_camera_model(&combined)
+            }
+        }
+    }
+}

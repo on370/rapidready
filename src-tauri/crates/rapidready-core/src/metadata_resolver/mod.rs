@@ -34,6 +34,30 @@ pub struct ImageMetadata {
     pub longitude: Option<f64>,
     #[serde(default)]
     pub altitude: Option<f64>,
+    #[serde(default)]
+    pub focal_length_35mm: Option<String>,
+    #[serde(default)]
+    pub exposure_program: Option<String>,
+    #[serde(default)]
+    pub metering_mode: Option<String>,
+    #[serde(default)]
+    pub white_balance: Option<String>,
+    #[serde(default)]
+    pub flash: Option<String>,
+    #[serde(default)]
+    pub color_space: Option<String>,
+    #[serde(default)]
+    pub subject_distance: Option<String>,
+    #[serde(default)]
+    pub digital_zoom: Option<String>,
+    #[serde(default)]
+    pub software: Option<String>,
+    #[serde(default)]
+    pub body_serial: Option<String>,
+    #[serde(default)]
+    pub lens_serial: Option<String>,
+    #[serde(default)]
+    pub subsec_time: Option<String>,
 }
 
 pub fn is_video_path(path: &Path) -> bool {
@@ -207,16 +231,63 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
                 }
             };
 
-            // 3. Camera Model
-            if let Some(field) = exif.fields().find(|f| f.tag == exif::Tag::Model) {
-                let raw = extract_ascii_field(field);
-                meta.camera = clean_camera_model(&raw);
-            }
+            // 3. Camera Make & Model
+            let raw_make = exif.fields().find(|f| f.tag == exif::Tag::Make).map(&extract_ascii_field);
+            let raw_model = exif.fields().find(|f| f.tag == exif::Tag::Model).map(&extract_ascii_field);
+            meta.camera = combine_camera_make_and_model(raw_make.as_deref(), raw_model.as_deref());
 
-            // 4. Lens Model
-            if let Some(field) = exif.fields().find(|f| f.tag == exif::Tag::LensModel) {
+            // 4. Lens Model & Fallback via LensSpecification (0xA432)
+            if let Some(field) = exif.fields().find(|f| {
+                f.tag == exif::Tag::LensModel || f.tag == exif::Tag(exif::Context::Tiff, 0xA434)
+            }) {
                 let raw = extract_ascii_field(field);
                 meta.lens = clean_lens_model(&raw);
+            }
+
+            if meta.lens.is_none() {
+                let lens_spec_field = exif.fields().find(|f| {
+                    f.tag == exif::Tag::LensSpecification || f.tag == exif::Tag(exif::Context::Exif, 0xA432) || f.tag == exif::Tag(exif::Context::Tiff, 0xA432)
+                });
+                if let Some(field) = lens_spec_field {
+                    if let exif::Value::Rational(ref vec) = field.value {
+                        if vec.len() >= 4 {
+                            let min_fl = rational_to_f64(&vec[0]).unwrap_or(0.0);
+                            let max_fl = rational_to_f64(&vec[1]).unwrap_or(0.0);
+                            let min_ap = rational_to_f64(&vec[2]).unwrap_or(0.0);
+                            let max_ap = rational_to_f64(&vec[3]).unwrap_or(0.0);
+
+                            if min_fl > 0.0 {
+                                let fl_str = if (min_fl - max_fl).abs() < 0.1 || max_fl <= 0.0 {
+                                    if (min_fl - min_fl.round()).abs() < 0.05 {
+                                        format!("{} mm", min_fl.round() as i64)
+                                    } else {
+                                        format!("{:.1} mm", min_fl)
+                                    }
+                                } else {
+                                    let min_s = if (min_fl - min_fl.round()).abs() < 0.05 { format!("{}", min_fl.round() as i64) } else { format!("{:.1}", min_fl) };
+                                    let max_s = if (max_fl - max_fl.round()).abs() < 0.05 { format!("{}", max_fl.round() as i64) } else { format!("{:.1}", max_fl) };
+                                    format!("{}-{} mm", min_s, max_s)
+                                };
+
+                                let ap_str = if min_ap > 0.0 {
+                                    if (min_ap - max_ap).abs() < 0.05 || max_ap <= 0.0 {
+                                        let s = if (min_ap - min_ap.round()).abs() < 0.05 { format!("{}", min_ap.round() as i64) } else { format!("{:.1}", min_ap) };
+                                        format!(" f/{}", s)
+                                    } else {
+                                        let min_s = if (min_ap - min_ap.round()).abs() < 0.05 { format!("{}", min_ap.round() as i64) } else { format!("{:.1}", min_ap) };
+                                        let max_s = if (max_ap - max_ap.round()).abs() < 0.05 { format!("{}", max_ap.round() as i64) } else { format!("{:.1}", max_ap) };
+                                        format!(" f/{}-{}", min_s, max_s)
+                                    }
+                                } else {
+                                    String::new()
+                                };
+
+                                let combined = format!("{}{}", fl_str, ap_str);
+                                meta.lens = clean_lens_model(&combined);
+                            }
+                        }
+                    }
+                }
             }
 
             // 5. ISO
@@ -340,6 +411,203 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
                             meta.altitude = Some(alt);
                         }
                     }
+                }
+            }
+
+            // 12. Focal Length in 35mm Film (Tag 0xA405)
+            let fl35_field = exif.fields().find(|f| {
+                f.tag == exif::Tag::FocalLengthIn35mmFilm || f.tag == exif::Tag(exif::Context::Exif, 0xA405)
+            });
+            if let Some(field) = fl35_field {
+                if let Some(val) = field.value.get_uint(0) {
+                    if val > 0 {
+                        meta.focal_length_35mm = Some(clean_focal_length(&format!("{} mm", val)));
+                    }
+                }
+            }
+
+            // 13. Exposure Program (Tag 0x8822) & Exposure Mode / Bracket (Tag 0xA402)
+            let prog_field = exif.fields().find(|f| f.tag == exif::Tag::ExposureProgram || f.tag == exif::Tag(exif::Context::Exif, 0x8822));
+            let mut prog_str = prog_field.and_then(|f| f.value.get_uint(0)).and_then(|val| {
+                match val {
+                    1 => Some("Manual (M)".to_string()),
+                    2 => Some("Program (P)".to_string()),
+                    3 => Some("Aperture Priority (A)".to_string()),
+                    4 => Some("Shutter Priority (S)".to_string()),
+                    5 => Some("Creative".to_string()),
+                    6 => Some("Action".to_string()),
+                    7 => Some("Portrait".to_string()),
+                    8 => Some("Landscape".to_string()),
+                    _ => None,
+                }
+            });
+
+            let mode_field = exif.fields().find(|f| f.tag == exif::Tag::ExposureMode || f.tag == exif::Tag(exif::Context::Exif, 0xA402));
+            let is_bracket = mode_field.and_then(|f| f.value.get_uint(0)).map(|v| v == 2).unwrap_or(false);
+            if is_bracket {
+                if let Some(ref mut s) = prog_str {
+                    s.push_str(" · Bracket");
+                } else {
+                    prog_str = Some("Auto Bracket".to_string());
+                }
+            }
+            meta.exposure_program = prog_str;
+
+            // 14. Metering Mode (Tag 0x9207)
+            let meter_field = exif.fields().find(|f| f.tag == exif::Tag::MeteringMode || f.tag == exif::Tag(exif::Context::Exif, 0x9207));
+            if let Some(field) = meter_field {
+                if let Some(val) = field.value.get_uint(0) {
+                    meta.metering_mode = match val {
+                        1 => Some("Average".to_string()),
+                        2 => Some("Center-Weighted".to_string()),
+                        3 => Some("Spot".to_string()),
+                        4 => Some("Multi-Spot".to_string()),
+                        5 => Some("Multi-Segment".to_string()),
+                        6 => Some("Partial".to_string()),
+                        _ => None,
+                    };
+                }
+            }
+
+            // 15. White Balance (Tag 0xA403) + Light Source (Tag 0x9208)
+            let wb_field = exif.fields().find(|f| f.tag == exif::Tag::WhiteBalance || f.tag == exif::Tag(exif::Context::Exif, 0xA403));
+            let wb_val = wb_field.and_then(|f| f.value.get_uint(0));
+
+            let light_field = exif.fields().find(|f| f.tag == exif::Tag::LightSource || f.tag == exif::Tag(exif::Context::Exif, 0x9208));
+            let light_val = light_field.and_then(|f| f.value.get_uint(0)).filter(|&v| v != 0);
+
+            let light_name = light_val.and_then(|v| match v {
+                1 => Some("Daylight"),
+                2 => Some("Fluorescent"),
+                3 => Some("Tungsten"),
+                4 => Some("Flash"),
+                9 => Some("Fine Weather"),
+                10 => Some("Cloudy"),
+                11 => Some("Shade"),
+                12..=15 => Some("Fluorescent"),
+                24 => Some("Studio Tungsten"),
+                _ => None,
+            });
+
+            meta.white_balance = match (wb_val, light_name) {
+                (Some(0), Some(l)) => Some(format!("Auto WB ({})", l)),
+                (Some(0), None) => Some("Auto WB".to_string()),
+                (Some(1), Some(l)) => Some(format!("Manual WB ({})", l)),
+                (Some(1), None) => Some("Manual WB".to_string()),
+                (None, Some(l)) => Some(l.to_string()),
+                _ => None,
+            };
+
+            // 16. Flash (Tag 0x9209)
+            let flash_field = exif.fields().find(|f| f.tag == exif::Tag::Flash || f.tag == exif::Tag(exif::Context::Exif, 0x9209));
+            if let Some(field) = flash_field {
+                if let Some(val) = field.value.get_uint(0) {
+                    let fired = (val & 1) != 0;
+                    if !fired {
+                        meta.flash = Some("Off".to_string());
+                    } else {
+                        let mode = (val >> 3) & 0x03;
+                        let red_eye = (val & 0x40) != 0;
+                        let desc = match (mode, red_eye) {
+                            (1, true) => "Fired (Fill, Red-Eye)",
+                            (1, false) => "Fired (Fill)",
+                            (3, true) => "Fired (Auto, Red-Eye)",
+                            (3, false) => "Fired (Auto)",
+                            (_, true) => "Fired (Red-Eye)",
+                            _ => "Fired",
+                        };
+                        meta.flash = Some(desc.to_string());
+                    }
+                }
+            }
+
+            // 17. Color Space (Tag 0xA001)
+            let cs_field = exif.fields().find(|f| f.tag == exif::Tag::ColorSpace || f.tag == exif::Tag(exif::Context::Exif, 0xA001));
+            if let Some(field) = cs_field {
+                if let Some(val) = field.value.get_uint(0) {
+                    if val == 1 {
+                        meta.color_space = Some("sRGB".to_string());
+                    } else if val == 2 {
+                        meta.color_space = Some("Adobe RGB".to_string());
+                    } else if val == 65535 || val == 0xFFFF {
+                        let interop_field = exif.fields().find(|f| {
+                            f.tag == exif::Tag::InteroperabilityIndex || f.tag == exif::Tag(exif::Context::Exif, 0x0001) || f.tag == exif::Tag(exif::Context::Tiff, 0x0001)
+                        });
+                        let is_adobe = interop_field.map(|f| extract_ascii_field(f).contains("R03")).unwrap_or(false);
+                        if is_adobe {
+                            meta.color_space = Some("Adobe RGB".to_string());
+                        } else {
+                            meta.color_space = Some("Uncalibrated".to_string());
+                        }
+                    }
+                }
+            }
+
+            // 18. Subject Distance (Tag 0x9206)
+            let dist_field = exif.fields().find(|f| f.tag == exif::Tag::SubjectDistance || f.tag == exif::Tag(exif::Context::Exif, 0x9206));
+            if let Some(field) = dist_field {
+                if let exif::Value::Rational(ref vec) = field.value {
+                    if let Some(r) = vec.first() {
+                        if r.denom == 0 || r.num == 0xFFFFFFFF {
+                            meta.subject_distance = Some("∞".to_string());
+                        } else {
+                            let val = r.num as f64 / r.denom as f64;
+                            if val > 0.0 && val < 10000.0 {
+                                if val >= 2.0 {
+                                    meta.subject_distance = Some(format!("{:.1} m", val));
+                                } else {
+                                    meta.subject_distance = Some(format!("{:.2} m", val));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 19. Digital Zoom Ratio (Tag 0xA404)
+            let zoom_field = exif.fields().find(|f| f.tag == exif::Tag::DigitalZoomRatio || f.tag == exif::Tag(exif::Context::Exif, 0xA404));
+            if let Some(field) = zoom_field {
+                if let exif::Value::Rational(ref vec) = field.value {
+                    if let Some(r) = vec.first() {
+                        if r.denom != 0 {
+                            let val = r.num as f64 / r.denom as f64;
+                            if val > 1.01 {
+                                meta.digital_zoom = Some(format!("{:.1}x", val));
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 20. Software (Tag 0x0131)
+            let sw_field = exif.fields().find(|f| f.tag == exif::Tag::Software || f.tag == exif::Tag(exif::Context::Tiff, 0x0131));
+            if let Some(field) = sw_field {
+                let raw = extract_ascii_field(field);
+                meta.software = clean_camera_model(&raw);
+            }
+
+            // 21. Body Serial Number (Tag 0xA431)
+            let bs_field = exif.fields().find(|f| f.tag == exif::Tag::BodySerialNumber || f.tag == exif::Tag(exif::Context::Exif, 0xA431));
+            if let Some(field) = bs_field {
+                let raw = extract_ascii_field(field);
+                meta.body_serial = clean_camera_model(&raw);
+            }
+
+            // 22. Lens Serial Number (Tag 0xA435)
+            let ls_field = exif.fields().find(|f| f.tag == exif::Tag::LensSerialNumber || f.tag == exif::Tag(exif::Context::Exif, 0xA435));
+            if let Some(field) = ls_field {
+                let raw = extract_ascii_field(field);
+                meta.lens_serial = clean_camera_model(&raw);
+            }
+
+            // 23. SubSecTimeOriginal (Tag 0x9291) / SubSecTime (Tag 0x9290)
+            let subsec_field = exif.fields().find(|f| f.tag == exif::Tag::SubSecTimeOriginal || f.tag == exif::Tag(exif::Context::Exif, 0x9291))
+                .or_else(|| exif.fields().find(|f| f.tag == exif::Tag::SubSecTime || f.tag == exif::Tag(exif::Context::Exif, 0x9290)));
+            if let Some(field) = subsec_field {
+                let raw = extract_ascii_field(field);
+                let digits: String = raw.chars().filter(|c| c.is_ascii_digit()).collect();
+                if !digits.is_empty() {
+                    meta.subsec_time = Some(digits);
                 }
             }
         }
@@ -471,7 +739,7 @@ mod tests {
             assert!(meta.is_raw, "DSC02268.ARW must be detected as RAW");
             assert!(!meta.is_monochrome_sensor, "Sony ILCE-7RM4 is not a monochrome sensor");
             assert!(!meta.is_monochrome_preview, "DSC02268 preview is a color photo");
-            assert_eq!(meta.camera.as_deref(), Some("ILCE-7RM4"));
+            assert_eq!(meta.camera.as_deref(), Some("Sony ILCE-7RM4"));
         }
 
         let cr2_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -498,7 +766,7 @@ mod tests {
             let meta = get_image_metadata(&raf_path);
             assert!(meta.is_raw, "DSCF8792.RAF must be detected as RAW");
             assert!(!meta.is_monochrome_sensor, "Fujifilm X-E4 is not a monochrome sensor");
-            assert_eq!(meta.camera.as_deref(), Some("X-E4"));
+            assert_eq!(meta.camera.as_deref(), Some("Fujifilm X-E4"));
         }
     }
 
@@ -724,5 +992,57 @@ mod tests {
             let meta = get_image_metadata(p);
             assert_eq!(meta.camera.as_deref(), Some("Canon DIGITAL IXUS"));
         }
+    }
+
+    #[test]
+    fn test_combine_camera_make_and_model() {
+        assert_eq!(
+            combine_camera_make_and_model(Some("SONY"), Some("DSC-RX100")),
+            Some("Sony DSC-RX100".to_string())
+        );
+        assert_eq!(
+            combine_camera_make_and_model(Some("SONY"), Some("ILCE-6000")),
+            Some("Sony ILCE-6000".to_string())
+        );
+        assert_eq!(
+            combine_camera_make_and_model(Some("SONY"), Some("ILCE-7RM4")),
+            Some("Sony ILCE-7RM4".to_string())
+        );
+        assert_eq!(
+            combine_camera_make_and_model(Some("FUJIFILM"), Some("X-E4")),
+            Some("Fujifilm X-E4".to_string())
+        );
+        assert_eq!(
+            combine_camera_make_and_model(Some("Canon"), Some("Canon EOS 6D")),
+            Some("Canon EOS 6D".to_string())
+        );
+        assert_eq!(
+            combine_camera_make_and_model(Some("NIKON CORPORATION"), Some("NIKON D850")),
+            Some("Nikon D850".to_string())
+        );
+        assert_eq!(
+            combine_camera_make_and_model(Some("OLYMPUS IMAGING CORP."), Some("E-M1")),
+            Some("Olympus E-M1".to_string())
+        );
+        assert_eq!(
+            combine_camera_make_and_model(Some("RICOH IMAGING COMPANY, LTD."), Some("RICOH GR III")),
+            Some("Ricoh GR III".to_string())
+        );
+        assert_eq!(
+            combine_camera_make_and_model(Some("Apple"), Some("iPhone 13 Pro")),
+            Some("iPhone 13 Pro".to_string())
+        );
+        assert_eq!(
+            combine_camera_make_and_model(None, Some("NIKON D850")),
+            Some("Nikon D850".to_string())
+        );
+        assert_eq!(
+            combine_camera_make_and_model(Some("Canon"), None),
+            Some("Canon".to_string())
+        );
+        assert_eq!(
+            combine_camera_make_and_model(Some("Unknown"), Some("Unknown")),
+            None
+        );
     }
 }

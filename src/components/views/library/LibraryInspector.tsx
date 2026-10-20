@@ -143,6 +143,18 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
         latitude?: number | null;
         longitude?: number | null;
         altitude?: number | null;
+        focal_length_35mm?: string | null;
+        exposure_program?: string | null;
+        metering_mode?: string | null;
+        white_balance?: string | null;
+        flash?: string | null;
+        color_space?: string | null;
+        subject_distance?: string | null;
+        digital_zoom?: string | null;
+        software?: string | null;
+        body_serial?: string | null;
+        lens_serial?: string | null;
+        subsec_time?: string | null;
       }>('get_image_metadata', { path: activeImage.path })
         .then(meta => {
           if (isMounted && meta) {
@@ -164,6 +176,18 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
               latitude: meta.latitude ?? null,
               longitude: meta.longitude ?? null,
               altitude: meta.altitude ?? null,
+              focal_length_35mm: meta.focal_length_35mm ?? null,
+              exposure_program: meta.exposure_program ?? null,
+              metering_mode: meta.metering_mode ?? null,
+              white_balance: meta.white_balance ?? null,
+              flash: meta.flash ?? null,
+              color_space: meta.color_space ?? null,
+              subject_distance: meta.subject_distance ?? null,
+              digital_zoom: meta.digital_zoom ?? null,
+              software: meta.software ?? null,
+              body_serial: meta.body_serial ?? null,
+              lens_serial: meta.lens_serial ?? null,
+              subsec_time: meta.subsec_time ?? null,
             });
           }
         })
@@ -234,6 +258,8 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
               activeImage={activeImage}
               isCollapsed={isCollapsed('camera')}
               onToggle={() => toggleSection('camera')}
+              isDetailsOpen={!!collapsedSections['cameraDetails_open']}
+              onToggleDetails={() => toggleSection('cameraDetails_open')}
             />
 
             <InspectorGpsCard

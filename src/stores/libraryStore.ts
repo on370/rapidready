@@ -35,6 +35,18 @@ export interface LibraryImage {
   latitude?: number | null;
   longitude?: number | null;
   altitude?: number | null;
+  focal_length_35mm?: string | null;
+  exposure_program?: string | null;
+  metering_mode?: string | null;
+  white_balance?: string | null;
+  flash?: string | null;
+  color_space?: string | null;
+  subject_distance?: string | null;
+  digital_zoom?: string | null;
+  software?: string | null;
+  body_serial?: string | null;
+  lens_serial?: string | null;
+  subsec_time?: string | null;
 }
 
 export interface ArchiveScanProgress {

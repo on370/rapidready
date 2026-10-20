@@ -26,6 +26,13 @@ function formatDuration(totalSec: number): string {
   return `${pad(mins)}:${pad(secs)} min`;
 }
 
+function formatPhotoRate(rate: number): string {
+  if (rate >= 10) return Math.round(rate).toString();
+  if (rate >= 0.1) return rate.toFixed(1);
+  if (rate > 0) return rate.toFixed(2);
+  return '0';
+}
+
 function useSmoothedEta(
   done: number,
   total: number,
@@ -56,16 +63,21 @@ function useSmoothedEta(
     const samples = samplesRef.current;
     samples.push({ time: now, done, bytes });
 
-    // Keep samples within a rolling 8-second window for responsive yet smoothed estimation
-    while (samples.length > 0 && now - samples[0].time > 8000) {
+    // Keep samples within a rolling 8-second window for responsive yet smoothed estimation,
+    // preserving at least one older reference point if long-running files (e.g. video) exceed 8s
+    while (
+      samples.length > 2 &&
+      now - samples[0].time > 8000 &&
+      samples[1].done < done
+    ) {
       samples.shift();
     }
 
-    // Require at least 1.5 seconds of sample history for an accurate rate
+    // Require at least 0.8 seconds of sample history for an accurate rate
     const oldest = samples[0];
     const durationSec = (now - oldest.time) / 1000;
 
-    if (durationSec >= 1.5 && samples.length >= 2) {
+    if (durationSec >= 0.8 && samples.length >= 2) {
       const deltaDone = Math.max(0, done - oldest.done);
       const deltaBytes = Math.max(0, bytes - oldest.bytes);
 
@@ -203,6 +215,7 @@ export function ArchiveScanBanner({ onRestartScan }: ArchiveScanBannerProps) {
   };
 
   const bottomClass = viewMode === 'loupe' ? 'bottom-28' : 'bottom-4';
+  const displayItemsPerSec = etaInfo.itemsPerSec > 0 ? etaInfo.itemsPerSec : avgItemsPerSec;
 
   const floatingCard = (
     <div className="absolute bottom-full mb-2.5 left-0 opacity-0 pointer-events-none group-hover/help:opacity-100 group-hover/help:pointer-events-auto transition-all duration-150 z-50">
@@ -225,7 +238,7 @@ export function ArchiveScanBanner({ onRestartScan }: ArchiveScanBannerProps) {
             <span className="text-txt-secondary">{t('loading.speed', 'Geschwindigkeit')}:</span>
             <div className="text-right font-mono">
               <span className="font-bold text-accent tabular-nums">
-                {etaInfo.itemsPerSec > 0 ? `${Math.round(etaInfo.itemsPerSec)} ${photosUnit}` : throughput.formattedSpeed}
+                {displayItemsPerSec > 0 ? `${formatPhotoRate(displayItemsPerSec)} ${photosUnit}` : throughput.formattedSpeed}
               </span>
               {throughput.formattedSpeed !== '0 MB/s' && (
                 <span className="text-txt-tertiary text-[10px] ml-1.5 tabular-nums">
@@ -239,7 +252,7 @@ export function ArchiveScanBanner({ onRestartScan }: ArchiveScanBannerProps) {
             <div className="flex items-baseline justify-between text-txt-tertiary text-[10px]">
               <span>{t('loading.avgSpeed', 'Durchschnitt')}:</span>
               <span className="font-mono tabular-nums text-txt-secondary">
-                {avgItemsPerSec.toFixed(1)} {photosUnit}
+                {formatPhotoRate(avgItemsPerSec)} {photosUnit}
               </span>
             </div>
           )}
