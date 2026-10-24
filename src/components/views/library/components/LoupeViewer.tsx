@@ -268,7 +268,7 @@ export const LoupeViewer = React.memo(function LoupeViewer({
             {isLoupeVideo && (
               <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 pointer-events-none flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/80 backdrop-blur-md border border-white/20 text-white shadow-2xl">
                 <Film className="w-3.5 h-3.5 text-accent" />
-                <span className="text-xs font-semibold tracking-wide text-white/95">Video · Poster Frame</span>
+                <span className="text-xs font-semibold tracking-wide text-white/95">{t('inspector.videoPosterFrame', 'Video · Poster Frame')}</span>
               </div>
             )}
           </>

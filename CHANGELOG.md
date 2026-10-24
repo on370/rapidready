@@ -5,6 +5,42 @@ All notable changes to RapidReady will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.3] - 2026-10-24
+
+Feature, precision, and polish release introducing comprehensive technical EXIF inspection with intelligent camera make/model harmonization, 35mm equivalent focal length detection, lens specification fallbacks, and a collapsible extended details drawer; sub-second transfer rate precision for slow NAS/video archives (GitHub Issue #3); a dedicated "Archive, Scanning & High-Speed Cache" in-app guide; comprehensive i18n settings refinement; and major zero-logic codebase modularization across both Rust backend crates and React inspector components.
+
+### Added & Improved
+- **Comprehensive Technical EXIF Inspection & Collapsible Details Drawer (`metadata_resolver/`, `InspectorCameraCard.tsx`, `InspectorFileInfoCard.tsx`, `LoupeViewer.tsx`):**
+  - **Intelligent Camera Make & Model Fusion (`combine_camera_make_and_model`):** Intelligently merges camera manufacturer (`Make`) and model tags (`Model`), strips corporate legal suffixes (`CORPORATION`, `IMAGING CORP.`, `COMPANY, LTD.`), harmonizes brand casing to photographic standard (`Sony`, `Fujifilm`, `Nikon`, `Canon`, `Olympus`, `Ricoh`, etc.), deduplicates redundant prefixes (e.g. `Canon` + `Canon EOS 6D` -> `Canon EOS 6D`), and preserves Apple device naming (`iPhone 13 Pro`).
+  - **`LensSpecification` Fallback (Tag `0xA432`):** When `LensModel` is omitted by camera firmware, automatically decodes the 4 rational values `[min_fl, max_fl, min_ap, max_ap]` into standard focal length and aperture ranges (e.g. `24-70 mm f/2.8`).
+  - **Extended Technical Standard EXIF Parameters:** Reads technical metadata directly from the already-parsed in-memory EXIF header with 0 ms additional I/O: exposure program (`exposure_program` with automatic exposure bracket detection `· Bracket`), metering mode (`metering_mode`), white balance (`white_balance` with light source mapping), flash status (`flash` with bitmask decoding for auto, fill, and red-eye modes), color space (`color_space` with interoperability index check), subject focus distance (`subject_distance`), digital zoom ratio (`digital_zoom`), body/lens serial numbers, software/firmware, and sub-second timestamps (`subsec_time`).
+  - **35mm Equivalent Focal Length Indicator:** In `InspectorCameraCard.tsx`, automatically detects crop sensors and displays the 35mm equivalent focal length inline (e.g. `(10.4 mm · 28 mm KB)` in German, `(10.4 mm · 28 mm eq.)` in English), while keeping clean single-focal length notation for full-frame cameras.
+  - **Collapsible "Extended Details" Drawer:** Integrated directly into `InspectorCameraCard.tsx` with persistent toggle state in `localStorage` (`cameraDetails_open`), displaying a compact monospace summary badge (`M · BKT · sRGB`) when collapsed, and an organized 2-column grid with smart hiding (zero empty rows) when expanded.
+  - **Sub-Second Precision in File Info:** In `InspectorFileInfoCard.tsx`, appends sub-second capture fractions to the capture date tooltip (`title`).
+  - **Loupe View EXIF Passthrough (`LoupeViewer.tsx`):** Replaced legacy partial metadata query with full technical EXIF resolution during Loupe view navigation, populating all inspector details without requiring a second IPC call when opening the inspector.
+- **Accurate Sub-1.0 Photo/s Transfer Rates & Hardened Rolling Window (GitHub Issue #3) (`ArchiveScanBanner.tsx`):**
+  - **Intelligent Decimal Rate Formatting (`formatPhotoRate`):** Rates $\ge 10$ display as whole numbers (`12 photos/s`), rates between $0.1$ and $10$ display with one decimal place (`1.4 photos/s`), and low rates $< 0.1$ display with two decimal places (`0.05 photos/s`), completely eliminating misleading `0 photos/s` or `0.0 photos/s` readouts on slow NAS network shares or large video files.
+  - **Live Fallback Rate:** Uses `avgItemsPerSec` as an immediate fallback whenever the momentary rolling rate drops to 0 during long-running single-file transfers.
+  - **Hardened Rolling Sample Window:** Preserves at least one older reference point with lower `done` count in `useSmoothedEta` even when single-file processing takes longer than 8 seconds, preventing sample buffer starvation.
+  - **Faster Responsiveness:** Reduced sample history requirement from 1.5s to 0.8s for quicker live rate adjustments.
+- **Dedicated In-App Documentation: "Archive, Scanning & High-Speed Cache" (`HelpArchive.tsx`, `HelpModal.tsx`):**
+  - Added new bilingual documentation section explaining RapidReady's two-phase progressive discovery architecture (instant directory scanning vs. background SSD chunk caching for 60–120 FPS scrolling).
+  - Clarified archive synchronization modes: folder refresh (<kbd>F5</kbd>), full delta sync (<kbd>Shift</kbd>+<kbd>F5</kbd>), and complete index/cache rebuilds.
+  - Added dedicated NAS & network storage performance tips detailing zero-latency local caching.
+- **i18n & User Experience Polish:**
+  - **Settings Guided Tour Synchronization (`SettingsView.tsx`, `settings.json`, `onboarding.json`):** Unified `tour` and `settings` locale keys, fixing an issue where German fallback text appeared in the English settings view.
+  - **Localized Video Poster Frame Indicator (`LoupeViewer.tsx`):** Replaced hardcoded text with localized `{t('inspector.videoPosterFrame')}` string.
+  - **Safety & Shortcuts Translations:** Added macOS trash guidance to `HelpSafety.tsx` and polished German shortcut descriptions in `HelpShortcuts.tsx`.
+  - **FeatureCard Badges (`HelpShared.tsx`, `HelpMetadata.tsx`):** Added optional `badge` property to `FeatureCard` and marked upcoming XMP sidecar synchronization with an amber "In Vorbereitung" / "Coming Soon" badge.
+
+### Refactored & Code Quality (Pure Structural Splits — 100% Zero Logic Change)
+- **Rust Backend Modularization (`rapidready-core`, `src-tauri`):**
+  - Gliedered `thumbnail.rs` (3,345 lines) into `thumbnail/` module directory: `mod.rs`, `header_parser.rs`, `jpeg_extract.rs`, `imageio_ffi.rs`, `worker.rs`, and `tests.rs`.
+  - Gliedered `metadata_resolver.rs` (1,127 lines) into `metadata_resolver/` module directory: `mod.rs`, `formatters.rs`, and `monochrome.rs`.
+  - Gliedered `commands.rs` (1,974 lines) into `commands/` module directory: `mod.rs`, `import_cmds.rs`, `archive_cmds.rs`, `culling_cmds.rs`, `collection_cmds.rs`, and `system_cmds.rs`.
+- **Frontend Inspector Modularization (`src/components/views/library/`):**
+  - Gliedered `LibraryInspector.tsx` (1,400 lines) into lightweight orchestrator (249 lines) and dedicated sub-components under `inspector/`: `InspectorPreviewCard`, `InspectorCullingCard`, `InspectorTagsCard`, `InspectorFileInfoCard`, `InspectorCameraCard`, and `InspectorGpsCard`.
+
 ## [0.5.2] - 2026-10-18
 
 Performance, stability, and polish release restoring blazing-fast speculative RAM pre-caching with live buffer indicators, synchronizing thumbnail and inspector orientations across all camera portrait orientations (GitHub Issue #2), providing edge-to-edge format-filling Loupe rendering, concurrency-governed full-resolution streaming, canonical volume path normalization, cross-platform Windows compilation hardening, and sanitized EXIF camera body metadata.

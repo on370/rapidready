@@ -84,7 +84,7 @@ export function HelpSafety() {
       >
         {isEn
           ? 'If you ever delete photos by mistake, simply open your Windows Recycle Bin or macOS Trash and choose "Restore". Photos and their metadata sidecars return to their exact original folder.'
-          : 'Solltest Du versehentlich Fotos gelöscht haben, öffne einfach den Windows-Papierkorb und wähle „Wiederherstellen“. Die Fotos und deren Metadaten-Sidecars landen wieder an ihrem ursprünglichen Platz.'}
+          : 'Solltest Du versehentlich Fotos gelöscht haben, öffne einfach den Windows-Papierkorb bzw. macOS-Papierkorb und wähle „Wiederherstellen“. Die Fotos und deren Metadaten-Sidecars landen wieder an ihrem ursprünglichen Platz.'}
       </TipBox>
 
       <InfoBox

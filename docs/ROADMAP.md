@@ -17,6 +17,32 @@
 
 ## 🚀 Released Milestones
 
+### Released in `v0.5.3` (Build `0167`)
+- [x] **Comprehensive Technical EXIF Extraction & Collapsible Details Drawer (`metadata_resolver/`, `InspectorCameraCard.tsx`, `InspectorFileInfoCard.tsx`, `LoupeViewer.tsx`):**
+  - **Intelligent Camera Make & Model Fusion (`combine_camera_make_and_model`):** Harmonizes camera manufacturer and model strings, strips corporate legal suffixes (`CORPORATION`, `COMPANY, LTD.`), standardizes brand casing (`Sony`, `Fujifilm`, `Nikon`, `Canon`, `Olympus`, `Ricoh`), deduplicates repetitive model prefixes, and preserves mobile devices (`iPhone 13 Pro`).
+  - **`LensSpecification` Fallback (Tag `0xA432`):** Automatically decodes rational lens specification quadruples `[min_fl, max_fl, min_ap, max_ap]` into clean photographer notation (e.g. `24-70 mm f/2.8`) when camera firmware omits `LensModel`.
+  - **Extended Technical EXIF Metadata (0 ms Additional I/O):** Single-pass extraction of standard EXIF fields directly from the opened header: exposure program (with bracket detection), metering mode, white balance (with light source mapping), flash status (bitmask decoding for fill, auto, red-eye), color space, subject focus distance, digital zoom ratio, body/lens serial numbers, and sub-second capture timestamps (`subsec_time`).
+  - **35mm Equivalent Focal Length Indicator:** Displays 35mm equivalent focal length inline for crop sensors (e.g. `10.4 mm (28 mm eq.)` / `(28 mm KB)`), maintaining clean single focal length notation for full-frame cameras.
+  - **Collapsible "Extended Details" Drawer:** Integrated directly into `InspectorCameraCard.tsx` with persistent toggle state in `localStorage` (`cameraDetails_open`), displaying a compact monospace summary badge (`M · BKT · sRGB`) when collapsed, and an organized 2-column key-value grid with smart hiding (zero empty rows) when expanded.
+  - **Sub-Second Precision in File Info:** Appends sub-second capture fractions to the capture date tooltip (`title`) in `InspectorFileInfoCard.tsx`.
+  - **Loupe View Full EXIF Passthrough:** Replaced legacy partial metadata query with full technical EXIF resolution during Loupe navigation, ensuring zero latency when expanding inspector cards.
+- [x] **Accurate Sub-1.0 Photo/s Transfer Rates & Hardened Rolling Window (GitHub Issue #3) (`ArchiveScanBanner.tsx`):**
+  - **Dynamic Decimal Rate Formatting (`formatPhotoRate`):** Eliminates misleading `0 photos/s` or `0.0 photos/s` readouts on slow NAS shares or large video files by rendering rates $\ge 10$ as integers (`12 photos/s`), rates between $0.1$ and $10$ with one decimal (`1.4 photos/s`), and low rates $< 0.1$ with two decimals (`0.05 photos/s`).
+  - **Live Fallback Rate:** Uses `avgItemsPerSec` as an immediate fallback whenever the momentary rolling rate drops to 0 during long-running single-file transfers.
+  - **Hardened Monotonic Rolling Sample Window:** Preserves older reference points with lower `done` count in `useSmoothedEta` even during multi-second single-file operations, preventing sample buffer starvation and ETA spikes.
+  - **Quicker ETA Responsiveness:** Reduced sample history requirement from 1.5s to 0.8s for faster rate adaptation.
+- [x] **Dedicated In-App Documentation: "Archive, Scanning & High-Speed Cache" (`HelpArchive.tsx`, `HelpModal.tsx`):**
+  - Added new bilingual documentation section explaining the two-tier L1 RAM / L2 persistent SSD chunk cache architecture, archive sync modes (<kbd>F5</kbd>, <kbd>Shift</kbd>+<kbd>F5</kbd>), and NAS optimization guidelines.
+  - Enhanced `FeatureCard` with optional badge support (`HelpShared.tsx`, `HelpMetadata.tsx`).
+- [x] **i18n & User Experience Polish:**
+  - **Settings Guided Tour Synchronization (`SettingsView.tsx`, `settings.json`, `onboarding.json`):** Unified locale keys for tour reset and settings cards, eliminating German fallback text in English UI mode.
+  - **Localized Video Poster Frame Indicator:** Replaced hardcoded text in `LoupeViewer.tsx` with localized `{t('inspector.videoPosterFrame')}` string.
+- [x] **Pure Structural Modularization (Zero Logic Change):**
+  - Modularized `thumbnail.rs` (3,345 lines) into `thumbnail/` module directory (`mod.rs`, `header_parser.rs`, `jpeg_extract.rs`, `imageio_ffi.rs`, `worker.rs`, `tests.rs`).
+  - Modularized `metadata_resolver.rs` (1,127 lines) into `metadata_resolver/` module directory (`mod.rs`, `formatters.rs`, `monochrome.rs`).
+  - Modularized `commands.rs` (1,974 lines) into `commands/` module directory (`mod.rs`, `import_cmds.rs`, `archive_cmds.rs`, `culling_cmds.rs`, `collection_cmds.rs`, `system_cmds.rs`).
+  - Modularized `LibraryInspector.tsx` (1,400 lines) into lightweight orchestrator and dedicated sub-cards under `inspector/`.
+
 ### Released in `v0.5.2` (Build `015E`)
 - [x] **Cross-Platform & Windows Build Hardening (`metadata_resolver.rs`, `thumbnail.rs`, `lib.rs`):**
   - **RFC 3484 (`unsafe_extern_blocks`) Compliance:** Updated Win32 API extern block in `metadata_resolver.rs` to `unsafe extern "system"` and macOS bindings in `lib.rs` to `unsafe extern "C"`, ensuring clean compilation on modern Rust toolchains on Windows.
@@ -871,7 +897,7 @@
        - **Video Codec & Bitrate:** Apple ProRes, H.265 (HEVC), H.264 (AVC), AV1.
        - **Audio Format:** Sample rate (48 kHz) and bit depth (24-bit LPCM, AAC).
   - **Ergonomic Inspector UI Architecture:**
-    - Dedicated collapsible section: *"Erweiterte EXIF-Daten & Technische Details"* in `LibraryInspector.tsx`, keeping the main exposure and file info cards clean while offering instant drill-down on demand.
+    - [x] Dedicated collapsible section: *"Erweiterte EXIF-Daten & Technische Details"* in `InspectorCameraCard.tsx` (`v0.5.3` / Build `0167`), keeping the main exposure and file info cards clean while offering instant drill-down on demand.
 - [ ] **Inspector Live-Histogram & Preview Viewport Switcher:**
   - **Context & Goal:**
     Photographers require rapid luminance and RGB exposure evaluation directly within the Inspector sidebar without needing to open the full Loupe view or switch to an external RAW developer.

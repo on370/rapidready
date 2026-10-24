@@ -472,9 +472,9 @@ export function SettingsView() {
                 <Compass className="w-5 h-5 text-accent" />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-txt-primary">{tOnboarding('settings.title', 'Geführte Einführung')}</h3>
+                <h3 className="text-sm font-semibold text-txt-primary">{t('tour.title', tOnboarding('settings.title', 'Geführte Einführung'))}</h3>
                 <p className="text-xs text-txt-secondary mt-0.5 max-w-xl">
-                  {tOnboarding('settings.description', 'Starte die interaktive Tour durch RapidReady jederzeit erneut, um alle Arbeitsbereiche und Tastenkürzel kennenzulernen.')}
+                  {t('tour.description', tOnboarding('settings.description', 'Starte die interaktive Tour durch RapidReady jederzeit erneut, um alle Arbeitsbereiche und Tastenkürzel kennenzulernen.'))}
                 </p>
               </div>
             </div>
@@ -484,7 +484,7 @@ export function SettingsView() {
               className="px-3.5 py-2 rounded-lg bg-app-panel hover:bg-app-hover border border-app-border hover:border-accent/40 text-xs font-semibold text-txt-primary hover:text-accent transition-all flex items-center gap-2 cursor-pointer shadow-xs active:scale-98 flex-shrink-0"
             >
               <Compass className="w-3.5 h-3.5 text-accent" />
-              <span>{tOnboarding('settings.replayButton', 'Tour erneut starten')}</span>
+              <span>{t('tour.replayButton', tOnboarding('settings.replayButton', 'Tour erneut starten'))}</span>
             </button>
           </div>
         </div>

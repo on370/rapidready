@@ -115,15 +115,23 @@ export function SectionHeading({ title, subtitle, badge }: SectionHeadingProps) 
 interface FeatureCardProps {
   icon: React.ReactNode;
   title: string;
+  badge?: string;
   children: React.ReactNode;
 }
 
-export function FeatureCard({ icon, title, children }: FeatureCardProps) {
+export function FeatureCard({ icon, title, badge, children }: FeatureCardProps) {
   return (
     <div className="p-3.5 bg-app-card border border-app-border rounded-xl flex flex-col gap-2 shadow-xs">
-      <div className="flex items-center gap-2 text-txt-primary font-semibold text-xs">
-        <span className="text-accent">{icon}</span>
-        <span>{title}</span>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-txt-primary font-semibold text-xs">
+          <span className="text-accent">{icon}</span>
+          <span>{title}</span>
+        </div>
+        {badge && (
+          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-400/15 text-amber-300 border border-amber-400/30 font-semibold whitespace-nowrap">
+            {badge}
+          </span>
+        )}
       </div>
       <div className="text-xs text-txt-secondary leading-relaxed">{children}</div>
     </div>

@@ -20,7 +20,9 @@
   },
   "settings": {
     "title": "Geführte Einführung",
+    "description": "Starte die interaktive Tour durch RapidReady jederzeit erneut, um alle Arbeitsbereiche und Tastenkürzel kennenzulernen.",
     "subtitle": "Die wichtigsten Workflows, Tastaturbefehle und Fotobuch-Exportfunktionen kennenlernen",
+    "replayButton": "Tour erneut starten",
     "replayBtn": "Tour wiederholen"
   },
   "steps": {

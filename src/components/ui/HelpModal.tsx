@@ -4,6 +4,7 @@ import {
   Search,
   BookOpen,
   Keyboard,
+  HardDrive,
   FolderDown,
   Zap,
   FolderTree,
@@ -16,6 +17,7 @@ import { listen } from '@tauri-apps/api/event';
 import { Kbd } from './help/HelpShared';
 
 import { HelpShortcuts } from './help/sections/HelpShortcuts';
+import { HelpArchive } from './help/sections/HelpArchive';
 import { HelpImport } from './help/sections/HelpImport';
 import { HelpCulling } from './help/sections/HelpCulling';
 import { HelpCollections } from './help/sections/HelpCollections';
@@ -23,7 +25,7 @@ import { HelpExport } from './help/sections/HelpExport';
 import { HelpMetadata } from './help/sections/HelpMetadata';
 import { HelpSafety } from './help/sections/HelpSafety';
 
-type SectionId = 'shortcuts' | 'import' | 'culling' | 'collections' | 'export' | 'metadata' | 'safety';
+type SectionId = 'shortcuts' | 'archive' | 'import' | 'culling' | 'collections' | 'export' | 'metadata' | 'safety';
 
 interface HelpSection {
   id: SectionId;
@@ -74,6 +76,28 @@ export function HelpModal() {
           'drehen',
         ],
         component: HelpShortcuts,
+      },
+      {
+        id: 'archive',
+        title: isEn ? 'Archive, Scanning & High-Speed Cache' : 'Archiv, Scan & High-Speed-Cache',
+        shortTitle: isEn ? 'Archive & Cache' : 'Archiv & Cache',
+        icon: <HardDrive className="w-4 h-4" />,
+        keywords: [
+          'archive',
+          'archiv',
+          'scan',
+          'caching',
+          'cache',
+          'nas',
+          'ssd',
+          'thumbnails',
+          'sync',
+          'f5',
+          'rebuild',
+          'aktualisieren',
+          'delta',
+        ],
+        component: HelpArchive,
       },
       {
         id: 'import',

@@ -260,6 +260,7 @@
     "bwWarningTooltip": "The camera was set to a Black & White picture style. The preview image is monochrome, but the RAW file contains the sensor's full color information.",
     "previewRendering": "Preview: In-Camera JPEG",
     "inCameraPreviewTooltip": "Embedded in-camera preview (color and exposure may differ from RAW development).",
+    "videoPosterFrame": "Video · Poster Frame",
     "location": "Location / GPS",
     "coordinates": "Coordinates",
     "altitude": "Altitude",

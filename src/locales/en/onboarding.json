@@ -20,7 +20,9 @@
   },
   "settings": {
     "title": "Guided Tour",
+    "description": "Replay the interactive tour anytime to explore core workflows, keyboard shortcuts, and photo book features.",
     "subtitle": "Discover core features, keyboard shortcuts, and photo book export workflows",
+    "replayButton": "Replay Tour",
     "replayBtn": "Replay Tour"
   },
   "steps": {

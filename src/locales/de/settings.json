@@ -87,5 +87,10 @@
     "download": "Herunterladen",
     "checkError": "Fehler beim Prüfen auf Updates: {{error}}",
     "connectionError": "Keine Verbindung zu GitHub möglich (Offline oder Anfrage blockiert)"
+  },
+  "tour": {
+    "title": "Geführte Einführung",
+    "description": "Starte die interaktive Tour durch RapidReady jederzeit erneut, um alle Arbeitsbereiche und Tastenkürzel kennenzulernen.",
+    "replayButton": "Tour erneut starten"
   }
 }

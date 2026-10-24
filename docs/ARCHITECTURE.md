@@ -39,14 +39,21 @@ app/
 │   └── set-version.js                  # Synchronous version bumper
 ├── src/                                # React 19 Frontend
 │   ├── components/                     # Modular UI components (views, layout, ui)
+│   │   └── views/library/inspector/    # Modular Inspector sub-cards (Camera, Histogram, Location, etc.)
 │   ├── stores/                         # Zustand stores (libraryStore, importStore, settingsStore)
 │   ├── locales/                        # Bilingual translations (en, de)
-│   └── utils/                          # Frontend helpers (image URLs, normalizers)
+│   └── utils/                          # Frontend helpers (image URLs, normalizers, formatters)
 ├── src-tauri/                          # Tauri v2 Desktop Shell
 │   ├── Cargo.toml                      # Main Tauri binary crate
 │   ├── src/
 │   │   ├── lib.rs                      # Tauri runtime setup & custom protocol handlers
-│   │   ├── commands.rs                 # IPC command handlers invoked from React
+│   │   ├── commands/                   # Modular IPC command handlers invoked from React
+│   │   │   ├── mod.rs                  # Submodule declarations & public re-exports
+│   │   │   ├── archive_cmds.rs         # Directory watching, scanning & chunk cache IPC
+│   │   │   ├── collection_cmds.rs      # Collections & photobook export IPC
+│   │   │   ├── culling_cmds.rs         # Ratings, picks, rejects & sidecar IPC
+│   │   │   ├── import_cmds.rs          # Memory card scanning & file ingestion IPC
+│   │   │   └── system_cmds.rs          # OS reveal, trash, external app launcher IPC
 │   │   └── main.rs                     # Platform entrypoint
 │   └── crates/
 │       └── rapidready-core/            # Standalone, reusable Rust business logic
@@ -60,9 +67,18 @@ app/
 │               ├── culling.rs          # Atomic sidecar I/O and RapidRAW state adapter
 │               ├── date_resolver.rs    # Multi-tier EXIF/file creation date resolution
 │               ├── import_index.rs     # SQLite hash-based duplicate prevention
-│               ├── metadata_resolver.rs# Single-pass EXIF, GPS, and monochrome detection
+│               ├── metadata_resolver/  # Single-pass EXIF, GPS, and monochrome detection
+│               │   ├── mod.rs          # Main resolver, types, caching & tests
+│               │   ├── formatters.rs   # Technical EXIF formatters (shutter, aperture, camera make/model)
+│               │   └── monochrome.rs   # In-camera B&W / monochrome profile detection
 │               ├── scanner.rs          # Memory card & folder media ingestion scanner
-│               └── thumbnail.rs        # Embedded RAW JPEG extractor, multi-scale downscaler & RAM LRU cache
+│               └── thumbnail/          # Embedded RAW JPEG extraction & multi-scale chunk caching
+│                   ├── mod.rs          # Public API, LRU RAM cache, pre-warming & scale logic
+│                   ├── header_parser.rs# Sub-millisecond TIFF/CR3/RAF header-slice parsers
+│                   ├── jpeg_extract.rs # Bitstream JPEG validation & in-place orientation injection
+│                   ├── imageio_ffi.rs  # macOS ImageIO downscaling bindings & native fallbacks
+│                   ├── worker.rs       # Multi-threaded background thumbnail generation workers
+│                   └── tests.rs        # Comprehensive test suite & regression tests
 ├── package.json                        # Node dependencies and build scripts
 └── CONTRIBUTING.md                     # Contributor onboarding guide
 ```

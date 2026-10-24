@@ -87,5 +87,10 @@
     "download": "Download",
     "checkError": "Error checking for updates: {{error}}",
     "connectionError": "Unable to connect to GitHub (offline or connection blocked)"
+  },
+  "tour": {
+    "title": "Guided Tour",
+    "description": "Replay the interactive tour anytime to explore core workflows, keyboard shortcuts, and photo book features.",
+    "replayButton": "Replay Tour"
   }
 }

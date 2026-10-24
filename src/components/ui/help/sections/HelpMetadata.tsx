@@ -52,17 +52,15 @@ export function HelpMetadata() {
         <FeatureCard
           icon={<FileCode className="w-4 h-4" />}
           title={isEn ? 'Industry Standard XMP Sidecars' : 'Industriestandard XMP-Sidecars'}
+          badge={isEn ? 'Coming Soon' : 'In Vorbereitung'}
         >
           {isEn ? (
             <>
-              Ratings, color labels, and keywords are not locked inside a proprietary database. Instead,
-              they are synchronously written to standard <code>.xmp</code> sidecar files alongside your RAWs.
+              Ratings, color labels, and keywords are currently managed without delay in RapidReady&apos;s local high-speed database. Direct, bidirectional synchronization with standard <code>.xmp</code> sidecar files for seamless exchange with Lightroom, Capture One, and RapidRAW is currently in preparation and will arrive in an upcoming update.
             </>
           ) : (
             <>
-              Bewertungen, Farblabels und Stichwörter werden nicht in einer proprietären Datenbank
-              eingeschlossen, sondern synchron in standards-konforme <code>.xmp</code>-Dateien neben Deinen RAWs
-              geschrieben.
+              Bewertungen, Farblabels und Stichwörter werden aktuell verzögerungsfrei in RapidReadys lokaler Hochgeschwindigkeits-Datenbank verwaltet. Die direkte, bidirektionale Synchronisation in standards-konforme <code>.xmp</code>-Dateien für den nahtlosen Austausch mit Lightroom, Capture One und RapidRAW befindet sich in Vorbereitung und folgt in einem kommenden Update.
             </>
           )}
         </FeatureCard>
@@ -76,15 +74,15 @@ export function HelpMetadata() {
         }
       >
         {isEn
-          ? 'Because RapidReady uses open Adobe XMP specifications, Adobe Lightroom, Adobe Bridge, Capture One, and RapidRAW automatically recognize your star ratings, color codes, and tags as soon as you open the folders.'
-          : 'Weil RapidReady offene Adobe-XMP-Spezifikationen nutzt, erkennen Adobe Lightroom, Adobe Bridge, Capture One und RapidRAW Deine vergebenen Sterne, Farbcodes und Stichwörter automatisch, sobald Du die Ordner dort öffnest.'}
+          ? 'With the upcoming XMP sidecar update, Adobe Lightroom, Adobe Bridge, Capture One, and RapidRAW will automatically recognize your star ratings, color codes, and tags as soon as you open the folders.'
+          : 'Mit dem bevorstehenden XMP-Sidecar-Update werden Adobe Lightroom, Adobe Bridge, Capture One und RapidRAW Deine vergebenen Sterne, Farbcodes und Stichwörter automatisch erkennen, sobald Du die Ordner dort öffnest.'}
       </TipBox>
 
       <InfoBox
         title={
           isEn
-            ? 'Fast Tag Filtering in Header'
-            : 'Schnelle Tag-Filterung im Header'
+            ? 'Fast Tag Filtering in Filter Bar'
+            : 'Schnelle Tag-Filterung in der Filterleiste'
         }
       >
         {isEn
