@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, ChevronRight, ScanEye, Check, Play, Camera, Info } from "lucide-react";
+import { ChevronDown, ChevronRight, ScanEye, Check, Play, Camera, Info, Film } from "lucide-react";
 import { LibraryImage } from "../../../../stores/libraryStore";
 import { useLibraryUIStore } from "../../../../stores/libraryUIStore";
 import { getRrImageUrl } from "../../../../utils/image";
@@ -28,9 +28,11 @@ export function InspectorPreviewCard({
   const inspectorImageRef = useRef<HTMLImageElement | null>(null);
   const inspectorContainerRef = useRef<HTMLDivElement | null>(null);
   const [inspectorPreviewSrc, setInspectorPreviewSrc] = useState<string>('');
+  const [loadFailed, setLoadFailed] = useState<boolean>(false);
 
   // Progressive preview loading: instant thumbnail + background fullres
   useEffect(() => {
+    setLoadFailed(false);
     const currentPath = activeImage.path;
     const thumbUrl = getRrImageUrl(currentPath, false, activeImage.culling?.orientation, 1, activeImage.size, activeImage.mtime);
     const targetFullresUrl = getRrImageUrl(currentPath, true, activeImage.culling?.orientation, undefined, activeImage.size, activeImage.mtime);
@@ -42,6 +44,7 @@ export function InspectorPreviewCard({
     img.src = targetFullresUrl;
     img.onload = () => {
       setInspectorPreviewSrc(prev => (prev === thumbUrl ? targetFullresUrl : prev));
+      setLoadFailed(false);
     };
   }, [activeImage.path, activeImage.culling?.orientation, activeImage.size, activeImage.mtime]);
 
@@ -93,18 +96,45 @@ export function InspectorPreviewCard({
             ref={inspectorContainerRef}
             className="relative w-full aspect-[3/2] rounded-xl overflow-hidden border border-app-border bg-app-deepest group"
           >
-            <img 
-              ref={inspectorImageRef}
-              src={inspectorPreviewSrc || getRrImageUrl(activeImage.path, false, activeImage.culling?.orientation, undefined, activeImage.size, activeImage.mtime)} 
-              alt={activeImage.name} 
-              crossOrigin="anonymous"
-              className="w-full h-full object-contain" 
-            />
-            <FocusPeakingOverlay 
-              imageRef={inspectorImageRef}
-              containerRef={inspectorContainerRef}
-              triggerUpdate={inspectorPreviewSrc}
-            />
+            {loadFailed && (isVideo || activeImage.is_video) ? (
+              <div className="w-full h-full flex flex-col items-center justify-center text-center p-3 gap-1.5 select-none">
+                <div className="w-9 h-9 rounded-xl bg-white/[0.04] border border-white/10 flex items-center justify-center text-txt-tertiary shadow-sm">
+                  <Film className="w-4 h-4 text-txt-secondary" />
+                </div>
+                <div className="flex items-center justify-center gap-1.5 max-w-[92%]">
+                  <span className="font-mono text-[11px] text-txt-primary truncate" title={activeImage.name}>
+                    {activeImage.name}
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider bg-white/10 text-white/90 border border-white/15 shrink-0">
+                    {extension.toUpperCase()}
+                  </span>
+                </div>
+                <div className="flex flex-col gap-0.5 max-w-[92%]">
+                  <p className="text-[11px] font-semibold text-txt-primary leading-tight">
+                    {t('inspector.videoPreviewUnavailable', 'Keine Vorschau für dieses Videoformat')}
+                  </p>
+                  <p className="text-[10px] text-txt-secondary leading-snug">
+                    {t('inspector.videoPreviewUnavailableHint', 'Das Betriebssystem kann dieses Format nicht dekodieren. Die Datei bleibt unverändert.')}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <>
+                <img 
+                  ref={inspectorImageRef}
+                  src={inspectorPreviewSrc || getRrImageUrl(activeImage.path, false, activeImage.culling?.orientation, undefined, activeImage.size, activeImage.mtime)} 
+                  alt={activeImage.name} 
+                  crossOrigin="anonymous"
+                  onError={() => setLoadFailed(true)}
+                  className="w-full h-full object-contain" 
+                />
+                <FocusPeakingOverlay 
+                  imageRef={inspectorImageRef}
+                  containerRef={inspectorContainerRef}
+                  triggerUpdate={inspectorPreviewSrc}
+                />
+              </>
+            )}
             {activeImage.culling.flag === -1 && (
               <div className="absolute inset-0 bg-danger/25 pointer-events-none z-10" />
             )}
@@ -120,18 +150,20 @@ export function InspectorPreviewCard({
                 </span>
               )}
             </div>
-            <div className="absolute bottom-2 left-2 flex items-center gap-1.5 bg-black/80 backdrop-blur-sm border border-white/15 shadow-sm px-2 py-0.5 rounded text-[11px] font-mono text-white z-20">
-              {isVideo ? (
-                <span className="text-accent font-semibold flex items-center gap-1">
-                  <Play className="w-2.5 h-2.5 fill-accent" />
-                  {extension}
-                </span>
-              ) : (
-                <span className={isRaw ? "text-accent font-semibold" : "text-white/95 font-semibold"}>{extension}</span>
-              )}
-              <span className="text-white/40">·</span>
-              <span>{(activeImage.size / (1024 * 1024)).toFixed(1)} MB</span>
-            </div>
+            {!(loadFailed && (isVideo || activeImage.is_video)) && (
+              <div className="absolute bottom-2 left-2 flex items-center gap-1.5 bg-black/80 backdrop-blur-sm border border-white/15 shadow-sm px-2 py-0.5 rounded text-[11px] font-mono text-white z-20">
+                {isVideo ? (
+                  <span className="text-accent font-semibold flex items-center gap-1">
+                    <Play className="w-2.5 h-2.5 fill-accent" />
+                    {extension}
+                  </span>
+                ) : (
+                  <span className={isRaw ? "text-accent font-semibold" : "text-white/95 font-semibold"}>{extension}</span>
+                )}
+                <span className="text-white/40">·</span>
+                <span>{(activeImage.size / (1024 * 1024)).toFixed(1)} MB</span>
+              </div>
+            )}
           </div>
 
           {/* Video Media Container Badge */}

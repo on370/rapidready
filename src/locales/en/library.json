@@ -261,6 +261,8 @@
     "previewRendering": "Preview: In-Camera JPEG",
     "inCameraPreviewTooltip": "Embedded in-camera preview (color and exposure may differ from RAW development).",
     "videoPosterFrame": "Video · Poster Frame",
+    "videoPreviewUnavailable": "No preview available for this video format",
+    "videoPreviewUnavailableHint": "Your operating system cannot decode this format. The file is left untouched.",
     "location": "Location / GPS",
     "coordinates": "Coordinates",
     "altitude": "Altitude",

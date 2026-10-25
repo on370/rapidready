@@ -261,6 +261,8 @@
     "previewRendering": "Vorschau: In-Camera JPEG",
     "inCameraPreviewTooltip": "Eingebettete Kamera-Vorschau (Farbe & Belichtung können vom RAW-Entwickler abweichen).",
     "videoPosterFrame": "Video · Standbild",
+    "videoPreviewUnavailable": "Keine Vorschau für dieses Videoformat",
+    "videoPreviewUnavailableHint": "Das Betriebssystem kann dieses Format nicht dekodieren. Die Datei bleibt unverändert.",
     "location": "Standort / GPS",
     "coordinates": "Koordinaten",
     "altitude": "Höhe",

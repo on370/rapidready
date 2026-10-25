@@ -1,5 +1,8 @@
 import { useState, useRef, useEffect, useCallback, MouseEvent as ReactMouseEvent, WheelEvent } from "react";
+import { useTranslation } from "react-i18next";
+import { Film } from "lucide-react";
 import { useLibraryUIStore } from "../../../stores/libraryUIStore";
+import { isVideoFilename } from "../../../utils/image";
 import { FocusPeakingOverlay } from "./components/FocusPeakingOverlay";
 
 interface ZoomableImageProps {
@@ -10,13 +13,18 @@ interface ZoomableImageProps {
 }
 
 export function ZoomableImage({ src, previewSrc, alt, onContextMenu }: ZoomableImageProps) {
+  const { t } = useTranslation('library');
   const { invertScrollZoom, loupeScale, setLoupeScale } = useLibraryUIStore();
   const [currentSrc, setCurrentSrc] = useState(previewSrc || src);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [isMinimapDragging, setIsMinimapDragging] = useState(false);
   const [isZoomTransitioning, setIsZoomTransitioning] = useState(false);
   const zoomTransitionTimeoutRef = useRef<number | null>(null);
+
+  const isVideo = isVideoFilename(alt) || ['wmv', 'flv'].includes(alt.split('.').pop()?.toLowerCase() || '');
+  const extension = (alt.split('.').pop() || 'VIDEO').toUpperCase();
   
   const isZoomed = loupeScale > 0;
   const scale = loupeScale > 0 ? loupeScale : 1;
@@ -38,6 +46,7 @@ export function ZoomableImage({ src, previewSrc, alt, onContextMenu }: ZoomableI
   // Reset state & progressive load: show preview immediately, load full-res in background
   useEffect(() => {
     let canceled = false;
+    setLoadFailed(false);
     setLoupeScale(0);
     setPosition({ x: 0, y: 0 });
 
@@ -52,6 +61,7 @@ export function ZoomableImage({ src, previewSrc, alt, onContextMenu }: ZoomableI
       img.onload = () => {
         if (!canceled) {
           setCurrentSrc(src);
+          setLoadFailed(false);
         }
       };
     }
@@ -303,7 +313,7 @@ export function ZoomableImage({ src, previewSrc, alt, onContextMenu }: ZoomableI
       onWheel={onWheel}
       onContextMenu={onContextMenu}
     >
-      {isZoomed && (
+      {isZoomed && !(loadFailed && isVideo) && (
         <div 
           ref={minimapRef}
           onMouseDown={onMinimapMouseDown}
@@ -327,33 +337,60 @@ export function ZoomableImage({ src, previewSrc, alt, onContextMenu }: ZoomableI
         </div>
       )}
 
-      <img
-        ref={imageRef}
-        src={currentSrc}
-        alt={alt}
-        crossOrigin="anonymous"
-        onMouseDown={onMouseDown}
-        onTransitionEnd={() => setIsZoomTransitioning(false)}
-        className={`select-none ${isZoomTransitioning ? "transition-transform duration-200" : ""}`}
-        style={{
-          cursor: isZoomed ? (isDragging ? 'grabbing' : 'grab') : 'zoom-in',
-          transform: isZoomed 
-            ? `translate(${position.x}px, ${position.y}px) scale(${scale})` 
-            : 'scale(1)',
-          width: isZoomed ? 'auto' : '100%',
-          height: isZoomed ? 'auto' : '100%',
-          maxWidth: isZoomed ? 'none' : '100%',
-          maxHeight: isZoomed ? 'none' : '100%',
-          objectFit: isZoomed ? 'none' : 'contain',
-        }}
-        draggable={false}
-      />
+      {loadFailed && isVideo ? (
+        <div className="w-full h-full flex flex-col items-center justify-center text-center p-6 gap-3 select-none bg-app-deepest">
+          <div className="w-16 h-16 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-center text-txt-secondary shadow-lg">
+            <Film className="w-8 h-8 text-txt-tertiary" />
+          </div>
+          <div className="flex items-center justify-center gap-2 max-w-md">
+            <span className="font-mono text-xs text-txt-primary truncate" title={alt}>
+              {alt}
+            </span>
+            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider bg-white/10 text-white/90 border border-white/15 shrink-0">
+              {extension}
+            </span>
+          </div>
+          <div className="flex flex-col gap-1 max-w-sm">
+            <p className="text-xs font-semibold text-txt-primary">
+              {t('inspector.videoPreviewUnavailable', 'Keine Vorschau für dieses Videoformat')}
+            </p>
+            <p className="text-[11px] text-txt-secondary leading-relaxed">
+              {t('inspector.videoPreviewUnavailableHint', 'Das Betriebssystem kann dieses Format nicht dekodieren. Die Datei bleibt unverändert.')}
+            </p>
+          </div>
+        </div>
+      ) : (
+        <>
+          <img
+            ref={imageRef}
+            src={currentSrc}
+            alt={alt}
+            crossOrigin="anonymous"
+            onError={() => setLoadFailed(true)}
+            onMouseDown={onMouseDown}
+            onTransitionEnd={() => setIsZoomTransitioning(false)}
+            className={`select-none ${isZoomTransitioning ? "transition-transform duration-200" : ""}`}
+            style={{
+              cursor: isZoomed ? (isDragging ? 'grabbing' : 'grab') : 'zoom-in',
+              transform: isZoomed 
+                ? `translate(${position.x}px, ${position.y}px) scale(${scale})` 
+                : 'scale(1)',
+              width: isZoomed ? 'auto' : '100%',
+              height: isZoomed ? 'auto' : '100%',
+              maxWidth: isZoomed ? 'none' : '100%',
+              maxHeight: isZoomed ? 'none' : '100%',
+              objectFit: isZoomed ? 'none' : 'contain',
+            }}
+            draggable={false}
+          />
 
-      <FocusPeakingOverlay
-        imageRef={imageRef}
-        containerRef={containerRef}
-        triggerUpdate={{ position, currentSrc }}
-      />
+          <FocusPeakingOverlay
+            imageRef={imageRef}
+            containerRef={containerRef}
+            triggerUpdate={{ position, currentSrc }}
+          />
+        </>
+      )}
     </div>
   );
 }
