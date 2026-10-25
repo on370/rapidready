@@ -239,7 +239,8 @@ pub fn run() {
                     if is_fullres {
                         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
                         
-                        if ["cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2", "pef", "3fr", "x3f", "nrw", "heic", "heif", "hif", "mp4", "mov", "m4v", "avi"].contains(&ext.as_str()) {
+                        // Video extensions must stay in sync with archive.rs VIDEO list; otherwise the generic else-branch would read the whole video file.
+                        if ["cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2", "pef", "3fr", "x3f", "nrw", "heic", "heif", "hif", "mp4", "mov", "m4v", "avi", "mkv", "mts", "m2ts", "wmv", "webm", "flv"].contains(&ext.as_str()) {
                             match rapidready_core::thumbnail::get_max_preview_jpeg_with_orient_and_hints(path, orient_param, size_param, mtime_param) {
                                 Ok(bytes) => {
                                     return Response::builder()
