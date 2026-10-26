@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Settings, Folder, Plus, Globe, Settings2, Trash2, Edit2, Check, MapPin, Sparkles, RefreshCw, ArrowUpRight, CheckCircle2, AlertCircle, ChevronDown, Compass } from "lucide-react";
+import { Settings, Folder, Plus, Globe, Settings2, Trash2, Edit2, Check, MapPin, Sparkles, RefreshCw, ArrowUpRight, CheckCircle2, AlertCircle, ChevronDown, Compass, ShieldAlert } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -95,6 +95,9 @@ export function SettingsView() {
     */
     openRapidRaw, setOpenRapidRaw,
     startupView, setStartupView,
+    shortcutPreset, setShortcutPreset,
+    enableFolderDeletion, setEnableFolderDeletion,
+    allowDirectFolderDeletion, setAllowDirectFolderDeletion,
     gpsMapProvider, setGpsMapProvider,
     checkForUpdates, setCheckForUpdates,
     includeBetaUpdates, setIncludeBetaUpdates,
@@ -275,6 +278,77 @@ export function SettingsView() {
                 <p className="text-xs text-txt-tertiary">{t('general.invertScrollZoom.desc')}</p>
               </div>
               <div className={`toggle-track ${invertScrollZoom ? 'on' : ''}`} onClick={() => setInvertScrollZoom(!invertScrollZoom)}>
+                <div className="toggle-knob"></div>
+              </div>
+            </div>
+
+            {/* Shortcut Preset */}
+            <div className="px-5 py-4 flex items-center justify-between">
+              <div>
+                <p className="text-sm text-txt-primary">{t('general.shortcutPreset.title', 'Tastaturkürzel-Schema')}</p>
+                <p className="text-xs text-txt-tertiary">{t('general.shortcutPreset.desc', 'Wähle zwischen dem Lightroom-Standard oder darktable-kompatiblen Shortcuts.')}</p>
+              </div>
+              <div className="relative flex items-center">
+                <select
+                  value={shortcutPreset}
+                  onChange={(e) => setShortcutPreset(e.target.value as 'lightroom' | 'darktable')}
+                  className="bg-app-deepest border border-app-border rounded-lg px-3 py-1.5 text-xs text-txt-primary focus:outline-none focus:border-accent cursor-pointer appearance-none pr-7 font-medium"
+                  style={{ colorScheme: 'dark' }}
+                >
+                  <option value="lightroom">{t('general.shortcutPreset.lightroom', 'Lightroom (Standard)')}</option>
+                  <option value="darktable">{t('general.shortcutPreset.darktable', 'darktable')}</option>
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-txt-tertiary absolute right-2.5 pointer-events-none" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Data Safety & File Operations */}
+        <div className="bg-app-card border border-app-border rounded-xl overflow-hidden">
+          <div className="px-5 py-3 border-b border-app-border flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 text-txt-secondary" />
+              <div>
+                <h3 className="text-sm font-semibold text-txt-primary">{t('fileOps.title', 'Datensicherheit & Dateioperationen')}</h3>
+                <p className="text-xs text-txt-secondary mt-0.5">{t('fileOps.subtitle', 'Sicherheitsbarrieren für das Löschen und Verwalten von Verzeichnissen')}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="divide-y divide-app-border">
+            {/* Switch 1: Ordner-Löschfunktionen aktivieren */}
+            <div className="px-5 py-4 flex items-center justify-between">
+              <div className="max-w-md">
+                <p className="text-sm text-txt-primary">{t('fileOps.enableFolderDeletion.title', 'Ordner-Löschfunktionen aktivieren')}</p>
+                <p className="text-xs text-txt-tertiary mt-0.5">{t('fileOps.enableFolderDeletion.desc', 'Ermöglicht das Vormerken oder Löschen kompletter Ordner in der Seitenleiste. Im deaktivierten Zustand sind Löschoptionen für Verzeichnisse vollständig geschützt.')}</p>
+              </div>
+              <div 
+                className={`toggle-track ${enableFolderDeletion ? 'on' : ''}`} 
+                onClick={() => setEnableFolderDeletion(!enableFolderDeletion)}
+              >
+                <div className="toggle-knob"></div>
+              </div>
+            </div>
+
+            {/* Switch 2: Direktes Löschen ohne Vormerkung erlauben */}
+            <div className={`px-5 py-4 flex items-center justify-between transition-opacity ${
+              !enableFolderDeletion ? 'opacity-40 cursor-not-allowed select-none' : ''
+            }`}>
+              <div className="max-w-md">
+                <p className="text-sm text-txt-primary">{t('fileOps.allowDirectFolderDeletion.title', 'Direktes Löschen ohne Vormerkung erlauben')}</p>
+                <p className="text-xs text-txt-tertiary mt-0.5">{t('fileOps.allowDirectFolderDeletion.desc', 'Wenn aktiv, löscht das Kontextmenü einen Ordner sofort nach Bestätigung. Standardmäßig werden Ordner im sicheren 2-Stufen-Verfahren zuerst zum Löschen vorgemerkt.')}</p>
+              </div>
+              <div 
+                className={`toggle-track ${(enableFolderDeletion && allowDirectFolderDeletion) ? 'on' : ''} ${
+                  !enableFolderDeletion ? 'pointer-events-none' : 'cursor-pointer'
+                }`} 
+                onClick={() => {
+                  if (enableFolderDeletion) {
+                    setAllowDirectFolderDeletion(!allowDirectFolderDeletion);
+                  }
+                }}
+              >
                 <div className="toggle-knob"></div>
               </div>
             </div>

@@ -1,6 +1,6 @@
 import { 
   GitBranch, Folder, ChevronDown, MousePointerClick, Camera, CheckCircle2, 
-  Filter, X, Info, Maximize2, ArrowLeft, AlertTriangle, HardDrive, Play,
+  Filter, X, Info, Maximize2, ArrowLeft, AlertTriangle, HardDrive, Film,
   Check, Minus, Circle 
 } from "lucide-react";
 import { useState, useMemo, useRef, useEffect } from "react";
@@ -500,7 +500,7 @@ export function ImportPreviewStep({ onBack }: ImportPreviewStepProps = {}) {
                         {pair.otherFile && (
                           isVideoFilename(pair.otherFile.name) ? (
                             <span className="text-[9px] px-1.5 py-0.5 rounded font-mono font-bold tracking-tight bg-accent/20 text-accent border border-accent/40 flex items-center gap-1">
-                              <Play className="w-2 h-2 fill-accent" />
+                              <Film className="w-2 h-2 text-accent" />
                               {pair.otherFile.name.split('.').pop()?.toUpperCase() || 'VID'}
                             </span>
                           ) : (

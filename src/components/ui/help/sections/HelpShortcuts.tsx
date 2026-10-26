@@ -1,5 +1,7 @@
 import { useTranslation } from 'react-i18next';
+import { useSettingsStore } from '../../../../stores/settingsStore';
 import { SectionHeading, Kbd, TipBox } from '../HelpShared';
+import { isMac } from '../../../../utils/platform';
 
 interface ShortcutItem {
   desc: string;
@@ -14,6 +16,8 @@ interface ShortcutGroup {
 export function HelpShortcuts() {
   const { i18n } = useTranslation();
   const isEn = i18n.language?.startsWith('en');
+  const shortcutPreset = useSettingsStore(s => s.shortcutPreset);
+  const isDarktable = shortcutPreset === 'darktable';
 
   const groups: ShortcutGroup[] = isEn
     ? [
@@ -24,25 +28,27 @@ export function HelpShortcuts() {
             { desc: 'Previous Image', keys: ['←', '|', 'K', '|', 'Shift', 'Space'] },
             { desc: 'Detail View (Loupe)', keys: ['E', '|', 'Enter'] },
             { desc: 'Grid View', keys: ['G'] },
+            { desc: 'Toggle Live-Histogram', keys: ['H'] },
+            { desc: 'Toggle Focus Peaking', keys: ['Shift', 'F'] },
             { desc: 'Back to all photos / Deselect', keys: ['Escape'] },
             { desc: 'Select All Images', keys: ['Cmd', 'A'] },
             { desc: 'Open Import View', keys: ['Cmd', '1'] },
             { desc: 'Open Library View', keys: ['Cmd', '2'] },
-            { desc: 'Toggle Fullscreen', keys: ['Cmd', 'F'] },
+            { desc: 'Toggle Window Fullscreen', keys: isMac ? ['Ctrl', 'Cmd', 'F'] : ['F11'] },
           ],
         },
         {
-          title: 'Culling & Rating',
+          title: `Culling & Rating (${isDarktable ? 'darktable scheme' : 'Lightroom scheme'})`,
           items: [
             { desc: 'Pick (Flag)', keys: ['P'] },
-            { desc: 'Reject', keys: ['X'] },
+            { desc: 'Reject', keys: isDarktable ? ['R', '|', 'X'] : ['X'] },
             { desc: 'Unflag (Neutral)', keys: ['U'] },
             { desc: 'Rating 1 to 5 Stars', keys: ['1', '-', '5'] },
             { desc: 'Remove Rating', keys: ['0'] },
-            { desc: 'Assign Red Label', keys: ['6'] },
-            { desc: 'Assign Yellow Label', keys: ['7'] },
-            { desc: 'Assign Green Label', keys: ['8'] },
-            { desc: 'Assign Blue Label', keys: ['9'] },
+            { desc: 'Assign Red Label', keys: isDarktable ? ['6', '|', 'F2'] : ['6'] },
+            { desc: 'Assign Yellow Label', keys: isDarktable ? ['7', '|', 'F3'] : ['7'] },
+            { desc: 'Assign Green Label', keys: isDarktable ? ['8', '|', 'F4'] : ['8'] },
+            { desc: 'Assign Blue Label', keys: isDarktable ? ['9', '|', 'F5'] : ['9'] },
           ],
         },
         {
@@ -59,7 +65,7 @@ export function HelpShortcuts() {
         {
           title: 'System & Workflow Integration',
           items: [
-            { desc: 'Edit in RapidRAW', keys: ['R'] },
+            { desc: 'Edit in RapidRAW', keys: isDarktable ? ['Shift', 'R'] : ['R'] },
             { desc: 'Show in Explorer / Finder', keys: ['Cmd', 'Shift', 'F'] },
             { desc: 'Open Settings', keys: ['Cmd', ','] },
             { desc: 'Show Help & Manual', keys: ['F1', '|', 'Cmd', '/'] },
@@ -75,25 +81,27 @@ export function HelpShortcuts() {
             { desc: 'Vorheriges Bild', keys: ['←', '|', 'K', '|', 'Shift', 'Space'] },
             { desc: 'Detailansicht (Lupe)', keys: ['E', '|', 'Enter'] },
             { desc: 'Rasteransicht (Grid)', keys: ['G'] },
+            { desc: 'Live-Histogramm umschalten', keys: ['H'] },
+            { desc: 'Focus Peaking umschalten', keys: ['Shift', 'F'] },
             { desc: 'Zurück zu allen Fotos / Auswahl aufheben', keys: ['Escape'] },
             { desc: 'Alle Bilder auswählen', keys: ['Cmd', 'A'] },
             { desc: 'Import-Ansicht öffnen', keys: ['Cmd', '1'] },
             { desc: 'Bibliothek-Ansicht öffnen', keys: ['Cmd', '2'] },
-            { desc: 'Vollbild umschalten', keys: ['Cmd', 'F'] },
+            { desc: 'Fenster-Vollbild umschalten', keys: isMac ? ['Ctrl', 'Cmd', 'F'] : ['F11'] },
           ],
         },
         {
-          title: 'Culling & Bildbewertung',
+          title: `Culling & Bildbewertung (${isDarktable ? 'darktable-Schema' : 'Lightroom-Schema'})`,
           items: [
             { desc: 'Auswählen (Pick)', keys: ['P'] },
-            { desc: 'Verwerfen (Reject)', keys: ['X'] },
+            { desc: 'Verwerfen (Reject)', keys: isDarktable ? ['R', '|', 'X'] : ['X'] },
             { desc: 'Markierung aufheben (Unflag)', keys: ['U'] },
             { desc: 'Sterne-Bewertung 1 bis 5', keys: ['1', '-', '5'] },
             { desc: 'Bewertung entfernen', keys: ['0'] },
-            { desc: 'Rotes Farblabel zuweisen', keys: ['6'] },
-            { desc: 'Gelbes Farblabel zuweisen', keys: ['7'] },
-            { desc: 'Grünes Farblabel zuweisen', keys: ['8'] },
-            { desc: 'Blaues Farblabel zuweisen', keys: ['9'] },
+            { desc: 'Rotes Farblabel zuweisen', keys: isDarktable ? ['6', '|', 'F2'] : ['6'] },
+            { desc: 'Gelbes Farblabel zuweisen', keys: isDarktable ? ['7', '|', 'F3'] : ['7'] },
+            { desc: 'Grünes Farblabel zuweisen', keys: isDarktable ? ['8', '|', 'F4'] : ['8'] },
+            { desc: 'Blaues Farblabel zuweisen', keys: isDarktable ? ['9', '|', 'F5'] : ['9'] },
           ],
         },
         {
@@ -110,7 +118,7 @@ export function HelpShortcuts() {
         {
           title: 'System & Workflow-Integration',
           items: [
-            { desc: 'In RapidRAW bearbeiten', keys: ['R'] },
+            { desc: 'In RapidRAW bearbeiten', keys: isDarktable ? ['Shift', 'R'] : ['R'] },
             { desc: 'Im Explorer / Finder anzeigen', keys: ['Cmd', 'Shift', 'F'] },
             { desc: 'Einstellungen öffnen', keys: ['Cmd', ','] },
             { desc: 'Hilfe & Handbuch anzeigen', keys: ['F1', '|', 'Cmd', '/'] },
@@ -150,6 +158,22 @@ export function HelpShortcuts() {
           </div>
         ))}
       </div>
+
+      <TipBox title={isEn ? 'Configurable Shortcut Schemes' : 'Konfigurierbare Tastenkürzel-Schemata'}>
+        {isEn ? (
+          <>
+            RapidReady supports both the <strong>Lightroom standard</strong> (P = Pick, X = Reject, R = RapidRAW)
+            and the <strong>darktable scheme</strong> (R = Reject, Shift+R = RapidRAW, F2–F5 = Colors). You can
+            switch schemas at any time in <em>Settings → General</em>.
+          </>
+        ) : (
+          <>
+            RapidReady unterstützt sowohl den <strong>Lightroom-Standard</strong> (P = Pick, X = Reject, R = RapidRAW)
+            als auch das <strong>darktable-Schema</strong> (R = Reject, Shift+R = RapidRAW, F2–F5 = Farben). Du kannst
+            das Schema jederzeit unter <em>Einstellungen → Allgemein</em> umstellen.
+          </>
+        )}
+      </TipBox>
 
       <TipBox title={isEn ? 'Esc Key in Grid View' : 'Tipp zur Esc-Taste im Grid'}>
         {isEn ? (

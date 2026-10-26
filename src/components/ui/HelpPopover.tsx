@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Info } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { isMac, modSymbol, shiftSymbol } from '../../utils/platform';
+import { useSettingsStore } from '../../stores/settingsStore';
 
 interface HelpPopoverProps {
   viewMode: 'grid' | 'loupe';
@@ -11,6 +12,8 @@ export function HelpPopover({ viewMode }: HelpPopoverProps) {
   const [isOpen, setIsOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
   const { t } = useTranslation('help');
+  const shortcutPreset = useSettingsStore((s) => s.shortcutPreset);
+  const isDarktable = shortcutPreset === 'darktable';
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -58,11 +61,11 @@ export function HelpPopover({ viewMode }: HelpPopoverProps) {
                 </div>
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-txt-secondary">{t('tooltip.pickReject')}</span>
-                  <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">P / X / U</span>
+                  <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">{isDarktable ? 'P / R,X / U' : 'P / X / U'}</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-txt-secondary">{t('tooltip.colorLabels')}</span>
-                  <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">6-9</span>
+                  <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">{isDarktable ? '6-9 / F2-F5' : '6-9'}</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-txt-secondary">{t('shortcuts.actions.rotateCw')}</span>
@@ -74,7 +77,7 @@ export function HelpPopover({ viewMode }: HelpPopoverProps) {
                 </div>
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-txt-secondary">{t('shortcuts.actions.openRapidRaw')}</span>
-                  <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">R</span>
+                  <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">{isDarktable ? `${shiftSymbol}R` : 'R'}</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-txt-secondary">{t('shortcuts.actions.next')}</span>
@@ -85,8 +88,12 @@ export function HelpPopover({ viewMode }: HelpPopoverProps) {
                   <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">← / K / ⇧Space</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
+                  <span className="text-txt-secondary">{t('shortcuts.actions.histogram', 'Live-Histogramm')}</span>
+                  <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">H</span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
                   <span className="text-txt-secondary">{t('shortcuts.actions.focusPeaking', 'Focus Peaking')}</span>
-                  <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">F</span>
+                  <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">{shiftSymbol}F</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-txt-secondary">{t('shortcuts.actions.grid')}</span>
@@ -109,11 +116,11 @@ export function HelpPopover({ viewMode }: HelpPopoverProps) {
                 </div>
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-txt-secondary">{t('tooltip.pickReject')}</span>
-                  <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">P / X / U</span>
+                  <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">{isDarktable ? 'P / R,X / U' : 'P / X / U'}</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-txt-secondary">{t('tooltip.colorLabels')}</span>
-                  <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">6-9</span>
+                  <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">{isDarktable ? '6-9 / F2-F5' : '6-9'}</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-txt-secondary">{t('shortcuts.actions.rotateCw')}</span>
@@ -125,7 +132,7 @@ export function HelpPopover({ viewMode }: HelpPopoverProps) {
                 </div>
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-txt-secondary">{t('shortcuts.actions.openRapidRaw')}</span>
-                  <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">R</span>
+                  <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">{isDarktable ? `${shiftSymbol}R` : 'R'}</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-txt-secondary">{isMac ? t('shortcuts.actions.showInFinder') : t('shortcuts.actions.showInExplorer')}</span>
@@ -136,8 +143,12 @@ export function HelpPopover({ viewMode }: HelpPopoverProps) {
                   <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">← / → / J / K</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
+                  <span className="text-txt-secondary">{t('shortcuts.actions.histogram', 'Live-Histogramm')}</span>
+                  <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">H</span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
                   <span className="text-txt-secondary">{t('shortcuts.actions.focusPeaking', 'Focus Peaking')}</span>
-                  <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">F</span>
+                  <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">{shiftSymbol}F</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-txt-secondary">{t('shortcuts.actions.deselectOrAllPhotos', 'Gesamtes Archiv / Deselect')}</span>

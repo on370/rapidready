@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { Check, Star, Play } from 'lucide-react';
+import { Check, Star, Film } from 'lucide-react';
 import { LibraryImage } from '../../../../stores/libraryStore';
 import { getRrImageUrl, isRawFilename, isVideoFilename } from '../../../../utils/image';
 import { getColorConfig } from '../../../../constants/culling';
@@ -126,7 +126,7 @@ export const GridThumbnailItem = React.memo(function GridThumbnailItem({
       <div className="absolute top-1.5 left-1.5 z-20 pointer-events-none">
         {isVideo ? (
           <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold tracking-wide bg-black/80 text-accent border border-accent/40 shadow-sm backdrop-blur-xs flex items-center gap-1">
-            <Play className="w-2.5 h-2.5 fill-accent text-accent" />
+            <Film className="w-2.5 h-2.5 text-accent" />
             {img.name.split('.').pop()?.toUpperCase() || 'VID'}
           </span>
         ) : isRaw ? (

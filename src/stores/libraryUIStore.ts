@@ -42,9 +42,24 @@ interface LibraryUIStore {
 
   focusPeakingThreshold: number;
   setFocusPeakingThreshold: (threshold: number) => void;
+
+  inspectorHistogramMode: InspectorHistogramMode;
+  setInspectorHistogramMode: (mode: InspectorHistogramMode) => void;
+  cycleInspectorHistogramMode: () => void;
 }
 
 export type FocusPeakingColor = 'green' | 'red' | 'cyan' | 'yellow';
+export type InspectorHistogramMode = 'off' | 'overlay' | 'full';
+
+const getSavedInspectorHistogramMode = (): InspectorHistogramMode => {
+  try {
+    const val = localStorage.getItem('rapidready_inspector_histogram_mode');
+    if (val === 'off' || val === 'overlay' || val === 'full') {
+      return val;
+    }
+  } catch (_) {}
+  return 'off';
+};
 
 const getSavedFocusPeakingEnabled = (): boolean => {
   try {
@@ -173,4 +188,20 @@ export const useLibraryUIStore = create<LibraryUIStore>((set) => ({
     } catch (_) {}
     set({ focusPeakingThreshold: threshold });
   },
+
+  inspectorHistogramMode: getSavedInspectorHistogramMode(),
+  setInspectorHistogramMode: (mode) => {
+    try {
+      localStorage.setItem('rapidready_inspector_histogram_mode', mode);
+    } catch (_) {}
+    set({ inspectorHistogramMode: mode });
+  },
+  cycleInspectorHistogramMode: () => set((state) => {
+    const current = state.inspectorHistogramMode;
+    const next: InspectorHistogramMode = current === 'off' ? 'overlay' : current === 'overlay' ? 'full' : 'off';
+    try {
+      localStorage.setItem('rapidready_inspector_histogram_mode', next);
+    } catch (_) {}
+    return { inspectorHistogramMode: next };
+  }),
 }));

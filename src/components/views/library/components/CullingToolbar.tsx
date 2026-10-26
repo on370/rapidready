@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { LibraryImage, useLibraryStore } from '../../../../stores/libraryStore';
 import { useLibraryUIStore } from '../../../../stores/libraryUIStore';
+import { useSettingsStore } from '../../../../stores/settingsStore';
 import { HelpPopover } from '../../../ui/HelpPopover';
 import { COLOR_PALETTE, getColorConfig } from '../../../../constants/culling';
 import { normalizeSlash } from '../../../../utils/image';
@@ -41,6 +42,7 @@ export const CullingToolbar = React.memo(function CullingToolbar({
   toggleInspector,
 }: CullingToolbarProps) {
   const { t } = useTranslation('library');
+  const shortcutPreset = useSettingsStore(s => s.shortcutPreset);
 
   // Domain Store
   const {
@@ -279,7 +281,7 @@ export const CullingToolbar = React.memo(function CullingToolbar({
                     ? 'text-accent font-semibold' 
                     : 'text-txt-tertiary hover:text-txt-secondary'
                 }`}
-                title={t('toolbar.focusPeakingTooltip', 'Focus Peaking (F)')}
+                title={t('toolbar.focusPeakingTooltip', `Focus Peaking (${shiftSymbol}F)`)}
               >
                 <ScanEye className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">{t('toolbar.focusPeaking', 'Focus')}</span>
@@ -302,7 +304,7 @@ export const CullingToolbar = React.memo(function CullingToolbar({
               <div className="absolute right-0 top-full mt-1.5 w-60 bg-[#18181b] border border-app-border rounded-xl shadow-2xl p-3 z-50 animate-in fade-in zoom-in-95 duration-100">
                 <div className="text-[11px] font-semibold text-txt-primary mb-2 flex items-center justify-between">
                   <span>{t('toolbar.focusSettingsTitle', 'Focus Peaking')}</span>
-                  <kbd className="text-[10px] font-mono text-txt-tertiary bg-app-card border border-app-border px-1.5 py-0.5 rounded">F</kbd>
+                  <kbd className="text-[10px] font-mono text-txt-tertiary bg-app-card border border-app-border px-1.5 py-0.5 rounded">{shiftSymbol}F</kbd>
                 </div>
 
                 {/* Color selection */}
@@ -710,7 +712,11 @@ export const CullingToolbar = React.memo(function CullingToolbar({
           <button 
             onClick={() => handleCulling(-1, activeImage?.culling.rating || 0)} 
             className={`w-8 h-7 rounded-r-md flex items-center justify-center text-xs font-bold transition-all border border-app-border hover:bg-danger/20 cursor-pointer ${activeImage?.culling.flag === -1 ? 'bg-danger text-white' : 'text-txt-tertiary'}`}
-            title={t('inspector.reject')}
+            title={
+              shortcutPreset === 'darktable'
+                ? t('inspector.rejectDarktable', 'Als verworfen markieren (Taste R / X)')
+                : t('inspector.reject', 'Als verworfen markieren (Taste X)')
+            }
           >
             X
           </button>

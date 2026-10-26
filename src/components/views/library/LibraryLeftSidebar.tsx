@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useSettingsStore } from "../../../stores/settingsStore";
-import { Bookmark, ChevronDown, Plus, HardDrive, Folder, ChevronRight, FolderOpen, Sparkles, Loader2, Camera, RefreshCw, Images, Zap, AlertTriangle } from "lucide-react";
+import { Bookmark, ChevronDown, Plus, HardDrive, Folder, ChevronRight, FolderOpen, Sparkles, Loader2, Camera, RefreshCw, Images, Zap, AlertTriangle, Trash2 } from "lucide-react";
 import { open, ask } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
 import { useLibraryStore, LibraryImage } from "../../../stores/libraryStore";
@@ -195,9 +195,10 @@ function TreeView({
   onFolderClick
 }: TreeViewProps) {
   const { t } = useTranslation('library');
-  const { activeImageFolder, isViewingLastImport } = useLibraryStore();
+  const { activeImageFolder, isViewingLastImport, stagedDeleteFolderPaths } = useLibraryStore();
   const activeCollectionId = useCollectionsStore((s) => s.activeCollectionId);
   const nodeRef = useRef<HTMLDivElement>(null);
+  const isStaged = stagedDeleteFolderPaths.has(normalizeSlash(node.path));
   
   const isExplicitlySet = expandedMap[node.path] !== undefined;
   const isOpen = isExplicitlySet ? expandedMap[node.path] : depth < 3;
@@ -281,12 +282,28 @@ function TreeView({
         
         <span 
           className={`text-xs truncate flex-1 ${
-            hasSelectedHighlight ? 'text-accent font-semibold' : showsImageBadge ? 'text-txt-primary font-medium' : 'text-txt-secondary'
+            isStaged
+              ? 'line-through text-danger/80'
+              : hasSelectedHighlight 
+              ? 'text-accent font-semibold' 
+              : showsImageBadge 
+              ? 'text-txt-primary font-medium' 
+              : 'text-txt-secondary'
           }`} 
           title={node.name}
         >
           {node.name}
         </span>
+
+        {isStaged && (
+          <span 
+            className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-danger/15 text-danger border border-danger/30 flex-shrink-0" 
+            title={t('folderMenu.stagedBadge', 'Zum Löschen vorgemerkt')}
+          >
+            <Trash2 className="w-2.5 h-2.5" />
+            <span>X</span>
+          </span>
+        )}
 
         {showsImageBadge && (
           <span 
@@ -363,6 +380,9 @@ export function LibraryLeftSidebar() {
   const imageCount = useLibraryStore((s) => s.images.length);
   const selectedFolderPaths = useLibraryStore((s) => s.selectedFolderPaths);
   const discoveredFolders = useLibraryStore((s) => s.discoveredFolders);
+  const stagedDeleteFolderPaths = useLibraryStore((s) => s.stagedDeleteFolderPaths);
+  const stageFoldersForDeletion = useLibraryStore((s) => s.stageFoldersForDeletion);
+  const unstageFoldersForDeletion = useLibraryStore((s) => s.unstageFoldersForDeletion);
   const scanState = useLibraryStore((s) => s.scanState);
   const lastImportPaths = useLibraryStore((s) => s.lastImportPaths);
   const isViewingLastImport = useLibraryStore((s) => s.isViewingLastImport);
@@ -1174,6 +1194,74 @@ export function LibraryLeftSidebar() {
     updateTreeNow();
   };
 
+  const handleStageFolders = async (topPaths: string[], allFolderPaths: string[]) => {
+    if (!rootPath) return;
+    const validPaths = topPaths.filter(p => normalizePath(p) !== normalizePath(rootPath));
+    if (validPaths.length === 0) {
+      useToastStore.getState().showWarning(
+        t('folderMenu.deleteRootProtected', 'Der Hauptordner kann nicht gelöscht werden')
+      );
+      return;
+    }
+    stageFoldersForDeletion(validPaths);
+
+    // Mark all photos in these folders as rejected (-1)
+    const normTargets = (allFolderPaths.length > 0 ? allFolderPaths : validPaths).map(p => normalizeSlash(p).toLowerCase());
+    const isUnderAny = (p: string) => {
+      const norm = normalizeSlash(p).toLowerCase();
+      return normTargets.some(t => norm.startsWith(t + '/') || norm === t);
+    };
+    const allImages = useLibraryStore.getState().images;
+    const affectedImages = allImages.filter(img => isUnderAny(img.path));
+    const affectedPaths = affectedImages.map(img => img.path);
+
+    if (affectedPaths.length > 0) {
+      useLibraryStore.getState().updateBatchCullingState(affectedPaths, { flag: -1 });
+      invoke('set_culling_state_batch', {
+        paths: affectedPaths,
+        flag: -1,
+        rating: null,
+        color: null,
+      }).catch((err) => {
+        console.error('Failed to set culling state for staged folder images:', err);
+      });
+    }
+
+    useToastStore.getState().showSuccess(
+      t('folderDelete.stagedSuccess', { count: validPaths.length, defaultValue: `${validPaths.length} Ordner zum Löschen vorgemerkt (X)` })
+    );
+  };
+
+  const handleUnstageFolders = async (topPaths: string[], allFolderPaths: string[]) => {
+    unstageFoldersForDeletion(topPaths);
+
+    // Unflag photos in these folders that were rejected (-1)
+    const normTargets = (allFolderPaths.length > 0 ? allFolderPaths : topPaths).map(p => normalizeSlash(p).toLowerCase());
+    const isUnderAny = (p: string) => {
+      const norm = normalizeSlash(p).toLowerCase();
+      return normTargets.some(t => norm.startsWith(t + '/') || norm === t);
+    };
+    const allImages = useLibraryStore.getState().images;
+    const rejectedInFolders = allImages.filter(img => isUnderAny(img.path) && img.culling?.flag === -1);
+    const affectedPaths = rejectedInFolders.map(img => img.path);
+
+    if (affectedPaths.length > 0) {
+      useLibraryStore.getState().updateBatchCullingState(affectedPaths, { flag: null });
+      invoke('set_culling_state_batch', {
+        paths: affectedPaths,
+        flag: 0,
+        rating: null,
+        color: null,
+      }).catch((err) => {
+        console.error('Failed to clear culling state for unstaged folder images:', err);
+      });
+    }
+
+    useToastStore.getState().showSuccess(
+      t('folderDelete.unstagedSuccess', { count: topPaths.length, defaultValue: `Löschvormerkung für ${topPaths.length} Ordner aufgehoben` })
+    );
+  };
+
   const renderTree = () => {
     if (isLoading && imageCount === 0 && (!tree || Object.keys(tree.children).length === 0)) {
       return (
@@ -1534,6 +1622,7 @@ export function LibraryLeftSidebar() {
           fileCount={contextMenu.totalPhotoCount}
           hasRejectedPhotos={contextMenu.rejectedPhotoCount > 0}
           rejectedCount={contextMenu.rejectedPhotoCount}
+          isStagedForDeletion={stagedDeleteFolderPaths.has(normalizeSlash(contextMenu.node.path))}
           onClose={() => setContextMenu(null)}
           onShowInFinder={() => handleShowInFinder([contextMenu.node.path])}
           onRefreshFolder={() => useLibraryStore.getState().reconcileFolder(contextMenu.node.path)}
@@ -1580,6 +1669,16 @@ export function LibraryLeftSidebar() {
             const paths = contextMenu.topSelectedPaths;
             setContextMenu(null);
             handleDeleteFolders(paths);
+          }}
+          onStageFolder={() => {
+            const paths = contextMenu.topSelectedPaths.length > 0 ? contextMenu.topSelectedPaths : [contextMenu.node.path];
+            setContextMenu(null);
+            handleStageFolders(paths, contextMenu.allSelectedFolderPaths);
+          }}
+          onUnstageFolder={() => {
+            const paths = contextMenu.topSelectedPaths.length > 0 ? contextMenu.topSelectedPaths : [contextMenu.node.path];
+            setContextMenu(null);
+            handleUnstageFolders(paths, contextMenu.allSelectedFolderPaths);
           }}
         />
       )}

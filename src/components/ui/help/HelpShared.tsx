@@ -23,14 +23,19 @@ export function Kbd({ keys }: KbdProps) {
         }
 
         let label: React.ReactNode = k;
+        let title: string | undefined = undefined;
         if (k === 'Cmd') {
           label = isMac ? <Command className="w-3 h-3 inline" /> : (isEn ? 'Ctrl' : 'Strg');
+          title = isMac ? 'Command (⌘)' : undefined;
         } else if (k === 'Ctrl') {
-          label = isMac ? <Command className="w-3 h-3 inline" /> : (isEn ? 'Ctrl' : 'Strg');
+          label = isMac ? '⌃' : (isEn ? 'Ctrl' : 'Strg');
+          title = isMac ? 'Control (⌃)' : undefined;
         } else if (k === 'Shift') {
           label = isMac ? <ArrowBigUp className="w-3 h-3 inline" /> : (isEn ? 'Shift' : 'Umschalt');
+          title = isMac ? 'Shift (⇧)' : undefined;
         } else if (k === 'Opt' || k === 'Alt') {
           label = isMac ? '⌥' : 'Alt';
+          title = isMac ? 'Option (⌥)' : undefined;
         } else if (k === 'Space') {
           label = isEn ? 'Space' : 'Leertaste';
         }
@@ -38,6 +43,7 @@ export function Kbd({ keys }: KbdProps) {
         return (
           <span
             key={i}
+            title={title}
             className="min-w-[22px] px-1.5 py-0.5 rounded bg-app-deepest border border-app-border text-[11px] font-mono font-medium text-txt-secondary shadow-xs text-center inline-flex items-center justify-center"
           >
             {label}

@@ -5,7 +5,8 @@ import { ContextMenu } from "./ContextMenu";
 import { ArchiveConnectingOverlay } from "./components/ArchiveConnectingOverlay";
 import { ArchiveScanBanner } from "./components/ArchiveScanBanner";
 import { invoke } from "@tauri-apps/api/core";
-import { normalizePath } from "../../../utils/image";
+import { normalizePath, normalizeSlash } from "../../../utils/image";
+import { getTopLevelSelectedPaths } from "./LibraryLeftSidebar";
 
 import { CullingToolbar } from "./components/CullingToolbar";
 import { LibraryGrid } from "./components/LibraryGrid";
@@ -421,22 +422,72 @@ export function LibraryCenter({
     return scopedImages.filter(i => i.culling.flag === -1);
   }, [scopedImages]);
   const rejectedCount = rejectedImages.length;
+  const stagedDeleteFolderPaths = useLibraryStore((s) => s.stagedDeleteFolderPaths);
+  const totalRejectedCount = rejectedCount + stagedDeleteFolderPaths.size;
 
   const handleDeleteRejected = useCallback(async () => {
-    if (rejectedCount === 0) return;
+    const topStagedFolders = getTopLevelSelectedPaths(stagedDeleteFolderPaths);
+    const stagedCount = topStagedFolders.length;
 
-    // Check if archive root or rejected images reside on a network share / NAS
-    const checkPaths = [rootPath, ...rejectedImages.slice(0, 10).map(i => i.path)].filter(Boolean) as string[];
+    if (rejectedCount === 0 && stagedCount === 0) return;
+
+    // Check if archive root, staged folders, or rejected images reside on a network share / NAS
+    const checkPaths = [
+      rootPath,
+      ...topStagedFolders,
+      ...rejectedImages.slice(0, 10).map(i => i.path)
+    ].filter(Boolean) as string[];
+
     const isNetwork = await invoke<boolean>('are_any_network_paths', { paths: checkPaths }).catch((err) => {
       console.error('Failed to check network path in delete rejected:', err);
       return false;
     });
 
-    const confirmed = await useDialogStore.getState().confirmDestructive({
-      title: isNetwork
+    let confirmTitle = '';
+    let confirmMessage = '';
+
+    if (stagedCount > 0 && rejectedCount > 0) {
+      confirmTitle = isNetwork
+        ? t('delete.multiNasConfirmTitle', { defaultValue: '⚠️ ACHTUNG: Dauerhaftes Löschen auf NAS / Netzwerk' })
+        : t('delete.mixedConfirmTitle', {
+            folderCount: stagedCount,
+            photoCount: rejectedCount,
+            defaultValue: `${stagedCount} Ordner und ${rejectedCount} Foto(s) in den Papierkorb verschieben?`
+          });
+      confirmMessage = isNetwork
+        ? t('delete.mixedNasConfirmMessage', {
+            folderCount: stagedCount,
+            photoCount: rejectedCount,
+            defaultValue: `Es sind ${stagedCount} Ordner und ${rejectedCount} verworfene Foto(s) zum Löschen vorgemerkt, die ganz oder teilweise auf einer Netzwerkfreigabe (NAS) liegen.\n\nDateien und Ordner auf Netzwerklaufwerken können NICHT in den Papierkorb verschoben werden!\n\nSie werden DAUERHAFT und UNWIDERRUFLICH von der Festplatte gelöscht.\n\nMöchtest du sie jetzt wirklich unwiderruflich löschen?`
+          })
+        : t('delete.mixedLocalConfirmMessage', {
+            folderCount: stagedCount,
+            photoCount: rejectedCount,
+            defaultValue: `Möchtest du ${stagedCount} vorgemerkte(n) Ordner und ${rejectedCount} verworfene(s) Foto(s) wirklich in den Papierkorb verschieben?`
+          });
+    } else if (stagedCount > 0) {
+      confirmTitle = isNetwork
+        ? t('folderDelete.multiNasTitle', { defaultValue: '⚠️ ACHTUNG: Dauerhaftes Löschen auf NAS / Netzwerk' })
+        : t('folderDelete.multiLocalTitle', {
+            count: stagedCount,
+            defaultValue: `${stagedCount} Ordner in den Papierkorb verschieben?`
+          });
+      confirmMessage = isNetwork
+        ? t('folderDelete.multiNasMessage', {
+            count: stagedCount,
+            photoCount: 0,
+            defaultValue: `Die ${stagedCount} ausgewählten Ordner liegen auf einer Netzwerkfreigabe (NAS).\n\nDateien und Ordner auf Netzwerklaufwerken können NICHT in den Papierkorb verschoben werden!\n\nSie werden DAUERHAFT und UNWIDERRUFLICH von der Festplatte gelöscht.\n\nMöchtest du diese ${stagedCount} Ordner jetzt wirklich unwiderruflich löschen?`
+          })
+        : t('folderDelete.multiLocalMessage', {
+            count: stagedCount,
+            photoCount: 0,
+            defaultValue: `Möchtest du die ${stagedCount} vorgemerkten Ordner und alle darin enthaltenen Dateien wirklich in den Papierkorb verschieben?`
+          });
+    } else {
+      confirmTitle = isNetwork
         ? t('delete.nasConfirmTitle', { defaultValue: '⚠️ ACHTUNG: Dauerhaftes Löschen auf NAS / Netzwerk' })
-        : t('delete.confirmTitle', { defaultValue: 'In den Papierkorb verschieben' }),
-      message: isNetwork
+        : t('delete.confirmTitle', { defaultValue: 'In den Papierkorb verschieben' });
+      confirmMessage = isNetwork
         ? t('delete.nasConfirmMessage', {
             count: rejectedCount,
             defaultValue: `Die ${rejectedCount} verworfenen Bilder liegen auf einer Netzwerkfreigabe (NAS).\n\nDateien auf Netzwerklaufwerken können NICHT in den Papierkorb verschoben werden!\n\nSie werden DAUERHAFT und UNWIDERRUFLICH von der Festplatte gelöscht.\n\nMöchtest du diese ${rejectedCount} Bilder jetzt wirklich unwiderruflich löschen?`
@@ -444,7 +495,12 @@ export function LibraryCenter({
         : t('delete.confirmMessage', {
             count: rejectedCount,
             defaultValue: `Möchtest du ${rejectedCount} verworfene(s) Bild(er) in den Papierkorb verschieben?`
-          }),
+          });
+    }
+
+    const confirmed = await useDialogStore.getState().confirmDestructive({
+      title: confirmTitle,
+      message: confirmMessage,
       confirmLabel: isNetwork
         ? t('delete.nasOkLabel', { defaultValue: 'Unwiderruflich löschen' })
         : t('delete.okLabel', { defaultValue: 'In den Papierkorb' }),
@@ -453,43 +509,93 @@ export function LibraryCenter({
 
     if (confirmed) {
       try {
-        const result = await invoke<{ deleted: string[]; failed: [string, string][] }>('delete_files', {
-          paths: rejectedImages.map(i => i.path),
-          toTrash: !isNetwork,
-          archiveRoot: rootPath || null,
-        });
+        const normStagedTargets = topStagedFolders.map(p => normalizeSlash(p).toLowerCase());
+        const isUnderAnyStaged = (p: string) => {
+          const norm = normalizeSlash(p).toLowerCase();
+          return normStagedTargets.some(t => norm.startsWith(t + '/') || norm === t);
+        };
 
-        if (result.deleted.length > 0) {
-          const rejectedPathSet = new Set(result.deleted);
-          const remaining = images.filter(i => !rejectedPathSet.has(i.path));
-          useLibraryStore.getState().setImages(remaining);
-          useCollectionsStore.getState().pruneDeletedPaths(result.deleted);
+        // 1. Delete staged folders if any
+        if (topStagedFolders.length > 0) {
+          await invoke('delete_folders', {
+            paths: topStagedFolders,
+            toTrash: !isNetwork,
+            archiveRoot: rootPath || null,
+          });
+          for (const fp of topStagedFolders) {
+            useLibraryStore.getState().removeFolder(fp);
+          }
+          useLibraryStore.getState().clearStagedDeleteFolders();
         }
 
-        if (result.failed.length > 0) {
-          const firstErr = result.failed[0][1];
-          useToastStore.getState().showWarning(
-            t('delete.partialFailed', {
-              failed: result.failed.length,
-              total: rejectedCount,
-              defaultValue: `${result.failed.length} von ${rejectedCount} Datei(en) konnten nicht gelöscht werden: ${firstErr}`
-            })
-          );
-        } else {
+        // 2. Delete remaining rejected images outside deleted folders
+        const remainingRejectedImages = rejectedImages.filter(img => !isUnderAnyStaged(img.path));
+        let deletedPhotosCount = 0;
+
+        if (remainingRejectedImages.length > 0) {
+          const result = await invoke<{ deleted: string[]; failed: [string, string][] }>('delete_files', {
+            paths: remainingRejectedImages.map(i => i.path),
+            toTrash: !isNetwork,
+            archiveRoot: rootPath || null,
+          });
+
+          deletedPhotosCount = result.deleted.length;
+          const rejectedPathSet = new Set(result.deleted);
+          const remaining = images.filter(i => !rejectedPathSet.has(i.path) && !isUnderAnyStaged(i.path));
+          useLibraryStore.getState().setImages(remaining);
+          useCollectionsStore.getState().pruneDeletedPaths(result.deleted);
+
+          if (result.failed.length > 0) {
+            const firstErr = result.failed[0][1];
+            useToastStore.getState().showWarning(
+              t('delete.partialFailed', {
+                failed: result.failed.length,
+                total: remainingRejectedImages.length,
+                defaultValue: `${result.failed.length} von ${remainingRejectedImages.length} Datei(en) konnten nicht gelöscht werden: ${firstErr}`
+              })
+            );
+          }
+        } else if (topStagedFolders.length > 0) {
+          const remaining = images.filter(i => !isUnderAnyStaged(i.path));
+          useLibraryStore.getState().setImages(remaining);
+        }
+
+        // 3. Feedback Toast
+        if (stagedCount > 0 && deletedPhotosCount > 0) {
           useToastStore.getState().showSuccess(
             isNetwork
-              ? t('delete.nasSuccessToast', { count: result.deleted.length, defaultValue: `${result.deleted.length} Bild(er) dauerhaft vom Netzwerklaufwerk gelöscht.` })
-              : t('delete.localSuccessToast', { count: result.deleted.length, defaultValue: `${result.deleted.length} Bild(er) in den Papierkorb verschoben.` })
+              ? t('delete.mixedNasSuccessToast', {
+                  folderCount: stagedCount,
+                  photoCount: deletedPhotosCount,
+                  defaultValue: `${stagedCount} Ordner und ${deletedPhotosCount} Bild(er) dauerhaft vom Netzwerklaufwerk gelöscht.`
+                })
+              : t('delete.mixedLocalSuccessToast', {
+                  folderCount: stagedCount,
+                  photoCount: deletedPhotosCount,
+                  defaultValue: `${stagedCount} Ordner und ${deletedPhotosCount} Bild(er) in den Papierkorb verschoben.`
+                })
+          );
+        } else if (stagedCount > 0) {
+          useToastStore.getState().showSuccess(
+            isNetwork
+              ? t('folderDelete.multiNasSuccess', { count: stagedCount, defaultValue: `${stagedCount} Ordner dauerhaft vom Netzwerklaufwerk gelöscht.` })
+              : t('folderDelete.multiLocalSuccess', { count: stagedCount, defaultValue: `${stagedCount} Ordner in den Papierkorb verschoben.` })
+          );
+        } else if (deletedPhotosCount > 0) {
+          useToastStore.getState().showSuccess(
+            isNetwork
+              ? t('delete.nasSuccessToast', { count: deletedPhotosCount, defaultValue: `${deletedPhotosCount} Bild(er) dauerhaft vom Netzwerklaufwerk gelöscht.` })
+              : t('delete.localSuccessToast', { count: deletedPhotosCount, defaultValue: `${deletedPhotosCount} Bild(er) in den Papierkorb verschoben.` })
           );
         }
       } catch (err: any) {
-        console.error('Failed to delete rejected files:', err);
+        console.error('Failed to delete rejected files/folders:', err);
         useToastStore.getState().showError(
           t('delete.failedError', { defaultValue: 'Löschen fehlgeschlagen: ' }) + (err?.message || err)
         );
       }
     }
-  }, [rejectedCount, rejectedImages, images, rootPath, t]);
+  }, [rejectedCount, rejectedImages, stagedDeleteFolderPaths, images, rootPath, t]);
 
   const handleItemClick = useCallback((e: React.MouseEvent, clickedIndex: number, img: LibraryImage) => {
     const isMetaOrCtrl = e.metaKey || e.ctrlKey;
@@ -743,7 +849,7 @@ export function LibraryCenter({
         availableTags={availableTags}
         colorCounts={colorCounts}
         ratingCounts={ratingCounts}
-        rejectedCount={rejectedCount}
+        rejectedCount={totalRejectedCount}
         handleCulling={handleCulling}
         handleSetColor={handleSetColor}
         handleRotate={handleRotate}

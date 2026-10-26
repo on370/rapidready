@@ -5,6 +5,7 @@ import {
   FolderOpen, CheckSquare, ChevronDown, ChevronRight, 
   FolderPlus, Trash2, XCircle, Pencil, RefreshCw 
 } from 'lucide-react';
+import { useSettingsStore } from '../../../../stores/settingsStore';
 import { isMac } from '../../../../utils/platform';
 
 export interface FolderContextMenuProps {
@@ -19,6 +20,7 @@ export interface FolderContextMenuProps {
   fileCount: number;
   hasRejectedPhotos?: boolean;
   rejectedCount?: number;
+  isStagedForDeletion?: boolean;
   onClose: () => void;
   onShowInFinder: () => void;
   onRefreshFolder?: () => void;
@@ -29,6 +31,8 @@ export interface FolderContextMenuProps {
   onRenameFolder?: () => void;
   onDeleteRejectedInFolder?: () => void;
   onDeleteFolder: () => void;
+  onStageFolder?: () => void;
+  onUnstageFolder?: () => void;
 }
 
 export const FolderContextMenu: React.FC<FolderContextMenuProps> = ({
@@ -42,6 +46,7 @@ export const FolderContextMenu: React.FC<FolderContextMenuProps> = ({
   fileCount,
   hasRejectedPhotos = false,
   rejectedCount = 0,
+  isStagedForDeletion = false,
   onClose,
   onShowInFinder,
   onRefreshFolder,
@@ -52,8 +57,11 @@ export const FolderContextMenu: React.FC<FolderContextMenuProps> = ({
   onRenameFolder,
   onDeleteRejectedInFolder,
   onDeleteFolder,
+  onStageFolder,
+  onUnstageFolder,
 }) => {
   const { t } = useTranslation('library');
+  const { enableFolderDeletion, allowDirectFolderDeletion } = useSettingsStore();
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -222,22 +230,48 @@ export const FolderContextMenu: React.FC<FolderContextMenuProps> = ({
         </>
       )}
 
-      {/* Delete Folder(s) (Destructive action) */}
-      {!isRoot && (
+      {/* Delete / Stage Folder(s) (Destructive action) */}
+      {!isRoot && enableFolderDeletion && (
         <>
           <div className="h-px bg-app-border my-1" />
           <div className="px-1 py-0.5">
-            <button
-              onClick={() => { onDeleteFolder(); onClose(); }}
-              className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-danger/20 text-danger hover:text-red-300 transition-colors cursor-pointer text-left font-medium"
-            >
-              <Trash2 className="w-3.5 h-3.5 text-danger flex-shrink-0" />
-              <span className="truncate">
-                {isMultiSelect
-                  ? t('folderMenu.deleteMultiFolders', { count: folderCount, defaultValue: `${folderCount} ausgewählte Ordner löschen...` })
-                  : t('folderMenu.deleteFolder', 'Ordner löschen...')}
-              </span>
-            </button>
+            {allowDirectFolderDeletion ? (
+              <button
+                onClick={() => { onDeleteFolder(); onClose(); }}
+                className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-danger/20 text-danger hover:text-red-300 transition-colors cursor-pointer text-left font-medium"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-danger flex-shrink-0" />
+                <span className="truncate">
+                  {isMultiSelect
+                    ? t('folderMenu.deleteMultiFolders', { count: folderCount, defaultValue: `${folderCount} ausgewählte Ordner löschen...` })
+                    : t('folderMenu.deleteFolder', 'Ordner löschen...')}
+                </span>
+              </button>
+            ) : isStagedForDeletion ? (
+              <button
+                onClick={() => { onUnstageFolder?.(); onClose(); }}
+                className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-white/10 text-txt-secondary hover:text-white transition-colors cursor-pointer text-left font-medium"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-txt-tertiary flex-shrink-0" />
+                <span className="truncate">
+                  {isMultiSelect
+                    ? t('folderMenu.unstageMultiFolders', { count: folderCount, defaultValue: `Löschvormerkung für ${folderCount} Ordner aufheben` })
+                    : t('folderMenu.unstageFolder', 'Löschvormerkung für Ordner aufheben')}
+                </span>
+              </button>
+            ) : (
+              <button
+                onClick={() => { onStageFolder?.(); onClose(); }}
+                className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-danger/20 text-danger hover:text-red-300 transition-colors cursor-pointer text-left font-medium"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-danger flex-shrink-0" />
+                <span className="truncate">
+                  {isMultiSelect
+                    ? t('folderMenu.stageMultiFolders', { count: folderCount, defaultValue: `${folderCount} Ordner zum Löschen vormerken (X)` })
+                    : t('folderMenu.stageFolder', 'Ordner zum Löschen vormerken (X)')}
+                </span>
+              </button>
+            )}
           </div>
         </>
       )}

@@ -64,14 +64,29 @@ export function ZoomableImage({ src, previewSrc, alt, onContextMenu }: ZoomableI
           setLoadFailed(false);
         }
       };
+      img.onerror = () => {
+        if (!canceled) {
+          if (!previewSrc || (imageRef.current?.complete && imageRef.current?.naturalWidth === 0)) {
+            setLoadFailed(true);
+          }
+        }
+      };
     }
 
     return () => {
       canceled = true;
       img.onload = null;
+      img.onerror = null;
       img.src = '';
     };
   }, [src, previewSrc, setLoupeScale]);
+
+  // Check if current visible image failed on mount / src change
+  useEffect(() => {
+    if (imageRef.current?.complete && imageRef.current?.naturalWidth === 0) {
+      setLoadFailed(true);
+    }
+  }, [currentSrc, src]);
 
   const clampAndSetPosition = useCallback((x: number, y: number, currentScale = scale) => {
     if (!containerRef.current || !imageRef.current) return;

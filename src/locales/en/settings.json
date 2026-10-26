@@ -30,6 +30,12 @@
     "startupView": {
       "title": "Always start in Import Mode",
       "desc": "Opens the app in Import Mode rather than Library upon startup"
+    },
+    "shortcutPreset": {
+      "title": "Keyboard Shortcut Preset",
+      "desc": "Choose between Lightroom standard and darktable-compatible keyboard shortcuts.",
+      "lightroom": "Lightroom (Standard)",
+      "darktable": "darktable"
     }
   },
   "gps": {
@@ -39,6 +45,18 @@
     "openStreetMap": "OpenStreetMap in Browser",
     "internalViewer": "Internal Viewer",
     "comingSoon": "Coming Soon"
+  },
+  "fileOps": {
+    "title": "Data Safety & File Operations",
+    "subtitle": "Safety barriers for deleting and managing directories",
+    "enableFolderDeletion": {
+      "title": "Enable folder deletion features",
+      "desc": "Allows staging or deleting entire folders from the sidebar tree. When disabled, directory deletion options are fully protected."
+    },
+    "allowDirectFolderDeletion": {
+      "title": "Allow direct deletion without staging",
+      "desc": "When enabled, the context menu directly deletes a folder upon confirmation. By default, folders are staged for deletion first in the safe 2-stage workflow."
+    }
   },
   "rapidraw": {
     "title": "RapidRaw Integration",

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, MouseEvent as ReactMouseEvent, WheelEvent } from "react";
-import { X, ChevronLeft, ChevronRight, ZoomIn, Minimize2, Info, Camera, Play } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, ZoomIn, Minimize2, Info, Camera, Film } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { PairedImportItem } from "../ImportPreviewStep";
@@ -329,7 +329,7 @@ export function ImportLightboxModal({
                   ? 'bg-accent/20 text-accent border border-accent/40'
                   : 'bg-white/10 text-white'
               }`}>
-                {isVideoFilename(pair.otherFile.name) && <Play className="w-2.5 h-2.5 fill-accent" />}
+                {isVideoFilename(pair.otherFile.name) && <Film className="w-2.5 h-2.5 text-accent" />}
                 {pair.otherFile.name.split(".").pop()?.toUpperCase() || 'FILE'}
               </span>
             )}

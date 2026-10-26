@@ -35,6 +35,9 @@ interface SettingsState {
   includeBetaUpdates: boolean;
   dismissedUpdateVersion: string | null;
   dismissDefaultPicturesWarning: boolean;
+  shortcutPreset: 'lightroom' | 'darktable';
+  enableFolderDeletion: boolean;
+  allowDirectFolderDeletion: boolean;
   
   setAutoDetect: (val: boolean) => void;
   setDismissDefaultPicturesWarning: (val: boolean) => void;
@@ -45,6 +48,9 @@ interface SettingsState {
   setStartupView: (val: 'import' | 'library') => void;
   setLastLibraryPath: (val: string | null) => void;
   setGpsMapProvider: (val: 'google' | 'osm' | 'internal') => void;
+  setShortcutPreset: (val: 'lightroom' | 'darktable') => void;
+  setEnableFolderDeletion: (val: boolean) => void;
+  setAllowDirectFolderDeletion: (val: boolean) => void;
   setCheckForUpdates: (val: boolean) => void;
   setIncludeBetaUpdates: (val: boolean) => void;
   setDismissedUpdateVersion: (val: string | null) => void;
@@ -73,6 +79,9 @@ export const useSettingsStore = create<SettingsState>()(
       checkForUpdates: true,
       includeBetaUpdates: true,
       dismissedUpdateVersion: null,
+      shortcutPreset: 'lightroom',
+      enableFolderDeletion: false,
+      allowDirectFolderDeletion: false,
       presets: [
         {
           id: 'default-std',
@@ -93,6 +102,12 @@ export const useSettingsStore = create<SettingsState>()(
       setStartupView: (startupView) => set({ startupView }),
       setLastLibraryPath: (lastLibraryPath) => set({ lastLibraryPath }),
       setGpsMapProvider: (gpsMapProvider) => set({ gpsMapProvider }),
+      setShortcutPreset: (shortcutPreset) => set({ shortcutPreset }),
+      setEnableFolderDeletion: (enableFolderDeletion) => set((state) => ({
+        enableFolderDeletion,
+        allowDirectFolderDeletion: enableFolderDeletion ? state.allowDirectFolderDeletion : false,
+      })),
+      setAllowDirectFolderDeletion: (allowDirectFolderDeletion) => set({ allowDirectFolderDeletion }),
       setCheckForUpdates: (checkForUpdates) => set((state) => ({
         checkForUpdates,
         // When checking for updates is turned off, also switch off includeBetaUpdates

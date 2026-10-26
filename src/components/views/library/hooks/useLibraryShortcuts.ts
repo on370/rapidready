@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useLibraryStore, LibraryImage } from '../../../../stores/libraryStore';
 import { useCollectionsStore } from '../../../../stores/collectionsStore';
 import { useLibraryUIStore } from '../../../../stores/libraryUIStore';
+import { useSettingsStore } from '../../../../stores/settingsStore';
 
 interface UseLibraryShortcutsProps {
   activeImage: LibraryImage | undefined;
@@ -41,11 +42,27 @@ export function useLibraryShortcuts({
       // Don't trigger shortcuts if a modal dialog is currently open
       if (useCollectionsStore.getState().isExportModalOpen) return;
       if (document.querySelector('.fixed.inset-0, [data-context-menu]')) return;
+
+      const shortcutPreset = useSettingsStore.getState().shortcutPreset;
       
       // Shortcut: Cmd/Ctrl + A -> Select All
       if ((e.metaKey || e.ctrlKey) && (e.key === 'a' || e.key === 'A')) {
         e.preventDefault();
         selectAll(displayedImages);
+        return;
+      }
+
+      // Shortcut: Shift + F (without Cmd/Ctrl) -> Toggle Focus Peaking
+      if (!e.metaKey && !e.ctrlKey && !e.altKey && e.shiftKey && (e.key === 'f' || e.key === 'F')) {
+        e.preventDefault();
+        useLibraryUIStore.getState().toggleFocusPeaking();
+        return;
+      }
+
+      // Shortcut: H (without Cmd/Ctrl/Shift) -> Cycle Inspector Histogram (Off -> Overlay -> Full)
+      if (!e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && (e.key === 'h' || e.key === 'H')) {
+        e.preventDefault();
+        useLibraryUIStore.getState().cycleInspectorHistogramMode();
         return;
       }
 
@@ -58,8 +75,32 @@ export function useLibraryShortcuts({
         return;
       }
 
-      // Shortcut: F5 or Cmd/Ctrl + Shift + R -> Refresh / Reconcile active folder
-      if (e.key === 'F5' || ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'r' || e.key === 'R'))) {
+      // Darktable function keys for color labels (F2=Red, F3=Yellow, F4=Green, F5=Blue)
+      if (shortcutPreset === 'darktable' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        if (e.key === 'F2') {
+          e.preventDefault();
+          handleSetColor(activeImage?.culling.color === 'red' ? null : 'red');
+          return;
+        }
+        if (e.key === 'F3') {
+          e.preventDefault();
+          handleSetColor(activeImage?.culling.color === 'yellow' ? null : 'yellow');
+          return;
+        }
+        if (e.key === 'F4') {
+          e.preventDefault();
+          handleSetColor(activeImage?.culling.color === 'green' ? null : 'green');
+          return;
+        }
+        if (e.key === 'F5') {
+          e.preventDefault();
+          handleSetColor(activeImage?.culling.color === 'blue' ? null : 'blue');
+          return;
+        }
+      }
+
+      // Shortcut: F5 (in Lightroom mode) or Cmd/Ctrl + Shift + R -> Refresh / Reconcile active folder
+      if ((shortcutPreset !== 'darktable' && e.key === 'F5') || ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'r' || e.key === 'R'))) {
         e.preventDefault();
         useLibraryStore.getState().reconcileActiveFolder();
         return;
@@ -79,11 +120,26 @@ export function useLibraryShortcuts({
         return;
       }
 
-      // Shortcut: R (without Cmd/Ctrl) -> Open in RapidRAW
-      if (!e.metaKey && !e.ctrlKey && !e.altKey && (e.key === 'r' || e.key === 'R')) {
+      // Shortcut: Shift + R in darktable mode -> Open in RapidRAW
+      if (shortcutPreset === 'darktable' && !e.metaKey && !e.ctrlKey && !e.altKey && e.shiftKey && (e.key === 'r' || e.key === 'R')) {
         e.preventDefault();
         if (activeImage) {
           invoke('open_in_rapidraw', { path: activeImage.path });
+        }
+        return;
+      }
+
+      // Shortcut: R (without modifiers)
+      if (!e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && (e.key === 'r' || e.key === 'R')) {
+        e.preventDefault();
+        if (shortcutPreset === 'darktable') {
+          // In darktable: R toggles Reject (-1 vs null)
+          handleCulling(activeImage?.culling.flag === -1 ? null : -1, activeImage?.culling.rating || 0);
+        } else {
+          // In Lightroom standard: R opens in RapidRAW
+          if (activeImage) {
+            invoke('open_in_rapidraw', { path: activeImage.path });
+          }
         }
         return;
       }
@@ -172,11 +228,6 @@ export function useLibraryShortcuts({
           case 'G':
             setViewMode('grid');
             e.preventDefault();
-            break;
-          case 'f':
-          case 'F':
-            e.preventDefault();
-            useLibraryUIStore.getState().toggleFocusPeaking();
             break;
           case 'Escape':
             e.preventDefault();

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Check, Star, Play } from 'lucide-react';
+import { Check, Star, Film } from 'lucide-react';
 import { LibraryImage } from '../../../../stores/libraryStore';
 import { getRrImageUrl, isRawFilename, isVideoFilename } from '../../../../utils/image';
 import { getColorConfig } from '../../../../constants/culling';
@@ -79,7 +79,7 @@ export const FilmstripThumbnailItem = React.memo(function FilmstripThumbnailItem
       <div className="absolute top-1 left-1 pointer-events-none z-20">
         {isVideo ? (
           <span className="px-1 py-0.2 rounded text-[8px] font-mono font-semibold tracking-wider bg-black/80 text-accent border border-accent/40 shadow-sm leading-tight inline-flex items-center gap-0.5">
-            <Play className="w-2 h-2 fill-accent text-accent" />
+            <Film className="w-2 h-2 text-accent" />
             {img.name.split('.').pop()?.toUpperCase() || 'VID'}
           </span>
         ) : isRaw ? (

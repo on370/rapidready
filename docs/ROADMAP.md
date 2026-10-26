@@ -561,6 +561,14 @@
   - Upgrade custom Tauri streaming protocol handler (`rr-video://` or `rr-image://`) with HTTP 206 Partial Content and byte-range request support (`Range: bytes=start-end`).
   - Enables zero-lag instant scrubbing across 10–50 GB 4K/8K camera video files (Sony XAVC S, Canon Cinema RAW Lite, Apple ProRes) without memory exhaustion.
   - Embedded HTML5 `<video>` player in `LoupeViewer.tsx` with standard shortcuts (`Space` toggle playback, `J`/`K`/`L` reverse/pause/forward scrubbing, `Left`/`Right` frame stepping).
+  - **No FFmpeg required for this phase:** the player plays whatever the platform WebView can decode natively (WKWebView: mp4/mov/m4v with H.264/HEVC/ProRes; WebView2: H.264/VP9/AV1, HEVC only with system codec; WebKitGTK: depends on installed GStreamer plugins). Use a dedicated `rr-video://` scheme so the verified `rr-image://` fast-path stays untouched.
+  - **Graceful fallback for undecodable formats:** on `<video>` `onError`, show the existing "no preview available" placeholder plus an **"Open in system player"** button (`open::that`), so unsupported containers (`.mkv`, `.avi`, `.wmv`, `.flv`, AVCHD `.mts/.m2ts`) are never a dead end.
+
+- [ ] **Phase 4 (Optional, decision pending): FFmpeg Compatibility Layer for Exotic Containers/Codecs:**
+  - **Trigger:** Only pursue if real users need in-app playback or poster frames for formats the OS/WebView cannot decode (MKV, WebM on macOS, AVI/WMV/FLV, AVCHD `.mts/.m2ts`, HEVC on Windows without codec extension, most formats on Linux without GStreamer plugins).
+  - **One tool, two benefits:** `ffmpeg` can serve both **poster-frame extraction** (generalizing the Linux-only `video_linux.rs` into a cross-platform fallback that runs **only after** `thumb_rs` fails, never on the cached fast path) and **on-demand remux/transcode proxy** for the Phase 3 player.
+  - **Distribution options (decide later):** (a) *Optional detection* of a user-installed `ffmpeg` (PATH plus `/opt/homebrew/bin`, `/usr/local/bin`; zero download size, poor UX on macOS/Windows); (b) *Bundled Tauri sidecar* (`externalBin`, LGPL build, +30–80 MB per platform, macOS notarization and per-platform binaries required).
+  - **Mandatory guardrails:** hard timeout and kill, global concurrency cap, binary probe once, negative cache for failures (see `docs/LINUX_THUMBNAILS_TASK.md` §4); never touch the L1/L2 thumbnail fast path.
 
 
 - [x] **Fujifilm RAW (`.raf`) Header Parser & Grid Thumbnail Extraction (`v0.5.1` / Build `013A`):**
@@ -638,6 +646,18 @@
     - **Zweistufiges Rendering & RAM-Lookahead:**
       - Nutzt das zweistufige Progressive-Loading (sofortige Anzeige des gecachten Scale-1/Scale-2-Previews aus L1/L2 in `< 0,1 ms`, nahtloses Nachziehen von `fullres=true`).
       - Während des Vollbild-/Diashow-Modus wärmt der Hintergrund-Preloader (`warm_thumbnail_cache`) in Vorwärtsrichtung die nächsten 3–5 Bilder (inkl. Full-Res-Preview bei aktivem Diashow-Timer) proaktiv in den L1-RAM-Cache vor, sodass jeder Diashow-Wechsel selbst auf NAS-Archiven zu 100 % aus dem RAM erfolgt.
+
+- [x] **Configurable Keyboard Shortcut Presets (Lightroom vs. darktable Muscle Memory):**
+  - **Context & Goal:**
+    Photographers migrating from or working with **darktable** are accustomed to `R` for *Reject* (and `F1`–`F5` for color labels), whereas RapidReady's default follows the **Adobe Lightroom / Photo Mechanic** convention (`P` = Pick, `X` = Reject, `U` = Unflag, `6`–`9` = Colors, `R` = Open in RAW Developer).
+  - **Requirements & Architecture:**
+    - Add a **Shortcut Scheme** selector in `SettingsView.tsx` (`settingsStore.ts`): `Lightroom Standard (P / X / U)` (default) vs. `darktable Compatible (R = Reject)`.
+    - In `darktable` mode:
+      - `R` toggles **Reject** (`flag = -1`, alongside `X`).
+      - Opening the external RAW developer moves to `Ctrl/Cmd + R` or `Shift + R`.
+      - Optional support for `F1`–`F5` color label shortcuts alongside `6`–`9`.
+    - Dynamically reflect the active shortcut bindings in tooltips (`CullingToolbar.tsx`, `InspectorCullingCard.tsx`) and in `HelpShortcuts.tsx`.
+  - **CTSP Guardrail:** Pure UI keybinding dispatch in `useLibraryShortcuts.ts` (0% CTSP impact).
 
 - [ ] **Switchable Masonry Grid Layout (Alternative to Fixed-Ratio Grid):**
   - **Context & Goal:**
@@ -725,7 +745,7 @@
             - On Network/NAS: Prompts with explicit **red warning triangle** alerting that files on network shares are permanently and irrevocably wiped without Trash support (`fs::remove_dir_all`).
           - State Cleanup: Removes all images under the deleted path from `libraryStore`, cleans `selectedPaths`, and gracefully steps `activeFolderPath` up to the parent directory.
 
-- [ ] **Harmonized Two-Stage Folder Tree Deletion & Guarded Settings Switches:**
+- [x] **Harmonized Two-Stage Folder Tree Deletion & Guarded Settings Switches:**
   - **Context & Goal:**
     Currently, right-clicking on a folder tree node allows triggering recursive folder deletion directly from the context menu (subject to confirmation). In contrast, image deletion in RapidReady enforces a disciplined, two-stage methodology: images are first flagged for rejection (`X`), and only deleted in a second explicit step via the toolbar trash bin. Deleting entire folder hierarchies directly from a context menu poses high operational risk (especially on network/NAS shares without a Recycle Bin). This item harmonizes folder tree deletion with image deletion by introducing the same two-stage mark-and-delete paradigm, guarded by configurable settings switches.
   - **The Two-Stage Folder Deletion Paradigm:**
@@ -898,7 +918,7 @@
        - **Audio Format:** Sample rate (48 kHz) and bit depth (24-bit LPCM, AAC).
   - **Ergonomic Inspector UI Architecture:**
     - [x] Dedicated collapsible section: *"Erweiterte EXIF-Daten & Technische Details"* in `InspectorCameraCard.tsx` (`v0.5.3` / Build `0167`), keeping the main exposure and file info cards clean while offering instant drill-down on demand.
-- [ ] **Inspector Live-Histogram & Preview Viewport Switcher:**
+- [x] **Inspector Live-Histogram & Preview Viewport Switcher:**
   - **Context & Goal:**
     Photographers require rapid luminance and RGB exposure evaluation directly within the Inspector sidebar without needing to open the full Loupe view or switch to an external RAW developer.
   - **UI Placement & Toggle Architecture:**
@@ -1019,6 +1039,29 @@
       - **Option 1 (`[ Als Bibliothek speichern ]`):** Befördert den temporären Ordner automatisch in die festen `locations` (`settingsStore.locations`). Die Sammlungen bleiben mit diesem Bibliotheks-Scope verknüpft und sind jederzeit über das Bibliotheks-Dropdown wieder erreichbar.
       - **Option 2 (`[ Sammlungen verwerfen ]`):** Bereinigt die angelegten Sammlungen dieses temporären Ordners aus `albums.json` (z. B. wenn sie nur für einen schnellen Einweg-Export dienten) und führt den Bibliothekswechsel durch.
       - **Option 3 (`[ Abbrechen ]`):** Bricht den Bibliothekswechsel ab und bleibt im aktuellen Arbeitszustand.
+
+---
+
+### Milestone: Self-Hosted Cloud & Immich Integration (RapidRAW v1.6.7 Parity)
+- [ ] **Native Immich Server Integration (Remote Browsing, Culling, Direct Ingest & RapidRAW Metadata Sync):**
+  - **Context & Goal:**
+    Starting with **RapidRAW v1.6.7**, CyberTimon introduced native integration with self-hosted **Immich** servers (v2.5+), storing non-destructive `.rrdata` payload directly in Immich's custom asset metadata API under the key `rapidraw`. By supporting Immich in RapidReady, photographers can browse, cull, rate, and tag their self-hosted Immich libraries at 60 FPS, offload SD cards directly to Immich, and hand over selected assets to RapidRAW with 100% consistent metadata across all workstations.
+  - **Core Functional Pillars:**
+    1. **Secure Server Connection & Credential Sharing:**
+       - Configure Immich Server URL and API Key (stored securely in the OS Keychain / Credential Manager, optionally auto-detecting existing RapidRAW Immich credentials).
+       - Dedicated **Immich** section in the left library sidebar (Timeline by Year/Month, Immich Albums, Favorites, Camera/Location filters).
+    2. **Zero-Download Preview Streaming & Local L1/L2 Cache Bridging:**
+       - Instead of downloading multi-gigabyte RAWs over HTTP, RapidReady fetches Immich's pre-generated server thumbnails (`size=thumbnail` for Grid, `size=preview` for Loupe) via a dedicated `rr-immich://` protocol or directly feeds them into the local L1 RAM / L2 SSD `ChunkCache` keyed by `immich://<server_id>/<asset_id>`.
+       - Original RAW files are only streamed/downloaded on demand when requesting 1:1 sensor pixel peeping (`Z`) or handing over to RapidRAW (`R`).
+    3. **100% RapidRAW v1.6.7 Metadata & Sidecar Parity:**
+       - Read and write RapidReady culling state (ratings `0–5`, picks/rejects, color labels, tags, GPS overrides) directly into Immich's asset metadata endpoint (`PUT /api/assets/{id}/metadata` under the `rapidraw` JSON key) alongside native Immich states (`rating`, `isFavorite`, `isArchived`).
+       - Changes made in RapidReady are immediately visible in RapidRAW v1.6.7 and the Immich web/mobile apps without local `.rrdata` files.
+    4. **Direct SD-Card-to-Immich Ingest & Collection Upload:**
+       - Optional Import Step 2 destination: Upload selected photos/RAWs from SD card directly to an Immich server (and assign to an Immich album) or simultaneously to local NAS + Immich backup.
+       - Collection Export destination: Export curated collections directly into an Immich Album.
+  - **CTSP Guardrail:**
+    - Strictly isolate remote REST/HTTP calls from the local filesystem scanner and `rr-image://` fast-path. Once an Immich thumbnail is fetched once, serve it in `< 0.5 ms` from local L1 RAM / L2 SSD `ChunkCache`.
+
 
 
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronLeft, ChevronRight, Film, Info, Camera, Play } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Film, Info, Camera } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -348,7 +348,7 @@ export const LoupeViewer = React.memo(function LoupeViewer({
             {activeImage && (
               isVideo ? (
                 <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold tracking-wide bg-accent/15 text-accent border border-accent/30 flex items-center gap-1">
-                  <Play className="w-2.5 h-2.5 fill-accent" />
+                  <Film className="w-2.5 h-2.5 text-accent" />
                   {activeImage.name.split('.').pop()?.toUpperCase() || 'VID'}
                 </span>
               ) : isRaw ? (

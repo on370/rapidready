@@ -1,10 +1,13 @@
 import { useEffect, useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, ChevronRight, ScanEye, Check, Play, Camera, Info, Film } from "lucide-react";
+import { ChevronDown, ChevronRight, ScanEye, Check, Camera, Info, Film, BarChart2, ExternalLink } from "lucide-react";
+import { openPath } from "@tauri-apps/plugin-opener";
+import { invoke } from "@tauri-apps/api/core";
 import { LibraryImage } from "../../../../stores/libraryStore";
 import { useLibraryUIStore } from "../../../../stores/libraryUIStore";
 import { getRrImageUrl } from "../../../../utils/image";
 import { FocusPeakingOverlay } from "../components/FocusPeakingOverlay";
+import { InspectorHistogram } from "../components/InspectorHistogram";
 
 interface InspectorPreviewCardProps {
   activeImage: LibraryImage;
@@ -24,7 +27,12 @@ export function InspectorPreviewCard({
   isRaw,
 }: InspectorPreviewCardProps) {
   const { t } = useTranslation('library');
-  const { focusPeakingEnabled, toggleFocusPeaking } = useLibraryUIStore();
+  const { 
+    focusPeakingEnabled, 
+    toggleFocusPeaking, 
+    inspectorHistogramMode, 
+    cycleInspectorHistogramMode 
+  } = useLibraryUIStore();
   const inspectorImageRef = useRef<HTMLImageElement | null>(null);
   const inspectorContainerRef = useRef<HTMLDivElement | null>(null);
   const [inspectorPreviewSrc, setInspectorPreviewSrc] = useState<string>('');
@@ -32,6 +40,7 @@ export function InspectorPreviewCard({
 
   // Progressive preview loading: instant thumbnail + background fullres
   useEffect(() => {
+    let canceled = false;
     setLoadFailed(false);
     const currentPath = activeImage.path;
     const thumbUrl = getRrImageUrl(currentPath, false, activeImage.culling?.orientation, 1, activeImage.size, activeImage.mtime);
@@ -43,10 +52,33 @@ export function InspectorPreviewCard({
     img.crossOrigin = 'anonymous';
     img.src = targetFullresUrl;
     img.onload = () => {
-      setInspectorPreviewSrc(prev => (prev === thumbUrl ? targetFullresUrl : prev));
-      setLoadFailed(false);
+      if (!canceled) {
+        setInspectorPreviewSrc(prev => (prev === thumbUrl ? targetFullresUrl : prev));
+        setLoadFailed(false);
+      }
+    };
+    img.onerror = () => {
+      if (!canceled) {
+        if (inspectorImageRef.current?.complete && inspectorImageRef.current?.naturalWidth === 0) {
+          setLoadFailed(true);
+        }
+      }
+    };
+
+    return () => {
+      canceled = true;
+      img.onload = null;
+      img.onerror = null;
+      img.src = '';
     };
   }, [activeImage.path, activeImage.culling?.orientation, activeImage.size, activeImage.mtime]);
+
+  // Check if current visible image failed on mount / src change
+  useEffect(() => {
+    if (inspectorImageRef.current?.complete && inspectorImageRef.current?.naturalWidth === 0) {
+      setLoadFailed(true);
+    }
+  }, [inspectorPreviewSrc, activeImage.path]);
 
   return (
     <div className="space-y-2">
@@ -64,23 +96,41 @@ export function InspectorPreviewCard({
             {t('inspector.preview', 'Vorschau')}
           </h3>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           {!isCollapsed && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleFocusPeaking();
-              }}
-              className={`p-1 rounded transition-all cursor-pointer ${
-                focusPeakingEnabled 
-                  ? 'bg-accent/20 text-accent ring-1 ring-accent/40' 
-                  : 'text-txt-tertiary hover:text-txt-secondary hover:bg-app-hover'
-              }`}
-              title={t('toolbar.focusPeakingTooltip', 'Focus Peaking (F)')}
-            >
-              <ScanEye className="w-3.5 h-3.5" />
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleFocusPeaking();
+                }}
+                className={`p-1 rounded transition-all cursor-pointer ${
+                  focusPeakingEnabled 
+                    ? 'bg-accent/20 text-accent ring-1 ring-accent/40' 
+                    : 'text-txt-tertiary hover:text-txt-secondary hover:bg-app-hover'
+                }`}
+                title={t('toolbar.focusPeakingTooltip', 'Focus Peaking (Shift+F)')}
+              >
+                <ScanEye className="w-3.5 h-3.5" />
+              </button>
+
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  cycleInspectorHistogramMode();
+                }}
+                className={`p-1 rounded transition-all cursor-pointer ${
+                  inspectorHistogramMode !== 'off'
+                    ? 'bg-accent/20 text-accent ring-1 ring-accent/40'
+                    : 'text-txt-tertiary hover:text-txt-secondary hover:bg-app-hover'
+                }`}
+                title={t('inspector.histogramTooltip', 'Histogramm umschalten: Aus / Overlay / Vollbild (H)')}
+              >
+                <BarChart2 className="w-3.5 h-3.5" />
+              </button>
+            </>
           )}
           {isCollapsed && (
             <span className="text-[10px] text-txt-tertiary font-mono">
@@ -117,6 +167,21 @@ export function InspectorPreviewCard({
                     {t('inspector.videoPreviewUnavailableHint', 'Das Betriebssystem kann dieses Format nicht dekodieren. Die Datei bleibt unverändert.')}
                   </p>
                 </div>
+                <button
+                  type="button"
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    try {
+                      await openPath(activeImage.path);
+                    } catch {
+                      await invoke('show_in_finder', { path: activeImage.path });
+                    }
+                  }}
+                  className="mt-1 flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/10 hover:bg-white/15 text-white/90 hover:text-white text-[11px] font-medium border border-white/15 shadow-xs transition-colors cursor-pointer"
+                >
+                  <ExternalLink className="w-3 h-3 text-accent" />
+                  <span>{t('inspector.openExternalPlayer', 'Im externen Player öffnen')}</span>
+                </button>
               </div>
             ) : (
               <>
@@ -126,35 +191,54 @@ export function InspectorPreviewCard({
                   alt={activeImage.name} 
                   crossOrigin="anonymous"
                   onError={() => setLoadFailed(true)}
-                  className="w-full h-full object-contain" 
+                  className={`w-full h-full object-contain ${inspectorHistogramMode === 'full' ? 'opacity-0 pointer-events-none' : ''}`} 
                 />
-                <FocusPeakingOverlay 
-                  imageRef={inspectorImageRef}
-                  containerRef={inspectorContainerRef}
-                  triggerUpdate={inspectorPreviewSrc}
-                />
+                {inspectorHistogramMode !== 'full' && (
+                  <FocusPeakingOverlay 
+                    imageRef={inspectorImageRef}
+                    containerRef={inspectorContainerRef}
+                    triggerUpdate={inspectorPreviewSrc}
+                  />
+                )}
+                {inspectorHistogramMode === 'overlay' && (
+                  <InspectorHistogram
+                    imageRef={inspectorImageRef}
+                    triggerUpdate={inspectorPreviewSrc}
+                    mode="overlay"
+                    hasFlag={activeImage.culling.flag === 1 || activeImage.culling.flag === -1}
+                  />
+                )}
+                {inspectorHistogramMode === 'full' && (
+                  <InspectorHistogram
+                    imageRef={inspectorImageRef}
+                    triggerUpdate={inspectorPreviewSrc}
+                    mode="full"
+                  />
+                )}
               </>
             )}
-            {activeImage.culling.flag === -1 && (
+            {inspectorHistogramMode !== 'full' && activeImage.culling.flag === -1 && (
               <div className="absolute inset-0 bg-danger/25 pointer-events-none z-10" />
             )}
-            <div className="absolute top-2 right-2 flex gap-1.5 z-20">
-              {activeImage.culling.flag === 1 && (
-                <span className="w-5 h-5 rounded-full bg-success flex items-center justify-center shadow">
-                  <Check className="w-3 h-3 text-white" />
-                </span>
-              )}
-              {activeImage.culling.flag === -1 && (
-                <span className="w-5 h-5 rounded-full bg-danger flex items-center justify-center text-xs font-bold text-white shadow">
-                  X
-                </span>
-              )}
-            </div>
-            {!(loadFailed && (isVideo || activeImage.is_video)) && (
+            {inspectorHistogramMode !== 'full' && (
+              <div className="absolute top-2 right-2 flex gap-1.5 z-30">
+                {activeImage.culling.flag === 1 && (
+                  <span className="w-5 h-5 rounded-full bg-success flex items-center justify-center shadow">
+                    <Check className="w-3 h-3 text-white" />
+                  </span>
+                )}
+                {activeImage.culling.flag === -1 && (
+                  <span className="w-5 h-5 rounded-full bg-danger flex items-center justify-center text-xs font-bold text-white shadow">
+                    X
+                  </span>
+                )}
+              </div>
+            )}
+            {inspectorHistogramMode !== 'full' && !(loadFailed && (isVideo || activeImage.is_video)) && (
               <div className="absolute bottom-2 left-2 flex items-center gap-1.5 bg-black/80 backdrop-blur-sm border border-white/15 shadow-sm px-2 py-0.5 rounded text-[11px] font-mono text-white z-20">
                 {isVideo ? (
                   <span className="text-accent font-semibold flex items-center gap-1">
-                    <Play className="w-2.5 h-2.5 fill-accent" />
+                    <Film className="w-2.5 h-2.5" />
                     {extension}
                   </span>
                 ) : (
@@ -171,7 +255,7 @@ export function InspectorPreviewCard({
             <div 
               className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-accent/10 border border-accent/30 text-xs shadow-sm"
             >
-              <Play className="w-4 h-4 text-accent fill-accent flex-shrink-0" />
+              <Film className="w-4 h-4 text-accent flex-shrink-0" />
               <div>
                 <span className="font-semibold text-accent text-[11px] block">{t('inspector.videoMedia', 'Videodatei (Container)')}</span>
                 <span className="text-[10px] text-txt-secondary block leading-snug">{t('inspector.videoMediaDesc', 'Native Vorschau-Keyframe')}</span>

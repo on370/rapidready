@@ -13,7 +13,7 @@
 
 Even if you aren't heading into full RAW development right away, RapidReady is a complete, standalone high-speed tool in its own right: whether you're backing up memory cards, performing a lightning-fast cull across thousands of shots, or simply browsing massive photo archives without ever waiting for a rendering progress bar.
 
-## 🚀 Key Features (Current & Planned)
+## 🚀 Key Features
 
 - **Persistent Local Disk Cache (Picasa & Lightroom Architecture):** High-speed 64 MB rolling binary chunk containers (`chunk_XXXX.bin`) with single-seek $O(1)$ byte-range retrieval and SQLite indexing (`archive_catalog.sqlite`) on local NVMe storage provide 100% offline-first 60 FPS grid browsing across 100,000+ images with zero NAS seek overhead.
 - **Blazing Fast RAW Engine & Universal Safety Net:** Powered by a custom Rust backend, RapidReady extracts embedded JPEGs from CR2, CR3, ARW, RAF, RW2, and other proprietary RAW formats instantly (< 2 ms) with an architectural universal fallback safety net guaranteeing 100% preview availability without blank tiles.

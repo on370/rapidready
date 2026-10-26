@@ -30,6 +30,12 @@
     "startupView": {
       "title": "Immer im Import-Modus starten",
       "desc": "Öffnet beim App-Start die Import-Ansicht anstelle der Bibliothek"
+    },
+    "shortcutPreset": {
+      "title": "Tastaturkürzel-Schema",
+      "desc": "Wähle zwischen dem Lightroom-Standard oder darktable-kompatiblen Shortcuts.",
+      "lightroom": "Lightroom (Standard)",
+      "darktable": "darktable"
     }
   },
   "gps": {
@@ -39,6 +45,18 @@
     "openStreetMap": "OpenStreetMap im Browser",
     "internalViewer": "Integrierter Viewer",
     "comingSoon": "Demnächst"
+  },
+  "fileOps": {
+    "title": "Datensicherheit & Dateioperationen",
+    "subtitle": "Sicherheitsbarrieren für das Löschen und Verwalten von Verzeichnissen",
+    "enableFolderDeletion": {
+      "title": "Ordner-Löschfunktionen aktivieren",
+      "desc": "Ermöglicht das Vormerken oder Löschen kompletter Ordner in der Seitenleiste. Im deaktivierten Zustand sind Löschoptionen für Verzeichnisse vollständig geschützt."
+    },
+    "allowDirectFolderDeletion": {
+      "title": "Direktes Löschen ohne Vormerkung erlauben",
+      "desc": "Wenn aktiv, löscht das Kontextmenü einen Ordner sofort nach Bestätigung. Standardmäßig werden Ordner im sicheren 2-Stufen-Verfahren zuerst zum Löschen vorgemerkt."
+    }
   },
   "rapidraw": {
     "title": "RapidRaw Integration",

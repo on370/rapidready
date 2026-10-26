@@ -78,10 +78,14 @@ interface LibraryStore {
   activeFolderPath: string | null;
   selectedFolderPaths: Set<string>;
   discoveredFolders: Set<string>;
+  stagedDeleteFolderPaths: Set<string>;
   setActiveFolderPath: (path: string | null) => void;
   setSelectedFolderPaths: (paths: Set<string>) => void;
   addDiscoveredFolders: (folders: string[]) => void;
   removeFolder: (folderPath: string) => void;
+  stageFoldersForDeletion: (folderPaths: string[]) => void;
+  unstageFoldersForDeletion: (folderPaths: string[]) => void;
+  clearStagedDeleteFolders: () => void;
   setActiveImageIndex: (index: number) => void;
   renameFolderPath: (oldPath: string, newPath: string) => void;
 
@@ -275,6 +279,25 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
     }
     return changed ? { discoveredFolders: next } : state;
   }),
+  stagedDeleteFolderPaths: new Set<string>(),
+  stageFoldersForDeletion: (folderPaths) => set((state) => {
+    const next = new Set(state.stagedDeleteFolderPaths);
+    for (const p of folderPaths) {
+      next.add(normalizeSlash(p));
+    }
+    return { stagedDeleteFolderPaths: next };
+  }),
+  unstageFoldersForDeletion: (folderPaths) => set((state) => {
+    const next = new Set(state.stagedDeleteFolderPaths);
+    const toRemove = new Set(folderPaths.map(p => normalizeSlash(p).toLowerCase()));
+    for (const p of next) {
+      if (toRemove.has(normalizeSlash(p).toLowerCase())) {
+        next.delete(p);
+      }
+    }
+    return { stagedDeleteFolderPaths: next };
+  }),
+  clearStagedDeleteFolders: () => set({ stagedDeleteFolderPaths: new Set() }),
   appendImageChunk: (chunk, dirs = []) => set((state) => {
     let nextFolders = state.discoveredFolders;
     if (dirs && dirs.length > 0) {
@@ -639,6 +662,7 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
             rootPath: path,
             activeFolderPath: path,
             selectedFolderPaths: path ? new Set([normalizePath(path)]) : new Set(),
+            stagedDeleteFolderPaths: new Set(),
             discoveredFolders: nextFolders,
             viewMode: 'grid',
             isLoading: false,
@@ -688,6 +712,7 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
       rootPath: path,
       activeFolderPath: path,
       selectedFolderPaths: path ? new Set([normalizePath(path)]) : new Set(),
+      stagedDeleteFolderPaths: isContinuing ? s.stagedDeleteFolderPaths : new Set(),
       discoveredFolders: isContinuing ? s.discoveredFolders : (path ? new Set([normalizeSlash(path)]) : new Set()),
       viewMode: 'grid',
       isLoading: true,
