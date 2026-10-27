@@ -271,6 +271,29 @@ select option {
   background: rgba(239, 68, 68, 0.12); pointer-events: none;
 }
 
+/* ── Slideshow Crossfade Transitions ─────────────── */
+@keyframes crossfade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes crossfade-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+.animate-crossfade-in {
+  animation: crossfade-in 350ms ease-in-out forwards;
+  will-change: opacity;
+  transform: translateZ(0);
+}
+
+.animate-crossfade-out {
+  animation: crossfade-out 350ms ease-in-out forwards;
+  will-change: opacity;
+  transform: translateZ(0);
+}
+
 html, body, #root {
   height: 100%;
   width: 100%;

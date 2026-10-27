@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
-  ChevronLeft, ChevronRight, Play, Pause, Repeat, Maximize, Minimize, 
+  ChevronLeft, ChevronRight, Play, Pause, Repeat, Blend, Maximize, Minimize, 
   X, Film, Timer, Check
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -9,7 +9,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { openPath } from '@tauri-apps/plugin-opener';
 import { LibraryImage, useLibraryStore, CullingState } from '../../../../stores/libraryStore';
 import { useLibraryUIStore } from '../../../../stores/libraryUIStore';
-import { getRrImageUrl, isVideoFilename } from '../../../../utils/image';
+import { getRrImageUrl, isVideoFilename, isRawFilename } from '../../../../utils/image';
 
 export interface FullscreenViewerProps {
   activeImage: LibraryImage | undefined;
@@ -43,9 +43,16 @@ export const FullscreenViewer = React.memo(function FullscreenViewer({
   const setSlideshowIntervalSec = useLibraryUIStore((s) => s.setSlideshowIntervalSec);
   const slideshowLoop = useLibraryUIStore((s) => s.slideshowLoop);
   const toggleSlideshowLoop = useLibraryUIStore((s) => s.toggleSlideshowLoop);
+  const slideshowCrossfade = useLibraryUIStore((s) => s.slideshowCrossfade);
+  const toggleSlideshowCrossfade = useLibraryUIStore((s) => s.toggleSlideshowCrossfade);
+  const loupeScale = useLibraryUIStore((s) => s.loupeScale);
+  const isZoomed = loupeScale > 0;
   const exitFullscreen = useLibraryUIStore((s) => s.exitFullscreen);
 
   const currentImage = displayedImages[activeImageIndex] || activeImage;
+  const isRawFile = currentImage
+    ? (currentImage.is_raw ?? isRawFilename(currentImage.name))
+    : false;
   const isVideo = currentImage
     ? (currentImage.is_video ?? isVideoFilename(currentImage.name)) || ['wmv', 'flv', 'mkv', 'webm'].includes(currentImage.name.split('.').pop()?.toLowerCase() || '')
     : false;
@@ -106,7 +113,7 @@ export const FullscreenViewer = React.memo(function FullscreenViewer({
     }
   };
 
-  // Two-Stage Progressive Loading
+  // Two-Stage Progressive Loading & 2-Layer Crossfade
   const previewSrc = currentImage
     ? getRrImageUrl(currentImage.path, false, currentImage.culling?.orientation, 2, currentImage.size, currentImage.mtime)
     : '';
@@ -114,17 +121,66 @@ export const FullscreenViewer = React.memo(function FullscreenViewer({
     ? getRrImageUrl(currentImage.path, true, currentImage.culling?.orientation, undefined, currentImage.size, currentImage.mtime)
     : '';
 
-  const [displaySrc, setDisplaySrc] = useState(previewSrc);
+  const initialSrc = (!isRawFile && fullresSrc) ? fullresSrc : previewSrc;
+
+  const [displaySrc, setDisplaySrc] = useState(initialSrc);
+  const [prevDisplaySrc, setPrevDisplaySrc] = useState<string | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const mainImgRef = useRef<HTMLImageElement>(null);
-  const isAutoTransitionRef = useRef(false);
+
+  const prevImagePathRef = useRef<string | undefined>(currentImage?.path);
+  const lastCommittedSrcRef = useRef<string | null>(initialSrc || null);
+  const crossfadeTimeoutRef = useRef<number | null>(null);
+  const lastNavTimeRef = useRef<number>(0);
+
+  // Update lastCommittedSrcRef whenever displaySrc is non-empty
+  useEffect(() => {
+    if (displaySrc) {
+      lastCommittedSrcRef.current = displaySrc;
+    }
+  }, [displaySrc]);
+
+  // Synchronously handle path changes during render so no stale image URL is ever rendered under the new key
+  if (currentImage?.path !== prevImagePathRef.current) {
+    prevImagePathRef.current = currentImage?.path;
+    const initialNextSrc = (!isRawFile && fullresSrc) ? fullresSrc : previewSrc;
+
+    const now = Date.now();
+    const isRapidSkim = (now - lastNavTimeRef.current) < 180;
+    lastNavTimeRef.current = now;
+
+    if (slideshowCrossfade && !isRapidSkim && lastCommittedSrcRef.current) {
+      setPrevDisplaySrc(lastCommittedSrcRef.current);
+    } else {
+      setPrevDisplaySrc(null);
+    }
+    setDisplaySrc(initialNextSrc);
+  }
+
+  // Clear outgoing backdrop layer after ~380ms (CSS animation is 350ms)
+  useEffect(() => {
+    if (prevDisplaySrc) {
+      if (crossfadeTimeoutRef.current !== null) {
+        window.clearTimeout(crossfadeTimeoutRef.current);
+      }
+      crossfadeTimeoutRef.current = window.setTimeout(() => {
+        setPrevDisplaySrc(null);
+        crossfadeTimeoutRef.current = null;
+      }, 380);
+    }
+    return () => {
+      if (crossfadeTimeoutRef.current !== null) {
+        window.clearTimeout(crossfadeTimeoutRef.current);
+        crossfadeTimeoutRef.current = null;
+      }
+    };
+  }, [prevDisplaySrc]);
 
   useEffect(() => {
     let canceled = false;
     setLoadFailed(false);
 
     if (!fullresSrc) {
-      setDisplaySrc('');
       return;
     }
 
@@ -133,13 +189,12 @@ export const FullscreenViewer = React.memo(function FullscreenViewer({
 
     if (img.complete && img.naturalWidth > 0) {
       setDisplaySrc(fullresSrc);
+      lastCommittedSrcRef.current = fullresSrc;
     } else {
-      if (previewSrc) {
-        setDisplaySrc(previewSrc);
-      }
       img.onload = () => {
         if (!canceled) {
           setDisplaySrc(fullresSrc);
+          lastCommittedSrcRef.current = fullresSrc;
           setLoadFailed(false);
         }
       };
@@ -244,6 +299,24 @@ export const FullscreenViewer = React.memo(function FullscreenViewer({
       })
       .catch(() => {});
 
+    // Pre-decode next images in WebKit cache for instant 60fps crossfading
+    if (warmPaths.length > 0) {
+      const preloadList = warmPaths.slice(0, 2);
+      for (const p of preloadList) {
+        const item = displayedImages.find(img => img.path === p);
+        if (item) {
+          const isItemRaw = item.is_raw ?? isRawFilename(item.name);
+          const pSrc = getRrImageUrl(item.path, false, item.culling?.orientation, 2, item.size, item.mtime);
+          const fSrc = getRrImageUrl(item.path, true, item.culling?.orientation, undefined, item.size, item.mtime);
+          const targetUrl = (!isItemRaw && fSrc) ? fSrc : pSrc;
+          if (targetUrl) {
+            const preImg = new Image();
+            preImg.src = targetUrl;
+          }
+        }
+      }
+    }
+
     return () => {
       warmupTokenRef.current = Date.now();
     };
@@ -255,7 +328,6 @@ export const FullscreenViewer = React.memo(function FullscreenViewer({
 
     const intervalMs = (slideshowIntervalSec || 3) * 1000;
     const timer = setTimeout(() => {
-      isAutoTransitionRef.current = true;
       if (activeImageIndex < displayedImages.length - 1) {
         const nextIdx = activeImageIndex + 1;
         setActiveImageIndex(nextIdx);
@@ -281,7 +353,6 @@ export const FullscreenViewer = React.memo(function FullscreenViewer({
   ]);
 
   const handleNext = useCallback(() => {
-    isAutoTransitionRef.current = false;
     if (activeImageIndex < displayedImages.length - 1) {
       const nextIdx = activeImageIndex + 1;
       setActiveImageIndex(nextIdx);
@@ -293,7 +364,6 @@ export const FullscreenViewer = React.memo(function FullscreenViewer({
   }, [activeImageIndex, displayedImages, slideshowLoop, setActiveImageIndex, setSelectedPaths]);
 
   const handlePrev = useCallback(() => {
-    isAutoTransitionRef.current = false;
     if (activeImageIndex > 0) {
       const prevIdx = activeImageIndex - 1;
       setActiveImageIndex(prevIdx);
@@ -307,7 +377,7 @@ export const FullscreenViewer = React.memo(function FullscreenViewer({
 
   // Culling Feedback Badge (1.2s glassmorphism toast)
   const prevCullingRef = useRef<CullingState | null>(null);
-  const prevImagePathRef = useRef<string | null>(null);
+  const prevCullingImagePathRef = useRef<string | null>(null);
   const [feedbackBadge, setFeedbackBadge] = useState<{
     text: string;
     icon?: React.ReactNode;
@@ -318,10 +388,10 @@ export const FullscreenViewer = React.memo(function FullscreenViewer({
   useEffect(() => {
     if (!currentImage) return;
 
-    const prevPath = prevImagePathRef.current;
+    const prevPath = prevCullingImagePathRef.current;
     const prevCulling = prevCullingRef.current;
 
-    prevImagePathRef.current = currentImage.path;
+    prevCullingImagePathRef.current = currentImage.path;
     prevCullingRef.current = { ...currentImage.culling };
 
     // Only fire if user modified culling on the SAME image
@@ -490,21 +560,32 @@ export const FullscreenViewer = React.memo(function FullscreenViewer({
               </button>
             </div>
           ) : (
-            <img
-              key={currentImage.path}
-              ref={mainImgRef}
-              src={displaySrc}
-              alt={currentImage.name}
-              className={`w-full h-full object-contain select-none pointer-events-none ${
-                isAutoTransitionRef.current ? 'animate-in fade-in duration-300' : ''
-              }`}
-              onLoad={() => {
-                isAutoTransitionRef.current = false;
-              }}
-              onError={() => {
-                if (isVideo) setLoadFailed(true);
-              }}
-            />
+            <>
+              {/* Outgoing Image Backdrop Layer for smooth crossfade */}
+              {prevDisplaySrc && !isZoomed && (
+                <img
+                  key={prevDisplaySrc}
+                  src={prevDisplaySrc}
+                  alt=""
+                  aria-hidden="true"
+                  draggable={false}
+                  className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none animate-crossfade-out z-0"
+                />
+              )}
+
+              <img
+                key={currentImage.path}
+                ref={mainImgRef}
+                src={displaySrc}
+                alt={currentImage.name}
+                className={`w-full h-full object-contain select-none pointer-events-none relative z-10 ${
+                  prevDisplaySrc && !isZoomed ? 'animate-crossfade-in' : ''
+                }`}
+                onError={() => {
+                  if (isVideo) setLoadFailed(true);
+                }}
+              />
+            </>
           )}
 
           {/* Video Poster Frame Indicator */}
@@ -673,7 +754,25 @@ export const FullscreenViewer = React.memo(function FullscreenViewer({
           <Repeat className="w-3.5 h-3.5" />
         </button>
 
-        {/* 9. OS Fullscreen Toggle */}
+        {/* 9. Crossfade Toggle */}
+        <button
+          onClick={toggleSlideshowCrossfade}
+          title={
+            slideshowCrossfade 
+              ? t('fullscreen.crossfadeActive', 'Weiche Überblendung aktiv') 
+              : t('fullscreen.crossfadeInactive', 'Weiche Überblendung inaktiv')
+          }
+          aria-label={t('fullscreen.crossfadeToggle', 'Weiche Überblendung (an/aus)')}
+          className={`p-1.5 rounded-md transition-all cursor-pointer ${
+            slideshowCrossfade 
+              ? 'text-accent bg-accent/20' 
+              : 'text-white/50 hover:text-white hover:bg-white/10'
+          }`}
+        >
+          <Blend className="w-3.5 h-3.5" />
+        </button>
+
+        {/* 10. OS Fullscreen Toggle */}
         <button
           onClick={(e) => {
             e.stopPropagation();

@@ -599,7 +599,7 @@
 ---
 
 ### Milestone: Library & Inspector UI Ergonomics
-- [ ] **Vollbild-Präsentationsmodus & Integrierte Diashow ("Presentation & Slideshow Mode"):**
+- [x] **Vollbild-Präsentationsmodus & Integrierte Diashow ("Presentation & Slideshow Mode"):**
   - **Context & Goal:**
     Neben der schnellen Kachel-Übersicht (`Grid`) und der detaillierten Einzelbild-Inspektion (`Loupe`) benötigen Fotografen einen ablenkungsfreien **Vollbild- & Diashow-Modus** (für die finale Auswahlkontrolle, Kundenpräsentationen oder das entspannte Durchblättern auf großen Monitoren). Der Modus kombiniert ein zweistufiges Vollbild-Konzept (App-Fenster-Vollbild vs. echtes OS-Vollbild) mit einer sich automatisch ausblendenden HUD-Steuerleiste und verzögerungsfreiem L1-RAM-Preloading.
   - **1. Zweistufiges Vollbild-Konzept (Window-Fill vs. OS-Fullscreen):**
@@ -633,16 +633,17 @@
         4. **`▶|` (Bild vor):** Button (`SkipForward` / `ChevronRight`) zum nächsten Bild.
         5. **Intervall-Auswahl (Zeitverzögerung Diashow):** Kompaktes Pulldown / Popover-Menü direkt in der Leiste mit den Stufen **`2s` | `3s` (Default) | `5s` | `10s`** (persistiert in `libraryUIStore`, z. B. `slideshowIntervalSec: 3`).
         6. **Loop-Toggle (`Repeat`-Icon):** Optionaler Schalter, ob die Diashow nach dem letzten Bild wieder bei Bild 1 beginnt (Default: aktiv).
-        7. **OS-Fullscreen-Toggle (`Maximize` / `Minimize`-Icon):** Schaltet das native Betriebssystem-Vollbild (`getCurrentWindow().setFullscreen(...)`) ein/aus und synchronisiert seinen Status über Window-Resize/Fullscreen-Events.
+        7. **Crossfade-Toggle (`Blend`-Icon):** Schalter für weiche 2-Layer-Überblendung (`350 ms` `ease-in-out`, persistiert in `localStorage`) vs. harten Schnitt.
+        8. **OS-Fullscreen-Toggle (`Maximize` / `Minimize`-Icon):** Schaltet das native Betriebssystem-Vollbild (`getCurrentWindow().setFullscreen(...)`) ein/aus und synchronisiert seinen Status über Window-Resize/Fullscreen-Events.
     - **Auto-Hide & Mauszeiger-Ausblendung:**
       - Nach **2,5 Sekunden ohne Mausaktivität** (`mousemove`, `mousedown`, `wheel`) blenden sich sowohl das Control-Deck unten als auch das `[ X ]` oben rechts sanft aus (`opacity-0 pointer-events-none transition-opacity duration-300`).
       - Gleichzeitig erhält der Vollbild-Container `cursor-none`, sodass auch der OS-Mauszeiger komplett aus dem Bild verschwindet.
       - Solange sich der Mauszeiger direkt *auf* dem Control-Deck befindet (`onMouseEnter` / `isHoveringControls`) oder das Zeit-Pulldown geöffnet ist, bleibt die Leiste dauerhaft sichtbar.
       - Jede Mausbewegung oder Maustaste (`onMouseMove` / `onMouseDown`) blendet Mauszeiger, Control-Deck und `[ X ]` sofort (`0 ms`) wieder ein.
   - **4. Übergänge & Intelligentes L1-RAM-Preloading:**
-    - **Differenzierte Bildübergänge:**
-      - **Manuelles Blättern (`←` / `→` oder Buttons):** Harter, verzögerungsfreier Schnitt (`0 ms` Transition) für maximale Reaktionsgeschwindigkeit beim schnellen Durchsteppen.
-      - **Automatischer Diashow-Wechsel (`isPlaying === true`):** Sanfte Crossfade-Überblendung (`200 ms` `opacity` Transition zwischen vorherigem und neuem Frame) für eine ruhige, hochwertige Präsentationswirkung.
+    - **Zuschaltbare 2-Layer-Überblendung (`slideshowCrossfade`):**
+      - Echtes 2-Layer-Crossfade (`animate-crossfade-in` / `animate-crossfade-out`, `350 ms ease-in-out` mit GPU-Compositing `translateZ(0)`) über dem ausgehenden Bild (`prevDisplaySrc`) ohne schwarzen Zwischenblitz.
+      - **Rapid-Skim-Schutz:** Bei schnellem manuellem Durchblättern (`< 180 ms` zwischen Tastendrücken) schaltet die Ansicht automatisch auf verzögerungsfreien Direktschnitt um.
     - **Zweistufiges Rendering & RAM-Lookahead:**
       - Nutzt das zweistufige Progressive-Loading (sofortige Anzeige des gecachten Scale-1/Scale-2-Previews aus L1/L2 in `< 0,1 ms`, nahtloses Nachziehen von `fullres=true`).
       - Während des Vollbild-/Diashow-Modus wärmt der Hintergrund-Preloader (`warm_thumbnail_cache`) in Vorwärtsrichtung die nächsten 3–5 Bilder (inkl. Full-Res-Preview bei aktivem Diashow-Timer) proaktiv in den L1-RAM-Cache vor, sodass jeder Diashow-Wechsel selbst auf NAS-Archiven zu 100 % aus dem RAM erfolgt.

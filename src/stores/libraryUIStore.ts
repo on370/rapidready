@@ -29,6 +29,10 @@ interface LibraryUIStore {
   slideshowLoop: boolean;
   setSlideshowLoop: (loop: boolean) => void;
   toggleSlideshowLoop: () => void;
+
+  slideshowCrossfade: boolean;
+  setSlideshowCrossfade: (crossfade: boolean) => void;
+  toggleSlideshowCrossfade: () => void;
   
   isInspectorOpen: boolean;
   setIsInspectorOpen: (open: boolean) => void;
@@ -160,6 +164,14 @@ const getSavedSlideshowLoop = (): boolean => {
   return true;
 };
 
+const getSavedSlideshowCrossfade = (): boolean => {
+  try {
+    const val = localStorage.getItem('rapidready_slideshow_crossfade');
+    if (val !== null) return val !== 'false';
+  } catch (_) {}
+  return true;
+};
+
 export const useLibraryUIStore = create<LibraryUIStore>((set) => ({
   viewMode: 'grid',
   previousViewMode: 'grid',
@@ -226,6 +238,21 @@ export const useLibraryUIStore = create<LibraryUIStore>((set) => ({
       localStorage.setItem('rapidready_slideshow_loop', next ? 'true' : 'false');
     } catch (_) {}
     return { slideshowLoop: next };
+  }),
+
+  slideshowCrossfade: getSavedSlideshowCrossfade(),
+  setSlideshowCrossfade: (crossfade) => {
+    try {
+      localStorage.setItem('rapidready_slideshow_crossfade', crossfade ? 'true' : 'false');
+    } catch (_) {}
+    set({ slideshowCrossfade: crossfade });
+  },
+  toggleSlideshowCrossfade: () => set((state) => {
+    const next = !state.slideshowCrossfade;
+    try {
+      localStorage.setItem('rapidready_slideshow_crossfade', next ? 'true' : 'false');
+    } catch (_) {}
+    return { slideshowCrossfade: next };
   }),
   
   isInspectorOpen: true,
