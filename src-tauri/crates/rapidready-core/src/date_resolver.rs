@@ -95,6 +95,8 @@ fn try_read_tiff_slice(file: &mut File, size: usize) -> Option<NaiveDateTime> {
         return None;
     }
 
+    crate::thumbnail::header_parser::normalize_tiff_magic_for_exif(&mut buf);
+
     let mut reader = exif::Reader::new();
     reader.continue_on_error(true);
     let exif = match reader.read_raw(buf) {
@@ -130,11 +132,7 @@ pub fn get_creation_date(path: &Path) -> Result<NaiveDateTime> {
                 }
             }
 
-            let is_tiff = magic16[0..4] == [0x49, 0x49, 0x2a, 0x00] // II*
-                       || magic16[0..4] == [0x4d, 0x4d, 0x00, 0x2a] // MM*
-                       || (magic16[0] == 0x49 && magic16[1] == 0x49 && magic16[2] == 0x55 && magic16[3] == 0x00) // CR2 / RW2: IIU
-                       || &magic16[0..4] == b"IIRO" // Olympus ORF
-                       || &magic16[0..4] == b"IIRS"; // Olympus ORF
+            let is_tiff = &magic16[0..2] == b"II" || &magic16[0..2] == b"MM";
 
             if is_tiff {
                 // Tier 1: 256 KB header slice (covers 99.9% of RAW files in < 1ms)
@@ -145,18 +143,18 @@ pub fn get_creation_date(path: &Path) -> Result<NaiveDateTime> {
                 if let Some(dt) = try_read_tiff_slice(&mut file, 2 * 1024 * 1024) {
                     return Ok(dt);
                 }
-            }
-        }
-
-        // Tier 3: Full container fallback (JPEG, HEIF, PNG, WebP, or rare TIFFs requiring full scan)
-        // kamadak-exif handles JPEG/HEIC/PNG/WebP efficiently by reading only the APP1 / Exif box.
-        if file.seek(SeekFrom::Start(0)).is_ok() {
-            let mut bufreader = BufReader::new(file);
-            let exifreader = exif::Reader::new();
-            
-            if let Ok(exif) = exifreader.read_from_container(&mut bufreader) {
-                if let Some(dt) = extract_date_from_exif(&exif) {
-                    return Ok(dt);
+            } else {
+                // Tier 3: Full container fallback (JPEG, HEIF, PNG, WebP)
+                // kamadak-exif handles JPEG/HEIC/PNG/WebP efficiently by reading only the APP1 / Exif box.
+                if file.seek(SeekFrom::Start(0)).is_ok() {
+                    let mut bufreader = BufReader::new(file);
+                    let exifreader = exif::Reader::new();
+                    
+                    if let Ok(exif) = exifreader.read_from_container(&mut bufreader) {
+                        if let Some(dt) = extract_date_from_exif(&exif) {
+                            return Ok(dt);
+                        }
+                    }
                 }
             }
         }

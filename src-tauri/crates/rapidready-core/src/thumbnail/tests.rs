@@ -899,8 +899,78 @@ fn test_cr2_olympus_short_compression_parsing() {
 
     // 4. Test is_legacy_black_raw_chunk detection
     let fake_broken_chunk = vec![0u8; 7007];
-    let fake_valid_preview = vec![0u8; 50_000];
+    let mut fake_valid_preview = vec![0u8; 50_000];
+    fake_valid_preview[0] = 0xFF;
+    fake_valid_preview[1] = 0xD8;
+    fake_valid_preview[2] = 0xFF;
+    fake_valid_preview[3] = 0xDB;
+
+    let mut fake_valid_jpg = vec![0u8; 10_000];
+    fake_valid_jpg[0] = 0xFF;
+    fake_valid_jpg[1] = 0xD8;
+    fake_valid_jpg[2] = 0xFF;
+    fake_valid_jpg[3] = 0xE0;
+
+    let fake_corrupt_orf = vec![0xFF, 0xD8, 0xFF, 0x58, 0x01, 0x00];
+    let mut fake_tiny_orf = vec![0u8; 7_152];
+    fake_tiny_orf[0] = 0xFF;
+    fake_tiny_orf[1] = 0xD8;
+    fake_tiny_orf[2] = 0xFF;
+    fake_tiny_orf[3] = 0xDB;
+
     assert!(is_legacy_black_raw_chunk(Path::new("img_2888.cr2"), &fake_broken_chunk), "7007-byte CR2 chunk must be recognized as legacy black chunk");
     assert!(!is_legacy_black_raw_chunk(Path::new("img_2888.cr2"), &fake_valid_preview), "Valid embedded preview must not be flagged");
-    assert!(!is_legacy_black_raw_chunk(Path::new("photo.jpg"), &fake_broken_chunk), "Non-CR2 files must not be affected");
+    assert!(!is_legacy_black_raw_chunk(Path::new("photo.jpg"), &fake_valid_jpg), "Valid JPEG files must not be affected");
+    assert!(is_legacy_black_raw_chunk(Path::new("test.ORF"), &fake_corrupt_orf), "Corrupt ORF chunk (FF D8 FF 58) must be flagged");
+    assert!(is_legacy_black_raw_chunk(Path::new("test.ORF"), &fake_tiny_orf), "Tiny ORF chunk (<25KB) must be flagged");
+    assert!(!is_legacy_black_raw_chunk(Path::new("test.ORF"), &fake_valid_preview), "Real full-res ORF preview must not be flagged");
+}
+
+#[test]
+fn test_olympus_om_system_orf_support() {
+    let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let workspace_root = manifest_dir.parent().unwrap().parent().unwrap().parent().unwrap().parent().unwrap();
+    let orf_dir = workspace_root.join("testdata/dest/Olympus-RAW");
+
+    let files = [
+        "E-M1 III HHHR 12bit.ORF",
+        "OM-1 II HHHR 12bit.ORF",
+        "OM-1 II HHHR 14bit.ORF",
+        "olympus_om_d_e_m5_mark_iii_02.orf",
+    ];
+
+    for fname in &files {
+        let path = orf_dir.join(fname);
+        assert!(path.exists(), "Test file must exist: {}", path.display());
+        let meta_fs = std::fs::metadata(&path).unwrap();
+        let sz = meta_fs.len();
+        let mt = meta_fs.modified().unwrap().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as i64;
+
+        // 1. extract_embedded_thumbnail yields valid JPEG with dimensions (3200, 2400)
+        let thumb_bytes = extract_embedded_thumbnail(&path, None)
+            .unwrap_or_else(|| panic!("{}: extract_embedded_thumbnail must return Some(bytes)", fname));
+        assert!(thumb_bytes.len() >= 2 && thumb_bytes[0] == 0xFF && thumb_bytes[1] == 0xD8,
+            "{}: extracted thumbnail must be a valid JPEG", fname);
+        let dims = parse_jpeg_dimensions(&thumb_bytes);
+        assert_eq!(dims, Some((3200, 2400)),
+            "{}: embedded preview dimensions must be 3200x2400", fname);
+
+        // 2. get_preview_jpeg(path, 1) and with hints generates valid grid preview
+        let grid_preview = get_preview_jpeg(&path, 1)
+            .unwrap_or_else(|e| panic!("{}: get_preview_jpeg(1) must succeed: {:?}", fname, e));
+        assert!(grid_preview.len() >= 2 && grid_preview[0] == 0xFF && grid_preview[1] == 0xD8,
+            "{}: grid preview must be a valid JPEG", fname);
+
+        let grid_with_hints = get_preview_jpeg_with_orient_and_hints(&path, 1, None, Some(sz), Some(mt))
+            .unwrap_or_else(|e| panic!("{}: get_preview_jpeg_with_orient_and_hints must succeed: {:?}", fname, e));
+        assert!(grid_with_hints.len() >= 2 && grid_with_hints[0] == 0xFF && grid_with_hints[1] == 0xD8);
+
+        // 3. resolve_image_metadata returns camera, iso, aperture, shutter, and date
+        let meta = crate::metadata_resolver::resolve_image_metadata(&path);
+        assert!(meta.camera.is_some(), "{}: camera must be detected, got {:?}", fname, meta.camera);
+        assert!(meta.iso.is_some(), "{}: ISO must be detected, got {:?}", fname, meta.iso);
+        assert!(meta.aperture.is_some(), "{}: aperture must be detected, got {:?}", fname, meta.aperture);
+        assert!(meta.shutter.is_some(), "{}: shutter must be detected, got {:?}", fname, meta.shutter);
+        assert!(meta.date.is_some(), "{}: date must be detected, got {:?}", fname, meta.date);
+    }
 }

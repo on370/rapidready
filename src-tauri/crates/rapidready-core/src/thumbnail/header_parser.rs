@@ -25,6 +25,18 @@ fn read_tiff_u32(buf: &[u8], offset: usize, is_le: bool) -> Option<u32> {
     Some(if is_le { u32::from_le_bytes(bytes) } else { u32::from_be_bytes(bytes) })
 }
 
+pub fn normalize_tiff_magic_for_exif(buf: &mut [u8]) {
+    if buf.len() >= 4 {
+        if &buf[0..2] == b"II" && ((buf[2] == 0x52 && (buf[3] == 0x4F || buf[3] == 0x53)) || (buf[2] == 0x55 && buf[3] == 0x00)) {
+            buf[2] = 0x2A;
+            buf[3] = 0x00;
+        } else if &buf[0..2] == b"MM" && ((buf[2] == 0x4F && (buf[3] == 0x52 || buf[3] == 0x53)) || (buf[2] == 0x00 && buf[3] == 0x55)) {
+            buf[2] = 0x00;
+            buf[3] = 0x2A;
+        }
+    }
+}
+
 pub fn parse_tiff_header_slice(buf: &[u8], base_offset: u32) -> HeaderTiffInfo {
     if buf.len() < 8 {
         return HeaderTiffInfo::default();
@@ -139,6 +151,110 @@ pub fn parse_tiff_header_slice(buf: &[u8], base_offset: u32) -> HeaderTiffInfo {
                 0x8769 => {
                     // ExifIFD
                     to_visit.push(val as usize);
+                }
+                0x927C => {
+                    // MakerNote (0x927C): Olympus / OM System embedded previews
+                    let mk_base = val as usize;
+                    if mk_base < buf.len() {
+                        let mk_slice = &buf[mk_base..];
+                        let (mk_ifd, is_olympus) = if mk_slice.starts_with(b"OLYMPUS\0II") {
+                            // Type A (OLYMPUS\0II): 10 bytes header + 2 bytes version (0x03, 0x00) -> IFD at mk_base + 12
+                            (mk_base + 12, true)
+                        } else if mk_slice.starts_with(b"OM SYSTEM\0\0\0II") {
+                            // Type B (OM SYSTEM\0\0\0II): 14 bytes header + 2 bytes version (0x04, 0x00) -> IFD at mk_base + 16
+                            (mk_base + 16, true)
+                        } else {
+                            (0, false)
+                        };
+
+                        if is_olympus && mk_ifd + 2 <= buf.len() {
+                            let mk_num_entries = read_tiff_u16(buf, mk_ifd, is_le).unwrap_or(0) as usize;
+                            let mk_safe = mk_num_entries.min(64).min((buf.len().saturating_sub(mk_ifd + 2)) / 12);
+                            for m in 0..mk_safe {
+                                let m_entry = mk_ifd + 2 + m * 12;
+                                let m_tag = match read_tiff_u16(buf, m_entry, is_le) {
+                                    Some(t) => t,
+                                    None => break,
+                                };
+                                let m_count = read_tiff_u32(buf, m_entry + 4, is_le).unwrap_or(0);
+                                let m_val = read_tiff_u32(buf, m_entry + 8, is_le).unwrap_or(0);
+
+                                match m_tag {
+                                    0x0100 => {
+                                        // Tag 0x0100: Olympus ThumbnailImage (Type UNDEFINED=7)
+                                        // m_count is length (> 500 && <= 1_000_000), m_val is offset relative to mk_base
+                                        if m_count > 500 && m_count <= 1_000_000 {
+                                            let thumb_rel = mk_base.saturating_add(m_val as usize);
+                                            let is_valid = if thumb_rel + 2 <= buf.len() {
+                                                buf[thumb_rel] == 0xFF && buf[thumb_rel + 1] == 0xD8
+                                            } else {
+                                                false
+                                            };
+                                            if is_valid {
+                                                candidates.push((base_offset + (mk_base as u32) + m_val, m_count));
+                                            }
+                                        }
+                                    }
+                                    0x2020 => {
+                                        // Tag 0x2020: CameraSettings Sub-IFD (Type 13/IFD or 4/LONG)
+                                        let cs_off = mk_base.saturating_add(m_val as usize);
+                                        if cs_off + 2 <= buf.len() {
+                                            let cs_num_entries = read_tiff_u16(buf, cs_off, is_le).unwrap_or(0) as usize;
+                                            let cs_safe = cs_num_entries.min(128).min((buf.len().saturating_sub(cs_off + 2)) / 12);
+
+                                            let mut prev_valid = true;
+                                            let mut prev_start = None;
+                                            let mut prev_len = None;
+
+                                            for c in 0..cs_safe {
+                                                let c_entry = cs_off + 2 + c * 12;
+                                                let c_tag = match read_tiff_u16(buf, c_entry, is_le) {
+                                                    Some(t) => t,
+                                                    None => break,
+                                                };
+                                                let c_val = read_tiff_u32(buf, c_entry + 8, is_le).unwrap_or(0);
+
+                                                match c_tag {
+                                                    0x0100 => {
+                                                        // PreviewImageValid (0 = No, 1 = Yes)
+                                                        let valid_val = read_tiff_u16(buf, c_entry + 8, is_le).unwrap_or((c_val & 0xFFFF) as u16);
+                                                        prev_valid = valid_val != 0;
+                                                    }
+                                                    0x0101 => {
+                                                        // PreviewImageStart (offset relative to mk_base)
+                                                        prev_start = Some(c_val);
+                                                    }
+                                                    0x0102 => {
+                                                        // PreviewImageLength
+                                                        prev_len = Some(c_val);
+                                                    }
+                                                    _ => {}
+                                                }
+                                            }
+
+                                            if prev_valid {
+                                                if let (Some(cs_val), Some(plen)) = (prev_start, prev_len) {
+                                                    if plen > 10_000 && plen <= 8_000_000 {
+                                                        let prev_rel = mk_base.saturating_add(cs_val as usize);
+                                                        let is_valid_jpeg = if prev_rel + 2 <= buf.len() {
+                                                            buf[prev_rel] == 0xFF && buf[prev_rel + 1] == 0xD8
+                                                        } else {
+                                                            true
+                                                        };
+                                                        if is_valid_jpeg {
+                                                            let prev_off = base_offset + (mk_base as u32) + cs_val;
+                                                            candidates.push((prev_off, plen));
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
                 }
                 _ => {}
             }
@@ -343,9 +459,11 @@ pub fn parse_header_orientation(buf: &[u8]) -> Option<u32> {
     }
     // 3. Fallback to kamadak-exif read_raw on header slice (only for TIFF containers)
     if &buf[0..2] == b"II" || &buf[0..2] == b"MM" {
+        let mut raw_vec = buf.to_vec();
+        normalize_tiff_magic_for_exif(&mut raw_vec);
         let mut reader = exif::Reader::new();
         reader.continue_on_error(true);
-        let exif = match reader.read_raw(buf.to_vec()) {
+        let exif = match reader.read_raw(raw_vec) {
             Ok(e) => e,
             Err(exif::Error::PartialResult(pr)) => pr.into_inner().0,
             Err(_) => return None,

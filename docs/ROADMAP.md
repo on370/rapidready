@@ -659,19 +659,33 @@
     - Dynamically reflect the active shortcut bindings in tooltips (`CullingToolbar.tsx`, `InspectorCullingCard.tsx`) and in `HelpShortcuts.tsx`.
   - **CTSP Guardrail:** Pure UI keybinding dispatch in `useLibraryShortcuts.ts` (0% CTSP impact).
 
-- [ ] **Switchable Masonry Grid Layout (Alternative to Fixed-Ratio Grid):**
+- [ ] **Switchable Proportional / Masonry Grid Layout (Justified Rows vs. Waterfall Columns):**
   - **Context & Goal:**
-    Currently, the Library Grid (`LibraryGrid.tsx`) displays photos in a uniform square tile matrix. While this provides a structured, predictable layout for rapid culling, photographers shooting mixed landscape (3:2, 16:9), portrait (2:3, 4:5), and panorama compositions experience heavy letterboxing/pillarboxing or cropped thumbnail previews. A switchable **Masonry Grid** (dynamically flowing columns or justified aspect-ratio rows, similar to Apple Photos, Lightroom Web, or Unsplash) displays every photo in its natural proportions with zero wasted space.
+    Currently, the Library Grid (`LibraryGrid.tsx`) displays photos in a uniform square tile matrix (`object-cover`). While this provides a structured, predictable layout for rapid culling, photographers shooting mixed landscape (3:2, 16:9), portrait (2:3, 4:5), and panorama compositions experience cropped thumbnail previews. A switchable **Proportional / Masonry Grid** displays every photo in its natural aspect ratio with zero wasted space.
+  - **Architectural Evaluation of the Two Masonry Variants:**
+    1. **Variant A — Justified Aspect-Ratio Rows (Horizontal Row Bin-Packing — *Recommended Primary Mode*):**
+       - *Mechanism:* Packs images strictly chronologically from left to right into rows, scaling each row's height so that all tiles fit flush against both the left and right viewport edges (the industry standard in *Adobe Lightroom "Justified Grid"*, *Google Photos*, and *Flickr*).
+       - *Why Primary for Culling:* Preserves 100% chronological left-to-right reading order (burst sequences stay side-by-side in the same row), guarantees intuitive `←`/`→`/`↑`/`↓` keyboard navigation, and makes `Shift+Click` range selections visually contiguous.
+    2. **Variant B — Waterfall Columns (Vertical Shortest-Column Placement — *Optional Secondary Mode*):**
+       - *Mechanism:* Fixed number of equal-width columns where each next photo is appended to the currently shortest column (*Pinterest* / *Unsplash* / *Eagle* style).
+       - *Trade-off:* Visually appealing for moodboards, but breaks strict horizontal chronological order, making `Shift+Click` range selection and arrow-key culling across mixed portrait/landscape shoots harder to follow.
   - **Requirements & Technical Architecture:**
-    - **Interactive Toggle Control:**
-      - View mode toggle in the library toolbar / footer controls (e.g. icon switcher next to the thumbnail size slider: `Uniform Square Grid` vs. `Masonry Flow Grid`).
-      - Keyboard shortcut (e.g. `Shift+G`) to quickly toggle between uniform and masonry layouts without taking hands off the keyboard.
-      - State persisted in `libraryUIStore` / `localStorage` (`gridMode: 'uniform' | 'masonry'`) to restore user preference across application restarts.
-    - **High-Performance Virtualized Layout:**
-      - Maintain smooth 60 FPS scrolling across large archives (10,000–50,000+ photos) using column-based virtualization or justified row bin-packing.
-      - Calculate item dimensions dynamically from cached EXIF/metadata dimensions (`width` / `height` and orientation) without loading full image bitmaps into memory.
+    - **Interactive Toggle Control (Harmonized with the 3-Segment `[ Grid ▾ | Loupe | Fullscreen ]` Switcher):**
+      - In `CullingToolbar.tsx`, the primary view mode switcher forms a unified 3-segment control block: **`[ ⊞ Grid ▾ | ⬚ Loupe | ⛶ Fullscreen ]`**.
+      - The **Grid segment** acts as a split button (`[ ⊞ Grid | ▾ ]`, analogous to the `[ Focus | ▾ ]` button):
+        - Clicking the main `Grid` button always activates `viewMode = 'grid'` (using the user's currently selected grid layout mode).
+        - Clicking the small `▾` chevron on the right side of the `Grid` segment opens a compact popover menu to choose between **`Square (Gleichmäßige Kacheln)`**, **`Justified Rows (Proportionale Zeilen)`**, and **`Waterfall Columns (Spalten-Masonry)`**, displaying `Shift+G` as the keyboard shortcut badge.
+        - The leading icon of the `Grid` button dynamically reflects the active layout mode (`LayoutGrid` for Square, `Rows3` for Justified, `Columns3` for Waterfall).
+      - **Keyboard Shortcuts (`G` vs. `Shift+G`):**
+        - **`G`:** Always switches reliably to Grid view (`viewMode = 'grid'`) from Loupe or Fullscreen without altering the chosen grid layout.
+        - **`Shift+G`:** Cycles through the grid layout variants (`square` $\rightarrow$ `justified` $\rightarrow$ `waterfall` $\rightarrow$ `square`) and persists `gridLayoutMode: 'square' | 'justified' | 'waterfall'` in `libraryUIStore` / `localStorage`.
+    - **High-Performance Virtualized Layout & CTSP Guardrails:**
+      - **Zero Backend Cache Changes:** L2 chunk cache (`thumbcache_0001.bin`) already stores `720px` thumbnails in their native aspect ratio (with EXIF orientation applied). Switching grid modes requires zero re-indexing or cache regeneration.
+      - **Pre-Computed Row Prefix Sums ($O(\log N)$ Binary Search):** Maintain smooth 60 FPS virtual scrolling across 50,000+ photos by pre-computing row heights and cumulative Y-offsets in a flat `Float64Array`, finding visible rows via binary search on `scrollTop`.
+      - **Zero Layout-Shift Aspect Ratio Resolution:** Persist `(width, height)` during Phase 2 thumbnailing (`parse_jpeg_dimensions` in `< 0.001 ms`) into `archive_catalog.db` so aspect ratios are available in RAM within `< 20 ms` on startup; fall back to `3:2` (or `2:3` for portrait orientation `6`/`8`) when dimensions are not yet known.
+      - **Spatial Up/Down Keyboard Navigation:** In `useLibraryShortcuts.ts`, `ArrowUp` and `ArrowDown` step to the tile in the adjacent row whose horizontal X-center is closest to the active tile's X-center.
     - **Culling & Selection Parity:**
-      - 100% feature parity in Masonry mode: range selection (`Shift+Click`), individual toggling (`Cmd/Ctrl+Click`), rating/color/flag badges, drag selection, and context menus.
+      - 100% feature parity: range selection (`Shift+Click`), individual toggling (`Cmd/Ctrl+Click`), rating/color/flag badges, drag-and-drop, and context menus.
 
 - [x] **Collapsible Inspector Cards & Sections:**
   - **Context & Goal:**

@@ -302,41 +302,86 @@ pub fn extract_embedded_thumbnail(path: &Path, target_orient: Option<u32>) -> Op
     if thumb_bytes.is_none() {
         let pattern = [0xFF, 0xD8, 0xFF];
         let mut pos = 0;
-        while pos + 3 <= header.len() {
+        let mut best_thumb: Option<(usize, Vec<u8>)> = None;
+
+        while pos + 4 <= header.len() {
             if let Some(offset) = header[pos..].windows(3).position(|w| w == pattern) {
                 let start = pos + offset;
+                if start + 4 > header.len() {
+                    break;
+                }
+                let m3 = header[start + 3];
+                // Byte 3 must be a valid JPEG marker: APPn (0xE0..=0xEF), DQT (0xDB), SOF/DHT (0xC0, 0xC2, 0xC4), COM (0xFE)
+                if !matches!(m3, 0xE0..=0xEF | 0xDB | 0xC0 | 0xC2 | 0xC4 | 0xFE) {
+                    pos = start + 1;
+                    continue;
+                }
+
                 let search_limit = (start + 65536).min(header.len());
                 let mut sof_pos = start + 2;
                 let mut dims = None;
+
                 while sof_pos + 8 < search_limit {
-                    if header[sof_pos] == 0xFF && (header[sof_pos + 1] == 0xC0 || header[sof_pos + 1] == 0xC2) {
-                        let h = ((header[sof_pos + 5] as usize) << 8) | (header[sof_pos + 6] as usize);
-                        let w = ((header[sof_pos + 7] as usize) << 8) | (header[sof_pos + 8] as usize);
-                        dims = Some((w, h));
+                    // If an EOI or another valid SOI is encountered before SOF, this candidate is invalid
+                    if header[sof_pos] == 0xFF && header[sof_pos + 1] == 0xD9 {
                         break;
+                    }
+                    if sof_pos > start && header[sof_pos] == 0xFF && header[sof_pos + 1] == 0xD8 && sof_pos + 3 < search_limit {
+                        let next_m3 = header[sof_pos + 3];
+                        if matches!(next_m3, 0xE0..=0xEF | 0xDB | 0xC0 | 0xC2 | 0xC4 | 0xFE) {
+                            break;
+                        }
+                    }
+
+                    if header[sof_pos] == 0xFF && (header[sof_pos + 1] == 0xC0 || header[sof_pos + 1] == 0xC2) {
+                        if sof_pos + 9 < search_limit {
+                            let precision = header[sof_pos + 4];
+                            let h = ((header[sof_pos + 5] as usize) << 8) | (header[sof_pos + 6] as usize);
+                            let w = ((header[sof_pos + 7] as usize) << 8) | (header[sof_pos + 8] as usize);
+                            let num_components = header[sof_pos + 9];
+
+                            if precision == 8 && (num_components == 1 || num_components == 3) && w >= 160 && h >= 120 && w <= 16000 && h <= 16000 {
+                                let aspect = (w as f32) / (h as f32);
+                                if aspect >= 0.33 && aspect <= 3.0 {
+                                    dims = Some((w, h));
+                                    break;
+                                }
+                            }
+                        }
                     }
                     sof_pos += 1;
                 }
 
                 if let Some((w, h)) = dims {
-                    if w >= 160 && h >= 120 {
-                        let mut end = start + 500;
-                        while end + 1 < header.len() {
-                            if header[end] == 0xFF && header[end + 1] == 0xD9 {
-                                thumb_bytes = Some(header[start..=end + 1].to_vec());
-                                break;
-                            }
-                            end += 1;
-                        }
-                        if thumb_bytes.is_some() {
+                    let mut end = start + 500;
+                    let mut found_end = None;
+                    while end + 1 < header.len() {
+                        if header[end] == 0xFF && header[end + 1] == 0xD9 {
+                            found_end = Some(end + 2);
                             break;
+                        }
+                        end += 1;
+                    }
+
+                    if let Some(end_pos) = found_end {
+                        let area = w * h;
+                        let is_better = match &best_thumb {
+                            Some((best_area, _)) => area > *best_area,
+                            None => true,
+                        };
+                        if is_better {
+                            best_thumb = Some((area, header[start..end_pos].to_vec()));
                         }
                     }
                 }
-                pos = start + 1000;
+                pos = start + 1;
             } else {
                 break;
             }
+        }
+
+        if let Some((_, bytes)) = best_thumb {
+            thumb_bytes = Some(bytes);
         }
     }
 

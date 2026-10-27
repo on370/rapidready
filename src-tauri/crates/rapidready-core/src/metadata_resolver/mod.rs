@@ -159,6 +159,8 @@ pub fn is_network_or_remote_path(path: &Path) -> bool {
     }
 }
 
+pub use get_image_metadata as resolve_image_metadata;
+
 pub fn get_image_metadata(path: &Path) -> ImageMetadata {
     let mut meta = ImageMetadata::default();
 
@@ -177,11 +179,47 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
                 }
             }
         }
-        let _ = file.seek(SeekFrom::Start(target_offset));
-        let mut bufreader = std::io::BufReader::new(file);
-        let exifreader = exif::Reader::new();
-        
-        if let Ok(exif) = exifreader.read_from_container(&mut bufreader) {
+
+        let exif_opt: Option<exif::Exif> = if &magic16[0..2] == b"II" || &magic16[0..2] == b"MM" {
+            // TIFF-based container (CR2, ARW, NEF, DNG, ORF, RW2, etc.):
+            // Read via read_raw on 256 KB slice (with 2 MB fallback) to avoid reading entire multi-MB file over SMB
+            let mut header = vec![0u8; 256 * 1024];
+            let _ = file.seek(SeekFrom::Start(target_offset));
+            let read_res = file.read(&mut header).ok().map(|n| { header.truncate(n); header });
+            
+            read_res.and_then(|mut buf| {
+                if buf.len() < 8 { return None; }
+                crate::thumbnail::header_parser::normalize_tiff_magic_for_exif(&mut buf);
+                let mut reader = exif::Reader::new();
+                reader.continue_on_error(true);
+                match reader.read_raw(buf) {
+                    Ok(exif) => Some(exif),
+                    Err(exif::Error::PartialResult(pr)) => Some(pr.into_inner().0),
+                    Err(_) => {
+                        // 2 MB fallback buffer
+                        let mut large_buf = vec![0u8; 2 * 1024 * 1024];
+                        let _ = file.seek(SeekFrom::Start(target_offset));
+                        let n2 = file.read(&mut large_buf).ok()?;
+                        large_buf.truncate(n2);
+                        crate::thumbnail::header_parser::normalize_tiff_magic_for_exif(&mut large_buf);
+                        let mut reader2 = exif::Reader::new();
+                        reader2.continue_on_error(true);
+                        match reader2.read_raw(large_buf) {
+                            Ok(exif) => Some(exif),
+                            Err(exif::Error::PartialResult(pr)) => Some(pr.into_inner().0),
+                            Err(_) => None,
+                        }
+                    }
+                }
+            })
+        } else {
+            let _ = file.seek(SeekFrom::Start(target_offset));
+            let mut bufreader = std::io::BufReader::new(file);
+            let exifreader = exif::Reader::new();
+            exifreader.read_from_container(&mut bufreader).ok()
+        };
+
+        if let Some(exif) = exif_opt {
             let parse_date_str = |dt_str: &str| -> Option<NaiveDateTime> {
                 let trimmed = dt_str.trim();
                 NaiveDateTime::parse_from_str(trimmed, "%Y:%m:%d %H:%M:%S")

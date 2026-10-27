@@ -237,16 +237,30 @@ fn resolve_fast_metadata(
 
 #[inline]
 pub(super) fn is_legacy_black_raw_chunk(path: &Path, bytes: &[u8]) -> bool {
-    // Old broken CR2 fallbacks produced an all-black 544x720 JPEG of ~7,007 bytes.
-    // Real embedded or 720px downscaled RAW previews are >15 KB.
-    if bytes.len() < 8_500 {
-        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-        if ext.eq_ignore_ascii_case("cr2") {
-            return parse_jpeg_dimensions(bytes) == Some((544, 720))
-                || parse_jpeg_dimensions(bytes) == Some((720, 544))
-                || bytes.len() <= 7_500;
-        }
+    // 1. Any chunk that is not a valid JPEG stream must be invalidated immediately
+    if bytes.len() < 4 || bytes[0] != 0xFF || bytes[1] != 0xD8 || bytes[2] != 0xFF {
+        return true;
     }
+    let m3 = bytes[3];
+    if !matches!(m3, 0xE0..=0xEF | 0xDB | 0xC0 | 0xC2 | 0xC4 | 0xFE) {
+        return true;
+    }
+
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+
+    // 2. Old broken CR2 fallbacks produced an all-black 544x720 JPEG of ~7,007 bytes.
+    if ext.eq_ignore_ascii_case("cr2") && bytes.len() < 8_500 {
+        return parse_jpeg_dimensions(bytes) == Some((544, 720))
+            || parse_jpeg_dimensions(bytes) == Some((720, 544))
+            || bytes.len() <= 7_500;
+    }
+
+    // 3. Old broken Olympus ORF fallbacks produced tiny 160x120 or corrupt fragments (< 25 KB).
+    // Real Olympus / OM System embedded previews are 3200x2400 (~1 MB) or downscaled to 720px (> 30 KB).
+    if ext.eq_ignore_ascii_case("orf") && bytes.len() < 25_000 {
+        return true;
+    }
+
     false
 }
 
