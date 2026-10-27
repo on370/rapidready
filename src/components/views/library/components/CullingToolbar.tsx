@@ -1,8 +1,9 @@
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { 
-  LayoutGrid, Scan, PanelRight, ArrowRightToLine, Star, Trash2, Check, 
+  LayoutGrid, Square, PanelRight, ArrowRightToLine, Star, Trash2, Check, 
   Rocket, FolderOpen, ZoomIn, ZoomOut, RotateCw, RotateCcw, 
-  SquareArrowOutUpRight, CircleSlash, Tag, ChevronDown, X, ScanEye
+  SquareArrowOutUpRight, CircleSlash, Tag, ChevronDown, X, ScanEye,
+  Maximize2
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
@@ -247,21 +248,31 @@ export const CullingToolbar = React.memo(function CullingToolbar({
 
           <div className="w-px h-5 bg-app-border mx-0.5"></div>
 
-          {/* View mode toggle: Grid / Loupe */}
+          {/* View mode toggle: Grid / Loupe / Fullscreen */}
           <div className="flex items-center bg-app-card border border-app-border rounded-lg p-0.5">
             <button 
-              className={`px-2.5 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all duration-150 ${viewMode === 'grid' ? 'bg-accent/15 text-accent' : 'text-txt-tertiary hover:text-txt-secondary'}`}
+              className={`px-2.5 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all duration-150 cursor-pointer ${viewMode === 'grid' ? 'bg-accent/15 text-accent' : 'text-txt-tertiary hover:text-txt-secondary'}`}
               onClick={() => setViewMode('grid')}
+              title={t('toolbar.viewGridTooltip', { defaultValue: 'Rasteransicht (G)' })}
             >
               <LayoutGrid className="w-3.5 h-3.5" />
               <span>{t('toolbar.viewGrid')}</span>
             </button>
             <button 
-              className={`px-2.5 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all duration-150 ${viewMode === 'loupe' ? 'bg-accent/15 text-accent' : 'text-txt-tertiary hover:text-txt-secondary'}`}
+              className={`px-2.5 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all duration-150 cursor-pointer ${viewMode === 'loupe' ? 'bg-accent/15 text-accent' : 'text-txt-tertiary hover:text-txt-secondary'}`}
               onClick={() => setViewMode('loupe')}
+              title={t('toolbar.viewLoupeTooltip', { defaultValue: 'Detailansicht / Lupe (E)' })}
             >
-              <Scan className="w-3.5 h-3.5" />
+              <Square className="w-3.5 h-3.5" />
               <span>{t('toolbar.viewLoupe')}</span>
+            </button>
+            <button 
+              className={`px-2.5 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all duration-150 cursor-pointer ${viewMode === 'fullscreen' ? 'bg-accent/15 text-accent' : 'text-txt-tertiary hover:text-txt-secondary'}`}
+              onClick={() => setViewMode('fullscreen')}
+              title={t('toolbar.viewFullWindowTooltip', 'Vollfenster & Diashow (F)')}
+            >
+              <Maximize2 className="w-3.5 h-3.5" />
+              <span>{t('toolbar.viewFullWindow', 'Vollfenster')}</span>
             </button>
           </div>
 

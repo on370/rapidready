@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { SectionHeading, Kbd, TipBox, FeatureCard } from '../HelpShared';
-import { Zap, CheckCircle2, XCircle, Flag, ZoomIn, Eye, ArrowRightToLine } from 'lucide-react';
+import { Zap, CheckCircle2, XCircle, Flag, ZoomIn, Eye, ArrowRightToLine, Maximize2 } from 'lucide-react';
 
 export function HelpCulling() {
   const { i18n } = useTranslation();
@@ -130,6 +130,28 @@ export function HelpCulling() {
               Drücke <Kbd keys={['E']} /> oder <Kbd keys={['Enter']} />, um in die Vollbild-Lupe zu wechseln.
               Ein Klick ins Bild schaltet sofort auf 100% Zoom zur Schärfenkontrolle. Mit gedrückter linker
               Maustaste verschiebst Du den Bildausschnitt.
+            </>
+          )}
+        </FeatureCard>
+
+        <FeatureCard
+          icon={<Maximize2 className="w-4 h-4" />}
+          title={isEn ? 'Full Window & Slideshow Mode (F)' : 'Vollfenster- & Diashow-Modus (F)'}
+        >
+          {isEn ? (
+            <>
+              Press <Kbd keys={['F']} /> to present photos across the entire application window. Start/pause an automatic
+              slideshow with <Kbd keys={['Space']} /> and choose intervals (2s, 3s, 5s, 10s). The floating HUD
+              and cursor automatically hide after 2.5s of inactivity. You can keep rating (<Kbd keys={['P']} />,{' '}
+              <Kbd keys={['X']} />, <Kbd keys={['1']} />–<Kbd keys={['5']} />) with instant glassmorphism feedback.
+            </>
+          ) : (
+            <>
+              Drücke <Kbd keys={['F']} />, um Fotos über das gesamte Anwendungsfenster zu präsentieren. Starte und pausiere
+              eine automatische Diashow mit <Kbd keys={['Space']} /> (Intervall 2s, 3s, 5s oder 10s wählbar).
+              Nach 2,5 s ohne Mausbewegung blenden sich HUD und Mauszeiger automatisch aus. Alle Culling-Tasten
+              (<Kbd keys={['P']} />, <Kbd keys={['X']} />, <Kbd keys={['1']} />–<Kbd keys={['5']} />) funktionieren
+              mit dezentem Glassmorphism-Feedback direkt im Vollfenster weiter.
             </>
           )}
         </FeatureCard>

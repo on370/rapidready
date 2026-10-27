@@ -1,8 +1,34 @@
 import { create } from 'zustand';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+
+const resetOsFullscreenIfActive = async () => {
+  try {
+    const win = getCurrentWindow();
+    const isFs = await win.isFullscreen();
+    if (isFs) {
+      await win.setFullscreen(false);
+    }
+  } catch (_) {}
+};
 
 interface LibraryUIStore {
-  viewMode: 'grid' | 'loupe';
-  setViewMode: (mode: 'grid' | 'loupe') => void;
+  viewMode: 'grid' | 'loupe' | 'fullscreen';
+  previousViewMode: 'grid' | 'loupe';
+  setViewMode: (mode: 'grid' | 'loupe' | 'fullscreen') => void;
+  enterFullscreen: () => void;
+  exitFullscreen: () => void;
+  toggleFullscreen: () => void;
+
+  isSlideshowPlaying: boolean;
+  setIsSlideshowPlaying: (playing: boolean) => void;
+  toggleSlideshowPlaying: () => void;
+
+  slideshowIntervalSec: 2 | 3 | 5 | 10;
+  setSlideshowIntervalSec: (sec: 2 | 3 | 5 | 10) => void;
+
+  slideshowLoop: boolean;
+  setSlideshowLoop: (loop: boolean) => void;
+  toggleSlideshowLoop: () => void;
   
   isInspectorOpen: boolean;
   setIsInspectorOpen: (open: boolean) => void;
@@ -115,9 +141,92 @@ const getSavedFilmstripHeight = (): number => {
   return 80;
 };
 
+const getSavedSlideshowInterval = (): 2 | 3 | 5 | 10 => {
+  try {
+    const val = localStorage.getItem('rapidready_slideshow_interval');
+    if (val) {
+      const num = parseInt(val, 10);
+      if (num === 2 || num === 3 || num === 5 || num === 10) return num;
+    }
+  } catch (_) {}
+  return 3;
+};
+
+const getSavedSlideshowLoop = (): boolean => {
+  try {
+    const val = localStorage.getItem('rapidready_slideshow_loop');
+    if (val !== null) return val === 'true';
+  } catch (_) {}
+  return true;
+};
+
 export const useLibraryUIStore = create<LibraryUIStore>((set) => ({
   viewMode: 'grid',
-  setViewMode: (mode) => set({ viewMode: mode }),
+  previousViewMode: 'grid',
+  setViewMode: (mode) => set((state) => {
+    if (mode === 'fullscreen') {
+      const prev = (state.viewMode === 'fullscreen' ? state.previousViewMode : state.viewMode) as 'grid' | 'loupe';
+      return {
+        viewMode: 'fullscreen',
+        previousViewMode: prev || 'grid',
+      };
+    } else {
+      resetOsFullscreenIfActive();
+      return {
+        viewMode: mode,
+        isSlideshowPlaying: false,
+      };
+    }
+  }),
+  enterFullscreen: () => set((state) => {
+    const prev = (state.viewMode === 'fullscreen' ? state.previousViewMode : state.viewMode) as 'grid' | 'loupe';
+    return {
+      viewMode: 'fullscreen',
+      previousViewMode: prev || 'grid',
+    };
+  }),
+  exitFullscreen: () => {
+    resetOsFullscreenIfActive();
+    set((state) => ({
+      viewMode: state.previousViewMode || 'grid',
+      isSlideshowPlaying: false,
+    }));
+  },
+  toggleFullscreen: () => {
+    const state = useLibraryUIStore.getState();
+    if (state.viewMode === 'fullscreen') {
+      state.exitFullscreen();
+    } else {
+      state.enterFullscreen();
+    }
+  },
+
+  isSlideshowPlaying: false,
+  setIsSlideshowPlaying: (playing) => set({ isSlideshowPlaying: playing }),
+  toggleSlideshowPlaying: () => set((state) => ({ isSlideshowPlaying: !state.isSlideshowPlaying })),
+
+  slideshowIntervalSec: getSavedSlideshowInterval(),
+  setSlideshowIntervalSec: (sec) => {
+    try {
+      localStorage.setItem('rapidready_slideshow_interval', sec.toString());
+    } catch (_) {}
+    set({ slideshowIntervalSec: sec });
+  },
+
+  slideshowLoop: getSavedSlideshowLoop(),
+  setSlideshowLoop: (loop) => {
+    try {
+      localStorage.setItem('rapidready_slideshow_loop', loop ? 'true' : 'false');
+    } catch (_) {}
+    set({ slideshowLoop: loop });
+  },
+  toggleSlideshowLoop: () => set((state) => {
+    const next = !state.slideshowLoop;
+    try {
+      localStorage.setItem('rapidready_slideshow_loop', next ? 'true' : 'false');
+    } catch (_) {}
+    return { slideshowLoop: next };
+  }),
   
   isInspectorOpen: true,
   setIsInspectorOpen: (open) => set({ isInspectorOpen: open }),

@@ -33,6 +33,10 @@
     "openInRapidRawTooltip": "In RapidRAW bearbeiten (R)",
     "viewGrid": "Raster",
     "viewLoupe": "Lupe",
+    "viewFullWindow": "Vollfenster",
+    "viewFullWindowTooltip": "Vollfenster & Diashow (F)",
+    "viewFullscreen": "Vollfenster",
+    "viewFullscreenTooltip": "Vollfenster & Diashow (F)",
     "toggleInspector": "Inspector ein-/ausblenden",
     "autoAdvance": "Auto-Advance",
     "autoAdvanceTooltip": "Auto-Advance: Nach jeder Bewertung automatisch zum nächsten Foto springen",
@@ -449,5 +453,27 @@
     "badgeSync": "⚡ Archiv-Sync",
     "tooltipSync": "RapidReady gleicht Änderungen seit dem letzten Scan mit dem schnellen lokalen Cache ab: neu hinzugefügte, geänderte oder gelöschte Fotos werden aktualisiert.",
     "subline": "Zukünftige Starts öffnen dieses Archiv sofort aus den zwischengespeicherten Daten."
+  },
+  "fullscreen": {
+    "play": "Diashow starten (Leertaste)",
+    "pause": "Diashow anhalten (Leertaste)",
+    "playPause": "Diashow starten / anhalten (Leertaste)",
+    "prev": "Vorheriges Foto (← / K)",
+    "next": "Nächstes Foto (→ / J)",
+    "interval": "Intervall",
+    "intervalSeconds": "{{seconds}}s",
+    "loop": "Endlosschleife",
+    "loopActive": "Endlosschleife aktiv",
+    "loopInactive": "Endlosschleife inaktiv",
+    "osFullscreen": "Betriebssystem-Vollbild einschalten",
+    "exitOsFullscreen": "Betriebssystem-Vollbild beenden",
+    "exit": "Vollbild beenden (Esc / F)",
+    "pickFeedback": "Pick (P)",
+    "rejectFeedback": "Verworfen (X)",
+    "unflagFeedback": "Neutral (U)",
+    "noRatingFeedback": "Keine Sterne (0)",
+    "ratingFeedback": "{{count}} Sterne",
+    "colorFeedback": "Farbkennzeichnung: {{color}}",
+    "noColorFeedback": "Keine Farbkennzeichnung"
   }
 }

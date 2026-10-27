@@ -8,6 +8,8 @@ import { ExportCollectionModal } from "./library/components/ExportCollectionModa
 export function LibraryView() {
   const isInspectorOpen = useLibraryUIStore((s) => s.isInspectorOpen);
   const setIsInspectorOpen = useLibraryUIStore((s) => s.setIsInspectorOpen);
+  const viewMode = useLibraryUIStore((s) => s.viewMode);
+  const isFullscreen = viewMode === 'fullscreen';
   
   const MIN_CENTER_WIDTH = 400;
   const MIN_LEFT_WIDTH = 180;
@@ -79,16 +81,16 @@ export function LibraryView() {
   }, [leftWidth, rightWidth, isInspectorOpen]);
 
   return (
-    <div className="flex-1 w-full overflow-hidden flex flex-col min-h-0" ref={containerRef}>
+    <div className={`flex-1 w-full overflow-hidden flex flex-col min-h-0 ${isFullscreen ? 'bg-black' : ''}`} ref={containerRef}>
       <div className="flex h-full w-full min-w-0 flex-1">
         {/* Left Sidebar */}
-        <div style={{ width: leftWidth }} className="flex-shrink-0 flex min-h-0 relative">
+        <div style={{ width: leftWidth }} className={isFullscreen ? "hidden" : "flex-shrink-0 flex min-h-0 relative"}>
           <LibraryLeftSidebar />
         </div>
         
         {/* Left Divider */}
         <div 
-          className="relative w-px flex-shrink-0 group cursor-col-resize z-20 select-none"
+          className={isFullscreen ? "hidden" : "relative w-px flex-shrink-0 group cursor-col-resize z-20 select-none"}
           onMouseDown={(e) => { e.preventDefault(); setIsDraggingLeft(true); }}
         >
           {/* 7px hit-area & subtle RapidRAW hover track (extends exclusively to the right to leave sidebar scrollbar free) */}
@@ -106,13 +108,13 @@ export function LibraryView() {
         </div>
         
         {/* Center */}
-        <div className="flex-1 min-w-[400px] flex min-h-0 bg-app-bg relative z-0">
+        <div className={`flex-1 ${isFullscreen ? '' : 'min-w-[400px]'} flex min-h-0 ${isFullscreen ? 'bg-black' : 'bg-app-bg'} relative z-0`}>
           <LibraryCenter />
-          {(isDraggingLeft || isDraggingRight) && <div className="absolute inset-0 z-50 cursor-col-resize" />}
+          {!isFullscreen && (isDraggingLeft || isDraggingRight) && <div className="absolute inset-0 z-50 cursor-col-resize" />}
         </div>
 
         {/* Right Area */}
-        {isInspectorOpen && (
+        {isInspectorOpen && !isFullscreen && (
           <>
             {/* Right Divider */}
             <div 

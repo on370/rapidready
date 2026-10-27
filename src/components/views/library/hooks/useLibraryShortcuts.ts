@@ -10,8 +10,8 @@ interface UseLibraryShortcutsProps {
   activeImageIndex: number;
   displayedImages: LibraryImage[];
   numColumns?: number;
-  viewMode: 'grid' | 'loupe';
-  setViewMode: (mode: 'grid' | 'loupe') => void;
+  viewMode: 'grid' | 'loupe' | 'fullscreen';
+  setViewMode: (mode: 'grid' | 'loupe' | 'fullscreen') => void;
   setActiveImageIndex: (index: number) => void;
   setSelectedPaths: (paths: Set<string>) => void;
   selectAll: (displayedImages: LibraryImage[]) => void;
@@ -49,6 +49,13 @@ export function useLibraryShortcuts({
       if ((e.metaKey || e.ctrlKey) && (e.key === 'a' || e.key === 'A')) {
         e.preventDefault();
         selectAll(displayedImages);
+        return;
+      }
+
+      // Shortcut: F (without Shift, Cmd, Ctrl, Alt) -> Toggle Fullscreen & Slideshow
+      if (!e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && (e.key === 'f' || e.key === 'F')) {
+        e.preventDefault();
+        useLibraryUIStore.getState().toggleFullscreen();
         return;
       }
 
@@ -231,7 +238,9 @@ export function useLibraryShortcuts({
             break;
           case 'Escape':
             e.preventDefault();
-            if (viewMode === 'loupe') {
+            if (viewMode === 'fullscreen') {
+              useLibraryUIStore.getState().exitFullscreen();
+            } else if (viewMode === 'loupe') {
               setViewMode('grid');
             } else {
               // In grid view: deselect any selected collection, last import, or folder
@@ -246,17 +255,29 @@ export function useLibraryShortcuts({
             break;
           case ' ':
             e.preventDefault();
-            if (e.shiftKey) {
-              if (activeImageIndex > 0) {
-                const prev = activeImageIndex - 1;
-                setActiveImageIndex(prev);
-                if (displayedImages[prev]) setSelectedPaths(new Set([displayedImages[prev].path]));
+            if (viewMode === 'fullscreen') {
+              if (!e.shiftKey) {
+                useLibraryUIStore.getState().toggleSlideshowPlaying();
+              } else {
+                if (activeImageIndex > 0) {
+                  const prev = activeImageIndex - 1;
+                  setActiveImageIndex(prev);
+                  if (displayedImages[prev]) setSelectedPaths(new Set([displayedImages[prev].path]));
+                }
               }
             } else {
-              if (activeImageIndex < displayedImages.length - 1) {
-                const next = activeImageIndex + 1;
-                setActiveImageIndex(next);
-                if (displayedImages[next]) setSelectedPaths(new Set([displayedImages[next].path]));
+              if (e.shiftKey) {
+                if (activeImageIndex > 0) {
+                  const prev = activeImageIndex - 1;
+                  setActiveImageIndex(prev);
+                  if (displayedImages[prev]) setSelectedPaths(new Set([displayedImages[prev].path]));
+                }
+              } else {
+                if (activeImageIndex < displayedImages.length - 1) {
+                  const next = activeImageIndex + 1;
+                  setActiveImageIndex(next);
+                  if (displayedImages[next]) setSelectedPaths(new Set([displayedImages[next].path]));
+                }
               }
             }
             break;

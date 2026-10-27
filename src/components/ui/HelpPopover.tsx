@@ -5,7 +5,7 @@ import { isMac, modSymbol, shiftSymbol } from '../../utils/platform';
 import { useSettingsStore } from '../../stores/settingsStore';
 
 interface HelpPopoverProps {
-  viewMode: 'grid' | 'loupe';
+  viewMode: 'grid' | 'loupe' | 'fullscreen';
 }
 
 export function HelpPopover({ viewMode }: HelpPopoverProps) {
@@ -96,6 +96,10 @@ export function HelpPopover({ viewMode }: HelpPopoverProps) {
                   <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">{shiftSymbol}F</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
+                  <span className="text-txt-secondary">{t('shortcuts.actions.fullscreenSlideshow', 'Vollfenster & Diashow')}</span>
+                  <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">F</span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
                   <span className="text-txt-secondary">{t('shortcuts.actions.grid')}</span>
                   <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">G / Esc</span>
                 </div>
@@ -149,6 +153,10 @@ export function HelpPopover({ viewMode }: HelpPopoverProps) {
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-txt-secondary">{t('shortcuts.actions.focusPeaking', 'Focus Peaking')}</span>
                   <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">{shiftSymbol}F</span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-txt-secondary">{t('shortcuts.actions.fullscreenSlideshow', 'Vollfenster & Diashow')}</span>
+                  <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">F</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-txt-secondary">{t('shortcuts.actions.deselectOrAllPhotos', 'Gesamtes Archiv / Deselect')}</span>

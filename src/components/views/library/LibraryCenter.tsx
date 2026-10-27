@@ -11,6 +11,7 @@ import { getTopLevelSelectedPaths } from "./LibraryLeftSidebar";
 import { CullingToolbar } from "./components/CullingToolbar";
 import { LibraryGrid } from "./components/LibraryGrid";
 import { LoupeViewer } from "./components/LoupeViewer";
+import { FullscreenViewer } from "./components/FullscreenViewer";
 import { useLibraryShortcuts } from "./hooks/useLibraryShortcuts";
 
 import { useLibraryUIStore } from "../../../stores/libraryUIStore";
@@ -20,8 +21,8 @@ import { useCollectionsStore, findAlbumById } from "../../../stores/collectionsS
 import { FolderHeart, Download, ArrowDownAZ, X } from "lucide-react";
 
 interface LibraryCenterProps {
-  viewMode?: 'grid' | 'loupe';
-  setViewMode?: (mode: 'grid' | 'loupe') => void;
+  viewMode?: 'grid' | 'loupe' | 'fullscreen';
+  setViewMode?: (mode: 'grid' | 'loupe' | 'fullscreen') => void;
   toggleInspector?: () => void;
 }
 
@@ -843,22 +844,24 @@ export function LibraryCenter({
   return (
     <div className="flex-1 flex flex-col overflow-hidden min-w-0">
       {/* Header, Filter and Culling Toolbars */}
-      <CullingToolbar
-        activeImage={activeImage}
-        displayedImages={displayedImages}
-        availableTags={availableTags}
-        colorCounts={colorCounts}
-        ratingCounts={ratingCounts}
-        rejectedCount={totalRejectedCount}
-        handleCulling={handleCulling}
-        handleSetColor={handleSetColor}
-        handleRotate={handleRotate}
-        handleDeleteRejected={handleDeleteRejected}
-        toggleInspector={toggleInspector}
-      />
+      <div className={viewMode === 'fullscreen' ? 'hidden' : 'contents'}>
+        <CullingToolbar
+          activeImage={activeImage}
+          displayedImages={displayedImages}
+          availableTags={availableTags}
+          colorCounts={colorCounts}
+          ratingCounts={ratingCounts}
+          rejectedCount={totalRejectedCount}
+          handleCulling={handleCulling}
+          handleSetColor={handleSetColor}
+          handleRotate={handleRotate}
+          handleDeleteRejected={handleDeleteRejected}
+          toggleInspector={toggleInspector}
+        />
+      </div>
 
       {/* Active Collection Header Banner */}
-      {activeCollection && (
+      {activeCollection && viewMode !== 'fullscreen' && (
         <div className="bg-[#18181c] border-b border-app-border px-6 py-2 flex items-center justify-between z-20 flex-shrink-0 animate-in fade-in slide-in-from-top-1 duration-150">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-7 h-7 rounded-lg bg-accent/15 border border-accent/30 flex items-center justify-center flex-shrink-0">
@@ -929,7 +932,7 @@ export function LibraryCenter({
             }}
             onContextMenu={handleContextMenu}
             onClearSelection={() => setSelectedPaths(new Set())}
-            viewMode={viewMode}
+            viewMode={viewMode === 'grid' ? 'grid' : 'loupe'}
             isCollectionMode={!!activeCollection}
             onReorderImages={activeCollection ? handleReorderInCollection : undefined}
           />
@@ -950,6 +953,25 @@ export function LibraryCenter({
             />
           </div>
         )}
+
+        {/* FullscreenViewer: mounted on-demand when viewMode === 'fullscreen' */}
+        {viewMode === 'fullscreen' && (
+          <div className="absolute inset-0 z-20 flex flex-col bg-black">
+            <FullscreenViewer
+              activeImage={activeImage}
+              activeImageIndex={activeImageIndex}
+              displayedImages={displayedImages}
+              selectedPaths={selectedPaths}
+              setActiveImageIndex={setActiveImageIndex}
+              setSelectedPaths={setSelectedPaths}
+              handleCulling={handleCulling}
+              handleSetColor={handleSetColor}
+              handleRotate={handleRotate}
+              onContextMenu={handleContextMenu}
+            />
+          </div>
+        )}
+
         {/* Phase 2 & 3: Non-blocking Progressive Scan Banner */}
         <ArchiveScanBanner />
       </div>

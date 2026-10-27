@@ -33,6 +33,10 @@
     "openInRapidRawTooltip": "Edit in RapidRAW (R)",
     "viewGrid": "Grid",
     "viewLoupe": "Loupe",
+    "viewFullWindow": "Full Window",
+    "viewFullWindowTooltip": "Full Window & Slideshow (F)",
+    "viewFullscreen": "Full Window",
+    "viewFullscreenTooltip": "Full Window & Slideshow (F)",
     "toggleInspector": "Toggle Inspector",
     "autoAdvance": "Auto-Advance",
     "autoAdvanceTooltip": "Auto-Advance: Automatically advance to next photo after rating",
@@ -449,5 +453,27 @@
     "badgeSync": "⚡ Archive Sync",
     "tooltipSync": "RapidReady reconciles changes since the last scan with the high-speed local cache: newly added, modified, or deleted photos are updated.",
     "subline": "Future launches will open this archive instantly from cached data."
+  },
+  "fullscreen": {
+    "play": "Start Slideshow (Space)",
+    "pause": "Pause Slideshow (Space)",
+    "playPause": "Start / Pause Slideshow (Space)",
+    "prev": "Previous photo (← / K)",
+    "next": "Next photo (→ / J)",
+    "interval": "Interval",
+    "intervalSeconds": "{{seconds}}s",
+    "loop": "Loop playback",
+    "loopActive": "Loop playback active",
+    "loopInactive": "Loop playback inactive",
+    "osFullscreen": "Enter OS fullscreen",
+    "exitOsFullscreen": "Exit OS fullscreen",
+    "exit": "Exit fullscreen (Esc / F)",
+    "pickFeedback": "Pick (P)",
+    "rejectFeedback": "Rejected (X)",
+    "unflagFeedback": "Neutral (U)",
+    "noRatingFeedback": "No rating (0)",
+    "ratingFeedback": "{{count}} stars",
+    "colorFeedback": "Color label: {{color}}",
+    "noColorFeedback": "No color label"
   }
 }
