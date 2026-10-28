@@ -45,6 +45,22 @@ pub fn run() {
         .manage(commands::ArchiveScanState::default())
         .manage(commands::CollectionExportState::default())
         .manage(commands::SourceScanState::default())
+        .on_window_event(|window, event| {
+            #[cfg(target_os = "windows")]
+            if let tauri::WindowEvent::Resized(_) = event {
+                if let Ok(is_fs) = window.is_fullscreen() {
+                    if is_fs {
+                        if window.is_menu_visible().unwrap_or(false) {
+                            let _ = window.hide_menu();
+                        }
+                    } else {
+                        if !window.is_menu_visible().unwrap_or(true) {
+                            let _ = window.show_menu();
+                        }
+                    }
+                }
+            }
+        })
         .setup(|app| {
             #[cfg(target_os = "macos")]
             {
