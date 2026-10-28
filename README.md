@@ -19,7 +19,9 @@ Even if you aren't heading into full RAW development right away, RapidReady is a
 - **Blazing Fast RAW Engine & Universal Safety Net:** Powered by a custom Rust backend, RapidReady extracts embedded JPEGs from CR2, CR3, ARW, RAF, RW2, and other proprietary RAW formats instantly (< 2 ms) with an architectural universal fallback safety net guaranteeing 100% preview availability without blank tiles.
 - **Network-Optimized Archive Thumbnailing (NAS/SMB):** Single-request 256 KB header-slice extraction, differentiated in-memory downscaling, and zero-cost EXIF orientation injection bypass multi-megabyte RAW file transfers over network mounts for instant 15+ images/s cache generation.
 - **Speculative RAM Viewport Caching:** Proactive background preloading of neighboring thumbnails in Grid (+3 rows) and Loupe views (+5 images ahead) with floating visual buffer indicators (`▲/▼` and `◀/▶`) for instant, stutter-free navigation.
-- **Hardware-Accelerated Focus Peaking:** Dual-view sharpness inspection (`F` key) in Loupe and Inspector preview powered by a darktable-inspired Difference-of-Gradients bandpass filter to verify focus on fine textures and eyes instantly.
+- **Fullscreen Presentation & Integrated Slideshow Mode:** Zero-lag distraction-free full window viewing (`F` key) with auto-hiding glassmorphic HUD, customizable playback intervals (2s, 3s, 5s, 10s), infinite loop playback, hardware-accelerated 2-layer crossfades (350ms), and in-slideshow keyboard culling/rating.
+- **Hardware-Accelerated Focus Peaking:** Dual-view sharpness inspection (`Shift+F` key) in Loupe and Inspector preview powered by a darktable-inspired Difference-of-Gradients bandpass filter to verify focus on fine textures and eyes instantly.
+- **Inspector Live Histogram:** Fast real-time photographic RGB and Luminance histogram (`H` key) with logarithmic and linear scaling modes to detect shadow clipping and blown highlights instantly.
 - **Zero-Latency Culling & Viewing:** Navigate through massive folders of high-resolution RAW files in real-time. Responsive filmstrip, split folder navigation, and instant sidecar synchronization.
 - **Advanced Culling & Organization:** One-touch flags (`Pick`, `Reject`, `Unflag`), star ratings (`1`-`5`), 5 color labels (`6`-`9`), and tag management with live autocomplete.
 - **Virtual Collections (Albums) & Sequencing:** Hierarchical virtual albums without file duplication, custom drag-and-drop narrative sequencing, seamless RapidRAW album synchronization, and sequential photobook/web export with EXIF preservation.
@@ -39,7 +41,7 @@ RapidReady is engineered for professional camera workflows, high-speed SD card i
 ### Currently Supported Formats
 - **RAW Camera Formats:** Canon (`.cr2`, `.cr3`), Sony (`.arw`), Nikon (`.nef`, `.nrw`), Adobe/Leica/Ricoh (`.dng`), Fujifilm (`.raf`), Olympus/OM System (`.orf`), Panasonic Lumix (`.rw2`), Pentax (`.pef`), Hasselblad (`.3fr`), Sigma (`.x3f`).
 - **Raster & Next-Gen Formats:** JPEG (`.jpg`, `.jpeg`), HEIF/HEIC (`.heic`, `.heif`, `.hif` with RAW+HIF pairing support), WebP (`.webp`), AVIF (`.avif`), PNG (`.png`), TIFF (`.tif`, `.tiff`).
-- **Video Formats (Ingestion & Archive Browsing):** `.mp4`, `.mov`, `.m4v`, `.avi` (native hardware thumbnail extraction, responsive video badges, and poster frame previewing).
+- **Video Formats (Ingestion & Archive Browsing):** `.mp4`, `.mov`, `.m4v`, `.avi`, `.mkv`, `.webm`, `.flv`, `.wmv` (hardware thumbnail extraction, responsive video badges, poster frame previewing, and graceful external player fallback).
 
 > [!TIP]
 > **Roadmap & Upcoming Media Support:**  

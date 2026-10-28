@@ -1,9 +1,10 @@
 import React, { useRef, useState, useEffect, useMemo } from 'react';
-import { 
-  LayoutGrid, Square, PanelRight, ArrowRightToLine, Star, Trash2, Check, 
-  Rocket, FolderOpen, ZoomIn, ZoomOut, RotateCw, RotateCcw, 
+import {
+  LayoutGrid, PanelRight, ArrowRightToLine, Star, Trash2, Check,
+  Rocket, FolderOpen, ZoomIn, ZoomOut, RotateCw, RotateCcw,
   SquareArrowOutUpRight, CircleSlash, Tag, ChevronDown, X, ScanEye,
-  Maximize2
+  Maximize2,
+  GalleryThumbnails
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
@@ -150,14 +151,14 @@ export const CullingToolbar = React.memo(function CullingToolbar({
       <div className="px-6 py-4 border-b border-app-border flex items-center justify-between flex-shrink-0">
         <div>
           <h2 className="text-lg font-bold text-txt-primary truncate max-w-[400px]">
-            {isViewingLastImport 
-              ? t('header.lastImport') 
+            {isViewingLastImport
+              ? t('header.lastImport')
               : topLevelSelection.count > 1
                 ? t('header.multipleFolders', { count: topLevelSelection.count, defaultValue: `${topLevelSelection.count} Ordner` })
                 : topLevelSelection.count === 1 && topLevelSelection.singleTopPath
                   ? (normalizeSlash(topLevelSelection.singleTopPath).split('/').pop() || topLevelSelection.singleTopPath)
-                  : activeFolderPath 
-                    ? normalizeSlash(activeFolderPath).split('/').pop() 
+                  : activeFolderPath
+                    ? normalizeSlash(activeFolderPath).split('/').pop()
                     : t('header.allImages')}
           </h2>
           <p className="text-xs text-txt-tertiary mt-0.5">
@@ -166,11 +167,11 @@ export const CullingToolbar = React.memo(function CullingToolbar({
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           {/* Auto-Advance Toggle */}
-          <button 
-            onClick={() => setAutoAdvance(!autoAdvance)} 
+          <button
+            onClick={() => setAutoAdvance(!autoAdvance)}
             className={`w-[30px] h-[30px] flex items-center justify-center rounded-lg border transition-colors cursor-pointer ${
-              autoAdvance 
-                ? 'bg-accent/15 border-accent/40 text-accent hover:bg-accent/25' 
+              autoAdvance
+                ? 'bg-accent/15 border-accent/40 text-accent hover:bg-accent/25'
                 : 'bg-app-card border-app-border text-txt-tertiary hover:text-txt-secondary hover:border-app-border-hover'
             }`}
             title={autoAdvance ? t('toolbar.autoAdvanceTooltipActive') : t('toolbar.autoAdvanceTooltipInactive')}
@@ -182,17 +183,17 @@ export const CullingToolbar = React.memo(function CullingToolbar({
           <div className="w-px h-5 bg-app-border mx-0.5"></div>
 
           {/* Dual-Mode Zoom Slider (Grid Thumbnail Zoom / Loupe Image Zoom) */}
-          <div 
+          <div
             className="flex items-center gap-1.5 bg-app-card border border-app-border rounded-lg px-2 py-1 h-[30px]"
             title={
-              viewMode === 'grid' 
-                ? t('toolbar.zoomThumbnailSize', { size: gridThumbnailSize }) 
-                : loupeScale <= 0 
-                  ? t('toolbar.zoomFit') 
+              viewMode === 'grid'
+                ? t('toolbar.zoomThumbnailSize', { size: gridThumbnailSize })
+                : loupeScale <= 0
+                  ? t('toolbar.zoomFit')
                   : t('toolbar.zoomPercent', { percent: Math.round(loupeScale * 100) })
             }
           >
-            <button 
+            <button
               onClick={() => {
                 if (viewMode === 'grid') {
                   setGridThumbnailSize(Math.max(120, gridThumbnailSize - 20));
@@ -210,7 +211,7 @@ export const CullingToolbar = React.memo(function CullingToolbar({
               <ZoomOut className="w-3.5 h-3.5" />
             </button>
 
-            <input 
+            <input
               type="range"
               min={viewMode === 'grid' ? 120 : 0}
               max={viewMode === 'grid' ? 400 : 5}
@@ -227,7 +228,7 @@ export const CullingToolbar = React.memo(function CullingToolbar({
               className="zoom-slider w-16 sm:w-20 md:w-24 cursor-pointer"
             />
 
-            <button 
+            <button
               onClick={() => {
                 if (viewMode === 'grid') {
                   setGridThumbnailSize(Math.min(400, gridThumbnailSize + 20));
@@ -250,23 +251,23 @@ export const CullingToolbar = React.memo(function CullingToolbar({
 
           {/* View mode toggle: Grid / Loupe / Fullscreen */}
           <div className="flex items-center bg-app-card border border-app-border rounded-lg p-0.5">
-            <button 
+            <button
               className={`px-2.5 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all duration-150 cursor-pointer ${viewMode === 'grid' ? 'bg-accent/15 text-accent' : 'text-txt-tertiary hover:text-txt-secondary'}`}
               onClick={() => setViewMode('grid')}
-              title={t('toolbar.viewGridTooltip', { defaultValue: 'Rasteransicht (G)' })}
+              title={t('toolbar.viewGridTooltip', 'Rasteransicht (G)')}
             >
               <LayoutGrid className="w-3.5 h-3.5" />
-              <span>{t('toolbar.viewGrid')}</span>
+              <span>{t('toolbar.viewGrid', 'Raster')}</span>
             </button>
-            <button 
+            <button
               className={`px-2.5 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all duration-150 cursor-pointer ${viewMode === 'loupe' ? 'bg-accent/15 text-accent' : 'text-txt-tertiary hover:text-txt-secondary'}`}
               onClick={() => setViewMode('loupe')}
-              title={t('toolbar.viewLoupeTooltip', { defaultValue: 'Detailansicht / Lupe (E)' })}
+              title={t('toolbar.viewLoupeTooltip', 'Lupenansicht (E)')}
             >
-              <Square className="w-3.5 h-3.5" />
-              <span>{t('toolbar.viewLoupe')}</span>
+              <GalleryThumbnails className="w-3.5 h-3.5" />
+              <span>{t('toolbar.viewLoupe', 'Lupe')}</span>
             </button>
-            <button 
+            <button
               className={`px-2.5 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all duration-150 cursor-pointer ${viewMode === 'fullscreen' ? 'bg-accent/15 text-accent' : 'text-txt-tertiary hover:text-txt-secondary'}`}
               onClick={() => setViewMode('fullscreen')}
               title={t('toolbar.viewFullWindowTooltip', 'Vollfenster & Diashow (F)')}
@@ -281,15 +282,15 @@ export const CullingToolbar = React.memo(function CullingToolbar({
           {/* Focus Peaking Button & Settings Dropdown */}
           <div className="relative" ref={focusMenuRef}>
             <div className={`flex items-center rounded-lg p-0.5 border transition-all ${
-              focusPeakingEnabled 
-                ? 'bg-accent/15 border-accent/40 text-accent shadow-sm' 
+              focusPeakingEnabled
+                ? 'bg-accent/15 border-accent/40 text-accent shadow-sm'
                 : 'bg-app-card border-app-border text-txt-tertiary'
             }`}>
               <button
                 onClick={toggleFocusPeaking}
                 className={`px-2 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all duration-150 cursor-pointer ${
-                  focusPeakingEnabled 
-                    ? 'text-accent font-semibold' 
+                  focusPeakingEnabled
+                    ? 'text-accent font-semibold'
                     : 'text-txt-tertiary hover:text-txt-secondary'
                 }`}
                 title={t('toolbar.focusPeakingTooltip', `Focus Peaking (${shiftSymbol}F)`)}
@@ -325,12 +326,12 @@ export const CullingToolbar = React.memo(function CullingToolbar({
                   </label>
                   <div className="grid grid-cols-4 gap-1.5">
                     {(['green', 'red', 'cyan', 'yellow'] as const).map((color) => {
-                      const bgClass = color === 'green' 
-                        ? 'bg-[#00ff40]' 
-                        : color === 'red' 
-                        ? 'bg-[#ff2a4b]' 
-                        : color === 'cyan' 
-                        ? 'bg-[#00e5ff]' 
+                      const bgClass = color === 'green'
+                        ? 'bg-[#00ff40]'
+                        : color === 'red'
+                        ? 'bg-[#ff2a4b]'
+                        : color === 'cyan'
+                        ? 'bg-[#00e5ff]'
                         : 'bg-[#ffee00]';
                       const isSelected = focusPeakingColor === color;
                       return (
@@ -338,8 +339,8 @@ export const CullingToolbar = React.memo(function CullingToolbar({
                           key={color}
                           onClick={() => setFocusPeakingColor(color)}
                           className={`h-7 rounded-md flex items-center justify-center transition-all cursor-pointer border ${
-                            isSelected 
-                              ? 'border-white ring-2 ring-white/30 scale-105' 
+                            isSelected
+                              ? 'border-white ring-2 ring-white/30 scale-105'
                               : 'border-transparent opacity-60 hover:opacity-100'
                           } ${bgClass}`}
                           title={t(`toolbar.focusColor_${color}`, color)}
@@ -358,10 +359,10 @@ export const CullingToolbar = React.memo(function CullingToolbar({
                       {t('toolbar.focusSensitivity', 'Empfindlichkeit')}
                     </label>
                     <span className="text-[10px] font-mono text-txt-tertiary">
-                      {focusPeakingThreshold < 0.030 
-                        ? t('toolbar.focusSensHigh', 'Hoch') 
-                        : focusPeakingThreshold >= 0.055 
-                        ? t('toolbar.focusSensLow', 'Niedrig') 
+                      {focusPeakingThreshold < 0.030
+                        ? t('toolbar.focusSensHigh', 'Hoch')
+                        : focusPeakingThreshold >= 0.055
+                        ? t('toolbar.focusSensLow', 'Niedrig')
                         : t('toolbar.focusSensNormal', 'Normal')}
                     </span>
                   </div>
@@ -422,7 +423,7 @@ export const CullingToolbar = React.memo(function CullingToolbar({
           {selectedRatingFilter !== null ? (
             <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-warning/15 text-warning border border-warning/30 text-[11px] font-medium">
               <Star className="w-3 h-3 fill-warning text-warning" />
-              <button 
+              <button
                 onClick={() => setIsRatingFilterOpen(prev => !prev)}
                 className="flex items-center gap-1 hover:underline cursor-pointer"
                 title={t('filters.ratingFilter')}
@@ -430,7 +431,7 @@ export const CullingToolbar = React.memo(function CullingToolbar({
                 <span>≥{selectedRatingFilter}★</span>
                 <ChevronDown className="w-3 h-3 opacity-70" />
               </button>
-              <button 
+              <button
                 onClick={(e) => {
                   e.stopPropagation();
                   setSelectedRatingFilter(null);
@@ -514,7 +515,7 @@ export const CullingToolbar = React.memo(function CullingToolbar({
           {selectedColorFilter ? (
             <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-white/10 text-txt-primary border border-white/20 text-[11px] font-medium">
               <span className={`w-3 h-3 rounded-full ${getColorConfig(selectedColorFilter)?.bg} ring-1 ring-white/30 flex-shrink-0`} />
-              <button 
+              <button
                 onClick={() => setIsColorFilterOpen(prev => !prev)}
                 className="flex items-center gap-1 hover:underline cursor-pointer"
                 title={t('filters.colorFilter')}
@@ -522,7 +523,7 @@ export const CullingToolbar = React.memo(function CullingToolbar({
                 <span>{t(`colors.${selectedColorFilter}`)}</span>
                 <ChevronDown className="w-3 h-3 opacity-70" />
               </button>
-              <button 
+              <button
                 onClick={(e) => {
                   e.stopPropagation();
                   setSelectedColorFilter(null);
@@ -610,7 +611,7 @@ export const CullingToolbar = React.memo(function CullingToolbar({
           {selectedTagFilter ? (
             <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-accent/15 text-accent border border-accent/30 text-[11px] font-medium">
               <Tag className="w-3 h-3 text-accent" />
-              <button 
+              <button
                 onClick={() => setIsTagFilterOpen(prev => !prev)}
                 className="flex items-center gap-1 hover:underline cursor-pointer"
                 title={t('filters.tagFilter')}
@@ -618,7 +619,7 @@ export const CullingToolbar = React.memo(function CullingToolbar({
                 <span>{selectedTagFilter}</span>
                 <ChevronDown className="w-3 h-3 opacity-70" />
               </button>
-              <button 
+              <button
                 onClick={(e) => {
                   e.stopPropagation();
                   setSelectedTagFilter(null);
@@ -699,29 +700,29 @@ export const CullingToolbar = React.memo(function CullingToolbar({
       </div>
 
       {/* 3. Culling Toolbar: Flags P/U/X, Delete, Stars, Color, Rotation, Share */}
-      <div 
+      <div
         data-tour="library-grid"
-        ref={toolbarRef} 
+        ref={toolbarRef}
         className="relative z-30 flex items-center gap-3 px-4 py-2 border-b border-app-border bg-[#111114] flex-shrink-0 overflow-visible whitespace-nowrap"
       >
         {/* Flag Buttons */}
         <div className="flex items-center gap-0.5 flex-shrink-0">
-          <button 
-            onClick={() => handleCulling(1, activeImage?.culling.rating || 0)} 
+          <button
+            onClick={() => handleCulling(1, activeImage?.culling.rating || 0)}
             className={`w-8 h-7 rounded-l-md flex items-center justify-center text-xs font-bold transition-all border border-app-border hover:bg-success/20 cursor-pointer ${activeImage?.culling.flag === 1 ? 'bg-success text-white' : 'text-txt-tertiary'}`}
             title={t('inspector.pick')}
           >
             P
           </button>
-          <button 
-            onClick={() => handleCulling(null, activeImage?.culling.rating || 0)} 
+          <button
+            onClick={() => handleCulling(null, activeImage?.culling.rating || 0)}
             className={`w-8 h-7 flex items-center justify-center text-xs font-bold transition-all border-y border-app-border hover:bg-app-hover cursor-pointer ${activeImage?.culling.flag === null ? 'bg-app-hover text-white' : 'text-txt-tertiary'}`}
             title={t('inspector.unflag')}
           >
             U
           </button>
-          <button 
-            onClick={() => handleCulling(-1, activeImage?.culling.rating || 0)} 
+          <button
+            onClick={() => handleCulling(-1, activeImage?.culling.rating || 0)}
             className={`w-8 h-7 rounded-r-md flex items-center justify-center text-xs font-bold transition-all border border-app-border hover:bg-danger/20 cursor-pointer ${activeImage?.culling.flag === -1 ? 'bg-danger text-white' : 'text-txt-tertiary'}`}
             title={
               shortcutPreset === 'darktable'
@@ -770,8 +771,8 @@ export const CullingToolbar = React.memo(function CullingToolbar({
             title={t('toolbar.colorLabelTooltip')}
           >
             {activeImage?.culling.color ? (
-              <span 
-                className={`w-3.5 h-3.5 rounded-full ${getColorConfig(activeImage.culling.color)?.bg} ring-1 ring-white/30 shadow-sm transition-transform hover:scale-110`} 
+              <span
+                className={`w-3.5 h-3.5 rounded-full ${getColorConfig(activeImage.culling.color)?.bg} ring-1 ring-white/30 shadow-sm transition-transform hover:scale-110`}
               />
             ) : (
               <span
@@ -857,12 +858,12 @@ export const CullingToolbar = React.memo(function CullingToolbar({
 
         {/* Share / Export Popover */}
         <div className="relative flex-shrink-0" ref={shareMenuRef}>
-          <button 
+          <button
             disabled={!activeImage}
             onClick={() => setIsShareOpen(!isShareOpen)}
             className={`px-2.5 py-1 rounded-md border text-xs font-medium transition-all duration-150 flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-sm ${
-              isShareOpen 
-                ? 'bg-accent/15 border-accent text-accent' 
+              isShareOpen
+                ? 'bg-accent/15 border-accent text-accent'
                 : 'bg-app-card border-app-border hover:border-app-border-hover hover:bg-app-hover text-txt-primary'
             }`}
             title={t('toolbar.shareTooltip')}

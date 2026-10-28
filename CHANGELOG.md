@@ -5,6 +5,44 @@ All notable changes to RapidReady will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.4] - 2026-10-28
+
+Major feature, format support, and user experience release introducing an integrated Fullscreen Presentation & Slideshow Mode with 2-layer hardware-accelerated crossfades and live culling; native Olympus and OM System RAW (`.ORF`) MakerNote preview extraction and Handheld High-Res Shot (HHHR) support (GitHub Issue #4); a real-time Inspector Live Histogram (<kbd>H</kbd>); a safe two-stage folder deletion workflow; configurable keyboard shortcut presets (Standard vs. Darktable); graceful video codec fallback handling; and comprehensive i18n toolbar polish.
+
+### Added & Improved
+- **Fullscreen Presentation & Integrated Slideshow Mode (`FullscreenViewer.tsx`, `libraryUIStore.ts`, `CullingToolbar.tsx`):**
+  - **Zero-Lag Full Window Presentation Mode (<kbd>F</kbd>):** Dedicated distraction-free full window viewing unmounting sidebars and navigation while keeping `LibraryGrid` resident in the background DOM (`z-0 invisible pointer-events-none`) for 0 ms return transitions and 100% preserved scroll state.
+  - **Integrated Slideshow Engine:** Automated photo playback with customizable intervals (2s, 3s, 5s, 10s), infinite playback loop toggle (`Repeat`), and auto-hiding floating glassmorphism HUD deck (auto-hides after 2.5s of inactivity, cursor hides automatically).
+  - **Snappy 2-Layer Hardware-Accelerated Crossfades:** GPU-composited 350ms crossfade animations (`@keyframes crossfade-in`, `@keyframes crossfade-out` with `transform: translateZ(0)`) providing smooth dissolves without stutter or black dips. Seamlessly handles aspect-ratio mismatches (e.g. landscape-to-portrait) by smoothly fading outgoing wings into the black background. Toggleable via the HUD control deck (`Blend` icon) and persisted in `localStorage`.
+  - **WebKit Memory Pre-Decoding:** Proactively pre-fetches and pre-decodes oncoming images directly in the browser's image pipeline alongside Rust chunk cache pre-warming, ensuring frame-1 instant transitions without decode latency.
+  - **In-Slideshow Culling & Rating:** Full keyboard culling in presentation mode (<kbd>P</kbd> Pick, <kbd>X</kbd> Reject, <kbd>U</kbd> Neutral, <kbd>1</kbd>–<kbd>5</kbd> Star rating, <kbd>6</kbd>–<kbd>9</kbd> Color labels) with a 1.2s glassmorphic visual feedback badge.
+  - **OS-Native Fullscreen Integration:** Dedicated HUD control and <kbd>Ctrl</kbd>+<kbd>Cmd</kbd>+<kbd>F</kbd> / <kbd>F11</kbd> support to toggle true operating system fullscreen.
+  - **Toolbar 3-Way Mode Switch:** Unified Grid (<kbd>G</kbd>) / Loupe (<kbd>E</kbd>) / Full Window (<kbd>F</kbd>) toggle switch with localized tooltips across German and English (`viewGridTooltip`, `viewLoupeTooltip`, `viewFullWindowTooltip`).
+- **Olympus & OM System RAW (`.ORF`) Support (GitHub Issue #4) (`header_parser.rs`, `date_resolver.rs`):**
+  - **MakerNote Header Parsing:** Direct header-slice parsing of Olympus (`OLYMPUS\0II`) and OM System (`OM SYSTEM\0\0\0II`) MakerNotes under `ExifIFD` Tag `0x927C`.
+  - **High-Resolution CameraSettings Extraction:** Reads Sub-IFD Tag `0x2020` for embedded preview JPEGs (up to 3200x2400) and Tag `0x0100` for thumbnail images.
+  - **Handheld High-Res Shot (HHHR) Multi-Frame Support:** Traverses up to 16 chained sub-IFD structures to extract valid preview streams for 12-bit and 14-bit HHHR files (e.g. OM-1, OM-1 Mark II, E-M1 Mark III).
+  - **MakerNote EXIF Date Fallback:** Extracts `DateTimeOriginal` from MakerNote when omitted from the root IFD0 header.
+- **Inspector Live Histogram (`InspectorHistogramCard.tsx`, `InspectorCameraCard.tsx`):**
+  - **Real-Time Photographic Histogram (<kbd>H</kbd>):** Fast client-side histogram calculation rendered directly inside the Library Inspector.
+  - **Multi-Channel Inspection:** Selectable Combined RGB, individual Red, Green, Blue, or Luminance channel histograms.
+  - **Linear & Logarithmic Scaling:** Toggleable logarithmic scale mode to easily detect shadow underexposure, highlight clipping, and tonal distribution.
+- **Two-Stage Folder Deletion & Network Safety (`archive_cmds.rs`, `LibraryLeftSidebar.tsx`):**
+  - **Safe Trash/Recycle Bin Workflow:** Deleting folders moves items to the OS Trash by default instead of permanently unlinking files.
+  - **Non-Empty Folder Confirmation:** Prompts with a safety modal requiring explicit confirmation before deleting non-empty directories.
+  - **NAS & Remote Share Warning:** Detects network mounts and automatically warns the user when the remote volume does not support Trash, requiring explicit permanent deletion confirmation.
+- **Configurable Shortcut Presets (`settingsStore.ts`, `SettingsView.tsx`, `useLibraryShortcuts.ts`):**
+  - Added user-selectable keyboard shortcut preset in Settings: Standard / Lightroom-style vs. Darktable-style.
+  - Dynamically updates shortcut help popovers, in-app tooltips, and culling feedback badges (<kbd>P</kbd>/<kbd>X</kbd>/<kbd>U</kbd> vs. <kbd>P</kbd>/<kbd>R</kbd>,<kbd>X</kbd>/<kbd>U</kbd>; <kbd>R</kbd> vs. <kbd>Shift</kbd>+<kbd>R</kbd> for RapidRAW).
+- **Graceful Video Fallback & Codec Compatibility (`FullscreenViewer.tsx`, `LoupeViewer.tsx`, `rr-image`):**
+  - Routed all known video formats (`.mp4`, `.mov`, `.m4v`, `.avi`, `.wmv`, `.flv`, `.mkv`, `.webm`) through preview extraction.
+  - Added an in-app fallback card with a 1-click "Open in external player" button when system codecs cannot decode a container.
+  - Unified filmstrip icon (`Film`) across all video badges, inspector cards, and grid overlays.
+- **UI & i18n Refinements:**
+  - Corrected macOS shortcut text formatting in help dialogs.
+  - Replaced legacy icons and unified active toggle button styling with RapidReady's accent theme (`text-accent bg-accent/20`).
+  - Added missing localization strings for view mode tooltips in German and English.
+
 ## [0.5.3] - 2026-10-24
 
 Feature, precision, and polish release introducing comprehensive technical EXIF inspection with intelligent camera make/model harmonization, 35mm equivalent focal length detection, lens specification fallbacks, and a collapsible extended details drawer; sub-second transfer rate precision for slow NAS/video archives (GitHub Issue #3); a dedicated "Archive, Scanning & High-Speed Cache" in-app guide; comprehensive i18n settings refinement; and major zero-logic codebase modularization across both Rust backend crates and React inspector components.
