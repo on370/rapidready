@@ -45,17 +45,17 @@ pub fn run() {
         .manage(commands::ArchiveScanState::default())
         .manage(commands::CollectionExportState::default())
         .manage(commands::SourceScanState::default())
-        .on_window_event(|window, event| {
+        .on_window_event(|_window, _event| {
             #[cfg(target_os = "windows")]
-            if let tauri::WindowEvent::Resized(_) = event {
-                if let Ok(is_fs) = window.is_fullscreen() {
+            if let tauri::WindowEvent::Resized(_) = _event {
+                if let Ok(is_fs) = _window.is_fullscreen() {
                     if is_fs {
-                        if window.is_menu_visible().unwrap_or(false) {
-                            let _ = window.hide_menu();
+                        if _window.is_menu_visible().unwrap_or(false) {
+                            let _ = _window.hide_menu();
                         }
                     } else {
-                        if !window.is_menu_visible().unwrap_or(true) {
-                            let _ = window.show_menu();
+                        if !_window.is_menu_visible().unwrap_or(true) {
+                            let _ = _window.show_menu();
                         }
                     }
                 }

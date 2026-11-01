@@ -143,6 +143,23 @@ pub fn get_creation_date(path: &Path) -> Result<NaiveDateTime> {
                 if let Some(dt) = try_read_tiff_slice(&mut file, 2 * 1024 * 1024) {
                     return Ok(dt);
                 }
+                // Tier 3: Reverse-layout TIFF/DNG fallback (IFD0 near EOF > 2 MB, e.g. Capture One DNG exports).
+                // read_from_container uses Seek to jump directly to IFD0 at EOF without reading the 50 MB sensor data.
+                if file.seek(SeekFrom::Start(0)).is_ok() {
+                    let mut bufreader = BufReader::new(&mut file);
+                    let mut exifreader = exif::Reader::new();
+                    exifreader.continue_on_error(true);
+                    let exif_opt = match exifreader.read_from_container(&mut bufreader) {
+                        Ok(exif) => Some(exif),
+                        Err(exif::Error::PartialResult(pr)) => Some(pr.into_inner().0),
+                        Err(_) => None,
+                    };
+                    if let Some(exif) = exif_opt {
+                        if let Some(dt) = extract_date_from_exif(&exif) {
+                            return Ok(dt);
+                        }
+                    }
+                }
             } else {
                 // Tier 3: Full container fallback (JPEG, HEIF, PNG, WebP)
                 // kamadak-exif handles JPEG/HEIC/PNG/WebP efficiently by reading only the APP1 / Exif box.

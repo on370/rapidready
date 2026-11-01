@@ -261,7 +261,76 @@ pub(super) fn is_legacy_black_raw_chunk(path: &Path, bytes: &[u8]) -> bool {
         return true;
     }
 
+    // 4. Old broken DNG fallbacks (e.g. Capture One DNGs without embedded JPEG) decoded the tiny 160x107 IFD0 strip.
+    if ext.eq_ignore_ascii_case("dng")
+        && (bytes.len() < 12_000
+            || parse_jpeg_dimensions(bytes)
+                .map(|(w, h)| w.max(h) <= 200)
+                .unwrap_or(false))
+    {
+        return true;
+    }
+
     false
+}
+
+fn validate_and_crop_thumb_rgba(width: u32, height: u32, rgba: Vec<u8>) -> Option<RgbaImage> {
+    let expected_len = (width as usize).checked_mul(height as usize)?.checked_mul(4)?;
+    if width <= 32 || height <= 32 || rgba.len() < expected_len {
+        return None;
+    }
+
+    let mut min_x = width;
+    let mut min_y = height;
+    let mut max_x = 0u32;
+    let mut max_y = 0u32;
+    let mut has_non_black = false;
+
+    let w_usize = width as usize;
+    for y in 0..height {
+        let row_offset = (y as usize) * w_usize * 4;
+        for x in 0..width {
+            let idx = row_offset + (x as usize) * 4;
+            let a = rgba[idx + 3];
+            if a > 16 {
+                if x < min_x {
+                    min_x = x;
+                }
+                if x > max_x {
+                    max_x = x;
+                }
+                if y < min_y {
+                    min_y = y;
+                }
+                if y > max_y {
+                    max_y = y;
+                }
+                if !has_non_black && (rgba[idx] > 8 || rgba[idx + 1] > 8 || rgba[idx + 2] > 8) {
+                    has_non_black = true;
+                }
+            }
+        }
+    }
+
+    if min_x > max_x || min_y > max_y || !has_non_black {
+        return None;
+    }
+
+    let crop_w = max_x - min_x + 1;
+    let crop_h = max_y - min_y + 1;
+
+    // A real photo rendered by OS thumbnailers fills either >= 90% width or >= 90% height.
+    // Generic OS file icons have transparent margins on all four sides.
+    if crop_w < (width * 90 / 100) && crop_h < (height * 90 / 100) {
+        return None;
+    }
+
+    let img = RgbaImage::from_raw(width, height, rgba)?;
+    if min_x > 0 || min_y > 0 || max_x < width - 1 || max_y < height - 1 {
+        Some(image::imageops::crop_imm(&img, min_x, min_y, crop_w, crop_h).to_image())
+    } else {
+        Some(img)
+    }
 }
 
 pub fn get_cached_preview_jpeg_fast(
@@ -540,6 +609,27 @@ pub fn get_preview_jpeg_with_orient_and_hints(
                 record_thumbnail_cache(&cache_key, blake3_key.as_deref(), scale, &final_imgio_bytes);
                 return Ok(final_imgio_bytes);
             }
+        } else if let Some(mut imgio_bytes) = extract_macos_imageio_thumbnail(path, target_px) {
+            // Fallback for RAW files without embedded JPEG preview (e.g. Capture One DNGs):
+            // Only reached when Stage 1 (extract_embedded_thumbnail + extract_largest_embedded_jpeg) returned None.
+            let explicit_o = target_orient.or_else(|| crate::culling::read_sidecar(path).orientation);
+            if let Some(target_o) = explicit_o {
+                let file_orient = read_exif_orientation(path).unwrap_or(1);
+                let file_deg = orientation_to_degrees(file_orient);
+                let target_deg = orientation_to_degrees(target_o);
+                let delta_deg = (target_deg + 360 - file_deg) % 360;
+                if delta_deg != 0 {
+                    let delta_tag = match delta_deg {
+                        90 => 6,
+                        180 => 3,
+                        270 => 8,
+                        _ => 1,
+                    };
+                    imgio_bytes = inject_orientation_into_jpeg(&imgio_bytes, delta_tag);
+                }
+            }
+            record_thumbnail_cache(&cache_key, blake3_key.as_deref(), scale, &imgio_bytes);
+            return Ok(imgio_bytes);
         }
     }
 
@@ -574,47 +664,23 @@ pub fn get_preview_jpeg_with_orient_and_hints(
     let thumb_scale = ThumbnailScale(scale.max(1));
     let thumb_res = get_thumbnail(path, thumb_scale);
 
-    // If thumb_rs returned a generic OS file icon (e.g. <=32px) or failed, or an all-black bitmap:
-    let is_invalid_thumb = match &thumb_res {
-        Ok(t) => {
-            if t.width <= 32 || t.height <= 32 {
-                true
-            } else if t.rgba.len() >= 4 {
-                // Sample 32 evenly distributed pixels across the buffer:
-                // If every sampled pixel has R == 0, G == 0, B == 0, treat as black/broken!
-                let total_pixels = t.rgba.len() / 4;
-                let sample_step = (total_pixels / 32).max(1);
-                let mut all_black = true;
-                for i in (0..total_pixels).step_by(sample_step) {
-                    let offset = i * 4;
-                    if offset + 2 < t.rgba.len() {
-                        if t.rgba[offset] != 0 || t.rgba[offset + 1] != 0 || t.rgba[offset + 2] != 0 {
-                            all_black = false;
-                            break;
-                        }
-                    }
-                }
-                all_black
-            } else {
-                true
-            }
-        }
-        Err(_) => true,
+    let valid_thumb_img = match thumb_res {
+        Ok(t) => validate_and_crop_thumb_rgba(t.width, t.height, t.rgba),
+        Err(_) => None,
     };
 
-    if is_invalid_thumb {
-        // Fallback: Pure Rust decoder for standard raster images (PNG, WebP, JPG, JPEG)
-        if let Some(raster_bytes) = extract_raster_thumbnail(path, scale, target_orient) {
-            record_thumbnail_cache(&cache_key, blake3_key.as_deref(), scale, &raster_bytes);
-            return Ok(raster_bytes);
+    let img = match valid_thumb_img {
+        Some(img) => img,
+        None => {
+            // Fallback: Pure Rust decoder for standard raster images (PNG, WebP, JPG, JPEG)
+            if let Some(raster_bytes) = extract_raster_thumbnail(path, scale, target_orient) {
+                record_thumbnail_cache(&cache_key, blake3_key.as_deref(), scale, &raster_bytes);
+                return Ok(raster_bytes);
+            }
+            return Err(anyhow::anyhow!("thumb_rs returned an all-black or invalid thumbnail"));
         }
-        return Err(anyhow::anyhow!("thumb_rs returned an all-black or invalid thumbnail"));
-    }
+    };
 
-    let thumb = thumb_res.map_err(|e| anyhow::anyhow!("thumb_rs error: {:?}", e))?;
-        
-    let img = RgbaImage::from_raw(thumb.width, thumb.height, thumb.rgba)
-        .context("Failed to construct RgbaImage from raw bytes")?;
     let dyn_img = image::DynamicImage::ImageRgba8(img);
     
     let file_orient = read_exif_orientation(path);
@@ -743,38 +809,47 @@ pub fn get_max_preview_jpeg_with_orient_and_hints(
         return Ok(bytes);
     }
 
-    // 2. Native macOS in-process ImageIO fast path (2560px preview for HEIC, PNG, WebP, etc.)
+    // 2. Native macOS in-process ImageIO fast path (2560px preview for HEIC, PNG, WebP, or JPEG-less RAWs)
     #[cfg(target_os = "macos")]
     {
         let is_raw = RAW_EXTENSIONS.contains(&ext.as_str());
-        if !is_raw {
-            if let Some(mut imgio_bytes) = extract_macos_imageio_thumbnail(path, 2560) {
-                let explicit_o = explicit_orient.or_else(|| crate::culling::read_sidecar(path).orientation);
-                if let Some(target_o) = explicit_o {
-                    let file_orient = read_exif_orientation(path).unwrap_or(1);
-                    let file_deg = orientation_to_degrees(file_orient);
-                    let target_deg = orientation_to_degrees(target_o);
-                    let delta_deg = (target_deg + 360 - file_deg) % 360;
-                    if delta_deg != 0 {
-                        let delta_tag = match delta_deg {
-                            90 => 6,
-                            180 => 3,
-                            270 => 8,
-                            _ => 1,
-                        };
-                        imgio_bytes = inject_orientation_into_jpeg(&imgio_bytes, delta_tag);
-                    }
+        if is_raw {
+            if let Some(bytes) = extract_embedded_thumbnail(path, explicit_orient) {
+                if parse_jpeg_dimensions(&bytes)
+                    .map(|(w, h)| w.max(h) >= 640)
+                    .unwrap_or(false)
+                {
+                    record_thumbnail_cache(&cache_key, blake3_key.as_deref(), 100, &bytes);
+                    return Ok(bytes);
                 }
-                record_thumbnail_cache(&cache_key, blake3_key.as_deref(), 100, &imgio_bytes);
-                return Ok(imgio_bytes);
             }
+        }
+        if let Some(mut imgio_bytes) = extract_macos_imageio_thumbnail(path, 2560) {
+            let explicit_o = explicit_orient.or_else(|| crate::culling::read_sidecar(path).orientation);
+            if let Some(target_o) = explicit_o {
+                let file_orient = read_exif_orientation(path).unwrap_or(1);
+                let file_deg = orientation_to_degrees(file_orient);
+                let target_deg = orientation_to_degrees(target_o);
+                let delta_deg = (target_deg + 360 - file_deg) % 360;
+                if delta_deg != 0 {
+                    let delta_tag = match delta_deg {
+                        90 => 6,
+                        180 => 3,
+                        270 => 8,
+                        _ => 1,
+                    };
+                    imgio_bytes = inject_orientation_into_jpeg(&imgio_bytes, delta_tag);
+                }
+            }
+            record_thumbnail_cache(&cache_key, blake3_key.as_deref(), 100, &imgio_bytes);
+            return Ok(imgio_bytes);
         }
     }
 
     // macOS QLThumbnailGenerator returns a generic 1024x1024 or 512x512 file icon
     // if the requested scale is larger than the embedded preview.
     // We try descending scales to find the largest actual preview (scale 10 is ~2560px, ideal for fast 2K/4K display)
-    let mut best_thumb = None;
+    let mut best_thumb_img = None;
 
     #[cfg(target_os = "windows")]
     let scales = [4, 2];
@@ -783,35 +858,14 @@ pub fn get_max_preview_jpeg_with_orient_and_hints(
 
     for scale in scales {
         if let Ok(thumb) = get_thumbnail(path, ThumbnailScale(scale)) {
-            if thumb.rgba.len() >= 4 {
-                if thumb.rgba[3] == 0 {
-                    continue;
-                }
-                let total_pixels = thumb.rgba.len() / 4;
-                let sample_step = (total_pixels / 32).max(1);
-                let mut all_black = true;
-                for i in (0..total_pixels).step_by(sample_step) {
-                    let offset = i * 4;
-                    if offset + 2 < thumb.rgba.len() {
-                        if thumb.rgba[offset] != 0 || thumb.rgba[offset + 1] != 0 || thumb.rgba[offset + 2] != 0 {
-                            all_black = false;
-                            break;
-                        }
-                    }
-                }
-                if all_black {
-                    continue;
-                }
+            if let Some(cropped_img) = validate_and_crop_thumb_rgba(thumb.width, thumb.height, thumb.rgba) {
+                best_thumb_img = Some(cropped_img);
+                break;
             }
-            best_thumb = Some(thumb);
-            break;
         }
     }
     
-    if let Some(thumb) = best_thumb {
-        let img = RgbaImage::from_raw(thumb.width, thumb.height, thumb.rgba)
-            .context("Failed to construct RgbaImage from raw bytes")?;
-            
+    if let Some(img) = best_thumb_img {
         let dyn_img = image::DynamicImage::ImageRgba8(img);
         let file_orient = read_exif_orientation(path);
         let rotated_img = apply_effective_orientation(dyn_img, Some(target_orient), file_orient);

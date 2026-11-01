@@ -327,67 +327,81 @@
   - **Batch Format Toggles:** Dedicated 1-click action buttons / format pills in the Step 2 source preview toolbar (`[ Select only RAWs ]`, `[ Deselect all JPGs ]`, `[ Videos ]`).
   - **Dynamic Volume Feedback:** Instantly recalculates transfer file count, total bytes, and destination disk headroom without requiring manual folder-by-folder unchecking.
 
-- [ ] **Umschaltbares RAW + JPEG Stacking (Kombi-Kacheln mit A/B-Toggle in Loupe & Inspector):**
+- [ ] **Umschaltbares RAW + JPEG Stacking (`1:N` Kombi-Kacheln inkl. Unterordner-Derivaten & A/B-Toggle in Loupe/Inspector):**
   - **Context & Goal:**
-    Beim simultanen Fotografieren in RAW + JPG (oder RAW + HIF) entstehen Bildpaare mit identischem Basisnamen (z. B. `_DSC1234.ARW` und `_DSC1234.JPG`). Im Grid verdoppeln diese Paare die Kachelanzahl und verlangsamen die visuelle Sichtung. Das RAW+JPEG Stacking fasst Bildpaare im Grid optional zu einer einzigen virtuellen Kachel zusammen, während in der Loupe-Ansicht ein blitzschneller A/B-Vergleich zwischen neutralem RAW und kamerainternem JPEG-Bildstil ermöglicht wird.
-  - **Grid-Ansicht & Kombi-Badges:**
+    Beim simultanen Fotografieren in RAW + JPG (oder RAW + HIF) sowie beim nachträglichen Entwickeln mit Tools wie Lightroom, Capture One, DxO oder RapidRAW entstehen zu einer RAW-Datei (`.../Mailand-2023/DSC23432.ARW`) korrespondierende JPEGs – entweder im selben Ordner (`DSC23432.JPG`) oder in einem bzw. mehreren direkten Entwicklungs-Unterordnern (z. B. `./LR/DSC23432.jpg`, `./Export/DSC23432.jpg`, `./Fertig/DSC23432.jpg`). Da entwickelte Unterordner-JPEGs ein späteres `mtime` besitzen, erscheinen sie bei der rekursiven Ordnersicht auf `.../Mailand-2023/` bisher weit unten im Grid getrennt vom zugehörigen RAW. Das `1:N` RAW+JPEG Stacking fasst das Mutter-RAW und alle zugehörigen JPEGs (im selben Ordner sowie in direkten Kind-Ordnern) im Grid optional zu einer einzigen virtuellen Kachel zusammen, während ein Direktklick auf einen Unterordner (`.../Mailand-2023/LR/`) weiterhin ungefiltert dessen physische JPEGs zeigt.
+  - **Scope-bewusste `1:N` Pairing-Logik (Gleicher Ordner & Direkte Unterordner):**
     - **Umschalt-Option:** Schnellwahlschalter in der Filter-/Toolbar sowie Tastenkürzel (`Alt+S`): *„RAW + JPG stapeln“* / *„Stack RAW+JPEG“*.
-    - **Pairing-Logik:** Dateien im selben Ordner mit identischem Stamm/Basisnamen (`stem`) werden im UI-Selector zu einer gemeinsamen Kachel verschmolzen (unterstützt alle gängigen RAW-Formate gepaart mit `.jpg`, `.jpeg`, `.hif`, `.heic`).
-    - **Kombi-Badge oben links:** Kachel zeigt `[RAW] [JPG]` (oder `[RAW+JPG]`), wobei das aktuell für die Anzeige ausgewählte Master-Format farblich hervorgehoben ist (z. B. `RAW` in Bernstein/Orange, `JPG` in dezentem Cyan/Grau).
-  - **Loupe View & Zero-Latency A/B-Vergleich:**
-    - **Konfigurierbarer Master:** Einstellbarer Standard in den Settings: *RAW-Master* (Standard, eingebettetes hochauflösendes Sensor-Preview) vs. *JPEG-Master* (kamerainterne Bearbeitung/Farben).
-    - **1-Key A/B-Umschaltung:** Taste `J` (oder Halten von `\` / `J` für temporären Hold-to-Compare) schaltet nahtlos zwischen RAW-Vorschau und Kamera-JPEG um – ohne Verlust von Zoomstufe oder Pan-Position (ideal für Schärfe- und Farbabgleiche bei 1:1 Sensor-Zoom).
-    - **GUI-Umschalter:** Schwebende Pill-Buttons in der Loupe-Toolbar: `[ • RAW | JPG ]`.
+    - **Zweistufiges `1:N`-Matching innerhalb des aktiven Ordner-Scopes (`activeFolderPath`):**
+      1. *Same-Folder Companion (`Tiefe 0`):* JPEG/HEIC/HIF im selben Verzeichnis wie das RAW mit identischem Basisnamen (`stem`, case-insensitiv).
+      2. *Direct-Subfolder Derivatives (`Tiefe +1`):* JPEGs/HEICs in beliebigen direkten Unterordnern des RAW-Ordners (z. B. `./LR/`, `./Export/`, `./Fertig/`, `./JPG/`, `./SW/`) mit identischem `stem` (sowie gängigen Entwicklungs-Suffixen wie `-Edit`, `-Bearbeitet`, `_LR`), unabhängig von deren abweichendem Export-`mtime`.
+    - **Strikte Scope-Treue im Ordnerbaum:**
+      - Ist der Elternordner (`.../Mailand-2023/`) oder die gesamte Library aktiv, befinden sich sowohl das Mutter-RAW als auch die Unterordner-JPEGs im Sichtbereich $\rightarrow$ die Unterordner-JPEGs werden in den Stapel des Mutter-RAWs eingegliedert und tauchen nicht mehr doppelt am Ende des Grids auf.
+      - Klickt die Nutzerin im Ordnerbaum gezielt auf einen Unterordner (`.../Mailand-2023/LR/`), liegt das Mutter-RAW außerhalb des gewählten Scopes $\rightarrow$ alle in `./LR/` liegenden JPEGs werden ganz normal einzeln angezeigt (keine „leeren“ Unterordner!).
+  - **Grid-Ansicht & Kombi-Badges:**
+    - **Kombi-Badge oben links:**
+      - Bei 1 Begleitdatei im selben Ordner: `[RAW] [JPG]` (bzw. `[RAW] [HIF]`).
+      - Bei 1 entwickeltem Derivat aus einem Unterordner: `[RAW] [LR/JPG]` (mit Unterordner-Kürzel).
+      - Bei mehreren Begleitdateien (`1:N`, z. B. Kamera-JPG + `./LR/` + `./Fertig/`): `[RAW] [+3 JPG]` (Tooltip listet alle enthaltenen Varianten: `JPG, LR/JPG, Fertig/JPG`).
+      - Das aktuell für die Vorschau aktive Format wird farblich hervorgehoben (`RAW` in Bernstein/Orange, `JPG`-Variante in Cyan/Akzent).
+  - **Loupe View & Zero-Latency Zyklus-Vergleich (`J`-Taste):**
+    - **Konfigurierbarer Master:** Einstellbarer Standard in den Settings: *RAW-Master* (Standard) vs. *JPEG/Derivat-Master* (bevorzugt entwickeltes Unterordner-JPEG vor Kamera-JPEG und RAW).
+    - **1-Key Varianten-Zyklus (`J`):** Taste `J` (oder Halten von `\` für Hold-to-Compare) schaltet im Stapel nahtlos der Reihe nach durch alle vorhandenen Varianten (`RAW` $\rightarrow$ `JPG` $\rightarrow$ `LR/JPG` $\rightarrow$ `Fertig/JPG` $\rightarrow$ `RAW`) – ohne Verlust von 1:1 Sensor-Zoomstufe oder Pan-Position.
+    - **GUI-Umschalter:** Schwebende Pill-Buttons in der Loupe-Toolbar zeigen alle Mitglieder des Stapels: `[ • RAW | JPG | LR/JPG | Fertig/JPG ]`.
   - **Inspector-Integration:**
-    - Header zeigt den einheitlichen Basisnamen mit Format-Chips und Dateigrößen: z. B. `_DSC1234` mit `[RAW (42.8 MB)]` und `[JPG (8.1 MB)]`.
-    - Belichtungs- und Aufnahmedaten (Zeit, Blende, ISO, Brennweite, GPS) bleiben synchron; formatspezifische Metadaten (Dateigröße, Farbraum) passen sich dem gewählten Format an.
+    - Header zeigt den Basisnamen mit klickbaren Format-Chips inkl. Unterordner-Herkunft und Dateigrößen: z. B. `DSC23432` mit `[RAW (42.8 MB)]`, `[JPG (8.1 MB)]`, `[LR/JPG (11.4 MB)]`.
+    - Belichtungs- und Aufnahmedaten bleiben synchron; formatspezifische Metadaten (Dateigröße, Dimensionen, Änderungsdatum, Pfad) passen sich der gewählten Variante im Stapel an.
   - **Synchrones Culling & Selektives Löschen:**
-    - **Synchrones Culling (Shared State):** Bewertungen (Picks `P`, Rejects `X`, Sterne `1`–`5`, Farblabels `6`–`9`, Tags) werden simultan in beide Sidecars geschrieben (`.ARW.rrdata` und `.JPG.rrdata`). Das Motiv wird einheitlich bewertet, wodurch keine Desynchronisation zwischen RAW und JPEG entsteht.
-    - **Differenzierter Lösch-Dialog:** Beim endgültigen Löschen eines gestapelten Paars bietet der Sicherheitsdialog drei Optionen:
-      1. `[ Beide Dateien löschen ]` (Standard)
-      2. `[ Nur RAW löschen ]` (z. B. Speicherplatz freigeben)
-      3. `[ Nur JPEG löschen ]` (Kamera-JPEGs nach initialer Sichtung verwerfen).
-  - **Performante Virtuelle Store-Architektur:**
-    - Der physische `images`-Array in `libraryStore` bleibt unberührt; die Gruppierung erfolgt rein virtuell über einen performanten `useMemo`-Selector in `LibraryCenter.tsx` ($< 5\,\text{ms}$ Overhead). Das Ein- und Ausschalten des Stapelmodus erfordert keinen Neuscan und erfolgt ohne Verzögerung.
+    - **Synchrones Culling (Shared State):** Bewertungen (Picks `P`, Rejects `X`, Sterne `1`–`5`, Farblabels `6`–`9`, Tags) werden simultan auf alle Mitglieder des Stapels angewendet.
+    - **Differenzierter Lösch-Dialog:** Beim Löschen eines gestapelten Eintrags bietet der Sicherheitsdialog gezielte Auswahloptionen:
+      1. `[ Alle Dateien im Stapel löschen ]`
+      2. `[ Nur RAW löschen ]` (Speicherplatz freigeben, entwickelte JPEGs behalten)
+      3. `[ Nur Kamera-JPEG / bestimmte Derivate löschen ]` (Einzelauswahl per Checkbox bei `1:N`-Stapeln).
+  - **Performante Virtuelle Store-Architektur (`0 %` CTSP-Impact):**
+    - Der physische `images`-Array in `libraryStore` sowie die Backend-Scanner- und Thumbnail-Pipeline bleiben zu 100 % unberührt. Die `1:N`-Gruppierung erfolgt rein virtuell im Frontend über einen $O(N)$ Hash-Map-Lookup nach `(parentDir, lowercaseStem)` im `useMemo`-Selector (`< 3 ms` für 50.000 Bilder, null Disk-/NAS-I/O). Das Ein- und Ausschalten erfordert keinen Neuscan.
 
 ### Milestone: Multi-RAW Developer & Universal Sidecar Architecture
-- [ ] **Industry Standard Adobe XMP Sidecars (`.xmp`) & Multi-RAW Developer Integration:**
+- [ ] **Industry Standard Adobe XMP Sidecars (`.xmp`), `.rrdata` Coexistence & Multi-RAW Developer Integration:**
   - **Context & Goal:**  
-    RapidReady currently operates with RapidRAW's proprietary JSON sidecars (`<file>.rrdata`). Professional photographers and studio workflows frequently use established RAW converters such as **Adobe Lightroom Classic / Camera Raw**, **Capture One**, **Darktable**, **RawTherapee / ART**, and **DxO PhotoLab**. RapidReady should serve as the universal, high-speed ingest and culling hub for all of them.
-  - **Universal Standard: Adobe XMP (ISO 16684-1):**
-    - File naming conventions:
-      - `IMG_0001.CR2.xmp` (Lightroom standard for RAW files, preventing collisions with companion JPEGs).
-      - `IMG_0001.xmp` (Standard for non-RAW files or Darktable/RawTherapee).
-    - Standardized field mappings:
-      - **Ratings:** `xmp:Rating="3"` (0 to 5 stars).
-      - **Color Labels:** `xmp:Label="Red"` (*Red, Yellow, Green, Blue, Purple*).
-      - **Picks & Rejects:** `photoshop:Urgency` / `xmp:Pick`.
-      - **Tags & Keywords:** `<dc:subject><rdf:Bag><rdf:li>Tag</rdf:li></rdf:Bag></dc:subject>`.
+    RapidReady natively operates with RapidRAW's JSON sidecars (`<file>.rrdata`). Professional photographers and hybrid workflows frequently also use **Adobe Lightroom Classic / Camera Raw**, **Capture One**, **darktable**, **RawTherapee / ART**, or **DxO PhotoLab**, which rely on **Adobe XMP (`.xmp`)** sidecars. RapidReady serves as the non-destructive, high-speed ingest and culling hub across both worlds without ever overwriting RAW development sliders (`adjustments` in `.rrdata` or `crs:*` / `darktable:*` in `.xmp`).
+  - [ ] **1. Non-Destructive Read-Modify-Write Engine (`.rrdata` & `.xmp`):**
+    - **Dual XMP Naming Support:**
+      - Reads both `<filename>.<ext>.xmp` (e.g. `DSC0123.ARW.xmp`, darktable/DigiKam standard) and `<stem>.xmp` (e.g. `DSC0123.xmp`, Lightroom/Capture One standard).
+      - When updating an existing `.xmp`, writes back to whichever file already exists on disk; when creating a new `.xmp`, uses `<filename>.<ext>.xmp` if `shortcutPreset === 'darktable'` (or darktable naming preference) and `<stem>.xmp` otherwise (or `<filename>.<ext>.xmp` if a companion JPEG with the same stem exists in the folder to avoid collisions).
+    - **Standardized XMP Field Mappings (In-Place Patching):**
+      - **Ratings:** `xmp:Rating="0..5"` (attribute and/or element).
+      - **Color Labels:** `xmp:Label="Red|Yellow|Green|Blue|Purple"` (mapped bidirectionally to RapidReady's color keys `red`, `yellow`, `green`, `blue`, `purple`).
+      - **Picks & Rejects:** `xmpDM:good="true"` / `xmp:Rating="-1"` (or `photoshop:Urgency` / `rr:pick` & `rr:reject` in `dc:subject` / custom namespace) so flags round-trip losslessly while remaining compatible with Lightroom/darktable/Bridge.
+      - **Tags & Keywords:** `<dc:subject><rdf:Bag><rdf:li>...</rdf:li></rdf:Bag></dc:subject>`.
       - **Geotags:** `exif:GPSLatitude`, `exif:GPSLongitude`, `exif:GPSAltitude`.
       - **Orientation:** `tiff:Orientation`.
-  - **Supported Target Ecosystems:**
-    1. **RapidRAW:** `.rrdata` (JSON sidecar adapter).
-    2. **Adobe Lightroom Classic / Camera Raw / Bridge:** Direct `.xmp` sidecar synchronization.
-    3. **Capture One:** Synchronous XMP rating, color label, and IPTC metadata ingestion.
-    4. **Darktable:** Native XMP reading and writing.
-    5. **RawTherapee / ART:** XMP sidecar reading with `.pp3` development files.
-    6. **DxO PhotoLab:** XMP metadata reading with `.dop` optical modules.
-  - **Architectural Implementation Roadmap:**
-    1. *Rust `SidecarProvider` Trait (`rapidready-core::sidecar`):*
-       - Abstract monolithic `culling.rs` into a pluggable trait:
-         ```rust
-         pub trait SidecarProvider: Send + Sync {
-             fn read_metadata(&self, image_path: &Path) -> Result<Option<CullingState>, SidecarError>;
-             fn write_metadata(&self, image_path: &Path, state: &CullingState) -> Result<(), SidecarError>;
-         }
-         ```
-       - `RrDataSidecarProvider`: RapidRAW JSON implementation.
-       - `XmpSidecarProvider`: High-performance streaming XML parser/writer for standard XMP.
-    2. *Configurable Preferred RAW Developer & Dual-Write Mode:*
-       - Settings option: *Preferred RAW Developer: RapidRAW | Adobe Lightroom Classic | Capture One | Darktable*.
-       - **Dual-Write Synchronization:** Option to write both `.rrdata` AND `.xmp` simultaneously. Photographers can cull in RapidReady and open their archive in either RapidRAW OR Lightroom without losing ratings or labels!
-    3. *Dynamic "Open in..." Shortcuts:*
-       - Upgrade shortcut `R` to open the configured RAW converter or show a quick-launch menu.
+    - **Preservation Guarantee:** Updating a `.xmp` sidecar patches only the culling/GPS/orientation nodes and preserves all third-party XML namespaces, attributes, and RAW development blocks (`crs:*`, `darktable:*`, `exif:*`, `photoshop:*`) via atomic temp-file write + rename.
+  - [ ] **2. Three Configurable Sidecar Modes & `mtime` Single Source of Truth (SSoT):**
+    - **Configurable Mode in `SettingsView.tsx` (`sidecarMode: 'rrdata' | 'dual' | 'xmp'`):**
+      1. **`RapidRAW (.rrdata)` *(Default)*:** Writes only `.rrdata`; reads `.rrdata` with automatic fallback to `.xmp` if only `.xmp` exists.
+      2. **`Dual-Sync (.rrdata + .xmp)` *(Hybrid)*:** Writes every culling/metadata change simultaneously to both `.rrdata` and `.xmp`.
+      3. **`Standard XMP (.xmp)` *(Lightroom / darktable / Capture One)*:** Writes new sidecars as `.xmp` (if a `.rrdata` already exists for that file, updates it as well to prevent stale shadow state); reads `.xmp` with automatic fallback to `.rrdata`.
+    - **Single Source of Truth (SSoT) Cascade when Reading:**
+      - If only `.rrdata` exists $\rightarrow$ `.rrdata` is SSoT (`source = "rrdata"`).
+      - If only `.xmp` exists $\rightarrow$ `.xmp` is SSoT (`source = "xmp"`).
+      - If **both** exist $\rightarrow$ Compare filesystem modification timestamps (`mtime`): the more recently modified sidecar wins as the authoritative SSoT (`source = "both_rrdata"` or `"both_xmp"`).
+    - **Zero-`stat` Single-Pass Scanner Integration (CTSP Guardrail):**
+      - In `archive.rs` (`scan_archive_directory_streaming`), collect both `.rrdata` and `.xmp` entries on-the-fly during the single `WalkDir` pass without adding per-image `stat` / `exists()` calls on NAS/SMB shares.
+      - In `archive_cmds.rs`, extend the live directory watcher (`SidecarWatcherState`) to also watch `.xmp` modifications and emit `sidecar-updated` events in real time.
+  - [ ] **3. NAS-Safe Bulk Sidecar Synchronization with Pause, Resume & Cancel (`20k+` Files):**
+    - **On-Demand Batch Sync in Settings (`[ Bestehende Sidecars im aktiven Archiv jetzt abgleichen ]`):**
+      - Prominent info/warning box alerting the user that syncing across large archives (e.g. 20,000+ photos on a NAS/network share) may take several minutes and can be paused, resumed, or cancelled at any time.
+      - **Smart Delta Execution:** Only processes images that actually carry non-default culling metadata or already have an existing `.rrdata` / `.xmp` on disk where the counterpart is missing or older (never floods disk with 20,000 empty default sidecars).
+      - **Interactive Progress UI (`ScanController` Architecture):** Displays a live progress bar (`processed / total`, synced sidecar counter, current filename) with **`[ ⏸ Pause ]`**, **`[ ▶ Fortsetzen (Resume) ]`**, and **`[ ✕ Abbrechen (Cancel) ]`** buttons powered by Rust `Condvar` (0% CPU when paused).
+  - [ ] **4. Inspector Sidecar Source Badge (`InspectorCullingCard.tsx` / `InspectorFileInfoCard.tsx`):**
+    - Display a compact, informative badge in the Inspector header indicating which sidecar(s) describe the active photo:
+      - `[ .rrdata ]` (only RapidRAW sidecar present)
+      - `[ .xmp ]` (only XMP sidecar present)
+      - `[ .rrdata · .xmp ]` (both present, highlighting the authoritative SSoT sidecar with an accent dot `•`)
+    - Hover tooltip explains which sidecar file(s) exist on disk and, when both exist, which one is currently the active Single Source of Truth based on `mtime`.
+  - [ ] **5. Settings Explanations, Hover Tooltips & Dedicated Help Section (`HelpModal.tsx`):**
+    - Structured explanation box and hover tooltips in `SettingsView.tsx` detailing the 3 sidecar modes, the `mtime` SSoT rule, and non-destructive patching.
+    - Dedicated section in `HelpModal.tsx` (fully localized in DE & EN) explaining `.rrdata` vs. `.xmp` coexistence, SSoT priority, the Inspector badges, and archive synchronization.
 
 ---
 

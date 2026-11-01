@@ -190,27 +190,48 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
             read_res.and_then(|mut buf| {
                 if buf.len() < 8 { return None; }
                 crate::thumbnail::header_parser::normalize_tiff_magic_for_exif(&mut buf);
-                let mut reader = exif::Reader::new();
-                reader.continue_on_error(true);
-                match reader.read_raw(buf) {
-                    Ok(exif) => Some(exif),
-                    Err(exif::Error::PartialResult(pr)) => Some(pr.into_inner().0),
-                    Err(_) => {
+                let parse_slice = |slice_buf: Vec<u8>| -> Option<exif::Exif> {
+                    let mut r = exif::Reader::new();
+                    r.continue_on_error(true);
+                    match r.read_raw(slice_buf) {
+                        Ok(exif) if exif.fields().next().is_some() => Some(exif),
+                        Err(exif::Error::PartialResult(pr)) => {
+                            let (exif, _) = pr.into_inner();
+                            if exif.fields().next().is_some() {
+                                Some(exif)
+                            } else {
+                                None
+                            }
+                        }
+                        _ => None,
+                    }
+                };
+
+                parse_slice(buf)
+                    .or_else(|| {
                         // 2 MB fallback buffer
                         let mut large_buf = vec![0u8; 2 * 1024 * 1024];
                         let _ = file.seek(SeekFrom::Start(target_offset));
                         let n2 = file.read(&mut large_buf).ok()?;
                         large_buf.truncate(n2);
                         crate::thumbnail::header_parser::normalize_tiff_magic_for_exif(&mut large_buf);
-                        let mut reader2 = exif::Reader::new();
-                        reader2.continue_on_error(true);
-                        match reader2.read_raw(large_buf) {
-                            Ok(exif) => Some(exif),
-                            Err(exif::Error::PartialResult(pr)) => Some(pr.into_inner().0),
-                            Err(_) => None,
+                        parse_slice(large_buf)
+                    })
+                    .or_else(|| {
+                        // Reverse-layout TIFF/DNG fallback (IFD0 near EOF > 2 MB, e.g. Capture One DNG exports)
+                        if file.seek(SeekFrom::Start(target_offset)).is_ok() {
+                            let mut bufreader = std::io::BufReader::new(&mut file);
+                            let mut reader3 = exif::Reader::new();
+                            reader3.continue_on_error(true);
+                            match reader3.read_from_container(&mut bufreader) {
+                                Ok(exif) => Some(exif),
+                                Err(exif::Error::PartialResult(pr)) => Some(pr.into_inner().0),
+                                Err(_) => None,
+                            }
+                        } else {
+                            None
                         }
-                    }
-                }
+                    })
             })
         } else {
             let _ = file.seek(SeekFrom::Start(target_offset));

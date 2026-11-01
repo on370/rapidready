@@ -974,3 +974,48 @@ fn test_olympus_om_system_orf_support() {
         assert!(meta.date.is_some(), "{}: date must be detected, got {:?}", fname, meta.date);
     }
 }
+
+#[test]
+fn test_capture_one_reverse_dng_preview_and_metadata() {
+    let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let workspace_root = manifest_dir.parent().unwrap().parent().unwrap().parent().unwrap().parent().unwrap();
+    let dng_path = workspace_root.join("testdata/dest/Unknown-RAW/DSC02225.dng");
+
+    if dng_path.exists() {
+        // 1. Grid preview (scale 1) must succeed and have longest dimension >= 600 (not the tiny 160x107 IFD0 bitmap)
+        let preview_bytes = get_preview_jpeg(&dng_path, 1)
+            .expect("get_preview_jpeg(path, 1) must succeed for Capture One DNG");
+        let (w, h) = parse_jpeg_dimensions(&preview_bytes)
+            .expect("Preview must be a valid JPEG with parseable dimensions");
+        assert!(
+            w.max(h) >= 600,
+            "Grid preview longest dimension must be >= 600 (not 160x107), got {}x{}",
+            w,
+            h
+        );
+
+        // 2. Max preview (scale 100) must succeed and have longest dimension >= 1000
+        let max_bytes = get_max_preview_jpeg(&dng_path)
+            .expect("get_max_preview_jpeg(path) must succeed for Capture One DNG");
+        let (mw, mh) = parse_jpeg_dimensions(&max_bytes)
+            .expect("Max preview must be a valid JPEG with parseable dimensions");
+        assert!(
+            mw.max(mh) >= 1000,
+            "Max preview longest dimension must be >= 1000, got {}x{}",
+            mw,
+            mh
+        );
+
+        // 3. Reverse-layout EXIF metadata (IFD0 at EOF ~51 MB) must resolve camera and capture date
+        let meta = crate::metadata_resolver::get_image_metadata(&dng_path);
+        assert!(
+            meta.camera.as_deref().unwrap_or("").contains("ILCE-6700"),
+            "Metadata camera must contain 'ILCE-6700', got {:?}",
+            meta.camera
+        );
+        assert!(
+            meta.date.is_some(),
+            "Metadata capture date must be resolved from EOF IFD0"
+        );
+    }
+}
