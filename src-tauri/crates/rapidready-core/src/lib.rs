@@ -7,6 +7,7 @@ pub mod import_index;
 pub mod thumbnail;
 pub mod drives;
 pub mod culling;
+pub mod culling_xmp;
 pub mod archive;
 pub mod metadata_resolver;
 pub mod collections;

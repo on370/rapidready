@@ -361,10 +361,10 @@
     - Der physische `images`-Array in `libraryStore` sowie die Backend-Scanner- und Thumbnail-Pipeline bleiben zu 100 % unberührt. Die `1:N`-Gruppierung erfolgt rein virtuell im Frontend über einen $O(N)$ Hash-Map-Lookup nach `(parentDir, lowercaseStem)` im `useMemo`-Selector (`< 3 ms` für 50.000 Bilder, null Disk-/NAS-I/O). Das Ein- und Ausschalten erfordert keinen Neuscan.
 
 ### Milestone: Multi-RAW Developer & Universal Sidecar Architecture
-- [ ] **Industry Standard Adobe XMP Sidecars (`.xmp`), `.rrdata` Coexistence & Multi-RAW Developer Integration:**
+- [x] **Industry Standard Adobe XMP Sidecars (`.xmp`), `.rrdata` Coexistence & Multi-RAW Developer Integration:**
   - **Context & Goal:**  
     RapidReady natively operates with RapidRAW's JSON sidecars (`<file>.rrdata`). Professional photographers and hybrid workflows frequently also use **Adobe Lightroom Classic / Camera Raw**, **Capture One**, **darktable**, **RawTherapee / ART**, or **DxO PhotoLab**, which rely on **Adobe XMP (`.xmp`)** sidecars. RapidReady serves as the non-destructive, high-speed ingest and culling hub across both worlds without ever overwriting RAW development sliders (`adjustments` in `.rrdata` or `crs:*` / `darktable:*` in `.xmp`).
-  - [ ] **1. Non-Destructive Read-Modify-Write Engine (`.rrdata` & `.xmp`):**
+  - [x] **1. Non-Destructive Read-Modify-Write Engine (`.rrdata` & `.xmp`):**
     - **Dual XMP Naming Support:**
       - Reads both `<filename>.<ext>.xmp` (e.g. `DSC0123.ARW.xmp`, darktable/DigiKam standard) and `<stem>.xmp` (e.g. `DSC0123.xmp`, Lightroom/Capture One standard).
       - When updating an existing `.xmp`, writes back to whichever file already exists on disk; when creating a new `.xmp`, uses `<filename>.<ext>.xmp` if `shortcutPreset === 'darktable'` (or darktable naming preference) and `<stem>.xmp` otherwise (or `<filename>.<ext>.xmp` if a companion JPEG with the same stem exists in the folder to avoid collisions).
@@ -376,7 +376,7 @@
       - **Geotags:** `exif:GPSLatitude`, `exif:GPSLongitude`, `exif:GPSAltitude`.
       - **Orientation:** `tiff:Orientation`.
     - **Preservation Guarantee:** Updating a `.xmp` sidecar patches only the culling/GPS/orientation nodes and preserves all third-party XML namespaces, attributes, and RAW development blocks (`crs:*`, `darktable:*`, `exif:*`, `photoshop:*`) via atomic temp-file write + rename.
-  - [ ] **2. Three Configurable Sidecar Modes & `mtime` Single Source of Truth (SSoT):**
+  - [x] **2. Three Configurable Sidecar Modes & `mtime` Single Source of Truth (SSoT):**
     - **Configurable Mode in `SettingsView.tsx` (`sidecarMode: 'rrdata' | 'dual' | 'xmp'`):**
       1. **`RapidRAW (.rrdata)` *(Default)*:** Writes only `.rrdata`; reads `.rrdata` with automatic fallback to `.xmp` if only `.xmp` exists.
       2. **`Dual-Sync (.rrdata + .xmp)` *(Hybrid)*:** Writes every culling/metadata change simultaneously to both `.rrdata` and `.xmp`.
@@ -388,18 +388,18 @@
     - **Zero-`stat` Single-Pass Scanner Integration (CTSP Guardrail):**
       - In `archive.rs` (`scan_archive_directory_streaming`), collect both `.rrdata` and `.xmp` entries on-the-fly during the single `WalkDir` pass without adding per-image `stat` / `exists()` calls on NAS/SMB shares.
       - In `archive_cmds.rs`, extend the live directory watcher (`SidecarWatcherState`) to also watch `.xmp` modifications and emit `sidecar-updated` events in real time.
-  - [ ] **3. NAS-Safe Bulk Sidecar Synchronization with Pause, Resume & Cancel (`20k+` Files):**
+  - [x] **3. NAS-Safe Bulk Sidecar Synchronization with Pause, Resume & Cancel (`20k+` Files):**
     - **On-Demand Batch Sync in Settings (`[ Bestehende Sidecars im aktiven Archiv jetzt abgleichen ]`):**
       - Prominent info/warning box alerting the user that syncing across large archives (e.g. 20,000+ photos on a NAS/network share) may take several minutes and can be paused, resumed, or cancelled at any time.
       - **Smart Delta Execution:** Only processes images that actually carry non-default culling metadata or already have an existing `.rrdata` / `.xmp` on disk where the counterpart is missing or older (never floods disk with 20,000 empty default sidecars).
       - **Interactive Progress UI (`ScanController` Architecture):** Displays a live progress bar (`processed / total`, synced sidecar counter, current filename) with **`[ ⏸ Pause ]`**, **`[ ▶ Fortsetzen (Resume) ]`**, and **`[ ✕ Abbrechen (Cancel) ]`** buttons powered by Rust `Condvar` (0% CPU when paused).
-  - [ ] **4. Inspector Sidecar Source Badge (`InspectorCullingCard.tsx` / `InspectorFileInfoCard.tsx`):**
+  - [x] **4. Inspector Sidecar Source Badge (`InspectorCullingCard.tsx` / `InspectorFileInfoCard.tsx`):**
     - Display a compact, informative badge in the Inspector header indicating which sidecar(s) describe the active photo:
       - `[ .rrdata ]` (only RapidRAW sidecar present)
       - `[ .xmp ]` (only XMP sidecar present)
       - `[ .rrdata · .xmp ]` (both present, highlighting the authoritative SSoT sidecar with an accent dot `•`)
     - Hover tooltip explains which sidecar file(s) exist on disk and, when both exist, which one is currently the active Single Source of Truth based on `mtime`.
-  - [ ] **5. Settings Explanations, Hover Tooltips & Dedicated Help Section (`HelpModal.tsx`):**
+  - [x] **5. Settings Explanations, Hover Tooltips & Dedicated Help Section (`HelpModal.tsx`):**
     - Structured explanation box and hover tooltips in `SettingsView.tsx` detailing the 3 sidecar modes, the `mtime` SSoT rule, and non-destructive patching.
     - Dedicated section in `HelpModal.tsx` (fully localized in DE & EN) explaining `.rrdata` vs. `.xmp` coexistence, SSoT priority, the Inspector badges, and archive synchronization.
 

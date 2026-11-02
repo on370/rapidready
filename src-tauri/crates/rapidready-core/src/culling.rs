@@ -1,9 +1,43 @@
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
 use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU8, Ordering};
+
+pub use crate::culling_xmp::{
+    find_existing_xmp_path, get_xmp_write_path, parse_sidecar_xmp, read_xmp_gps,
+    read_xmp_gps_from_str, write_sidecar_xmp, write_sidecar_xmp_to_path, write_xmp_gps,
+};
 
 pub const TAG_PICK: &str = "rr:pick";
 pub const TAG_REJECT: &str = "rr:reject";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum SidecarMode {
+    #[default]
+    Rrdata,
+    Dual,
+    Xmp,
+}
+
+static SIDECAR_MODE: AtomicU8 = AtomicU8::new(0); // 0 = Rrdata, 1 = Dual, 2 = Xmp
+
+pub fn set_sidecar_mode(mode: SidecarMode) {
+    let val = match mode {
+        SidecarMode::Rrdata => 0,
+        SidecarMode::Dual => 1,
+        SidecarMode::Xmp => 2,
+    };
+    SIDECAR_MODE.store(val, Ordering::SeqCst);
+}
+
+pub fn get_sidecar_mode() -> SidecarMode {
+    match SIDECAR_MODE.load(Ordering::SeqCst) {
+        1 => SidecarMode::Dual,
+        2 => SidecarMode::Xmp,
+        _ => SidecarMode::Rrdata,
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct CullingState {
@@ -15,18 +49,119 @@ pub struct CullingState {
     pub tags: Vec<String>,
     #[serde(default)]
     pub orientation: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sidecar_source: Option<String>,
 }
 
 pub fn get_sidecar_path(original_path: &Path) -> PathBuf {
     PathBuf::from(format!("{}.rrdata", original_path.to_string_lossy()))
 }
 
+/// Reads culling state with single source of truth (SSoT) resolution between .rrdata and .xmp:
+/// - If only .rrdata exists -> .rrdata wins (sidecar_source = "rrdata")
+/// - If only .xmp exists -> .xmp wins (sidecar_source = "xmp")
+/// - If both exist -> compare filesystem modification timestamps (mtime):
+///   - If .xmp is strictly newer -> .xmp wins (sidecar_source = "both_xmp")
+///   - Otherwise -> .rrdata wins (sidecar_source = "both_rrdata")
+/// - If neither exists -> default CullingState (sidecar_source = None)
 pub fn read_sidecar(original_path: &Path) -> CullingState {
-    let sidecar_path = get_sidecar_path(original_path);
-    if let Ok(contents) = fs::read_to_string(&sidecar_path) {
-        return parse_sidecar_json(&contents);
+    let rr_path = get_sidecar_path(original_path);
+    let xmp_path = find_existing_xmp_path(original_path);
+
+    let rr_meta = if rr_path.is_file() {
+        fs::metadata(&rr_path).ok()
+    } else {
+        None
+    };
+    let xmp_meta = xmp_path.as_ref().and_then(|p| fs::metadata(p).ok());
+
+    match (rr_meta, xmp_meta) {
+        (Some(rr_m), Some(xmp_m)) => {
+            let rr_time = rr_m.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+            let xmp_time = xmp_m.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+            if xmp_time > rr_time {
+                let mut state = xmp_path
+                    .and_then(|p| fs::read_to_string(p).ok())
+                    .map(|c| parse_sidecar_xmp(&c))
+                    .unwrap_or_default();
+                state.sidecar_source = Some("both_xmp".to_string());
+                state
+            } else {
+                let mut state = fs::read_to_string(&rr_path)
+                    .map(|c| parse_sidecar_json(&c))
+                    .unwrap_or_default();
+                state.sidecar_source = Some("both_rrdata".to_string());
+                state
+            }
+        }
+        (Some(_), None) => {
+            let mut state = fs::read_to_string(&rr_path)
+                .map(|c| parse_sidecar_json(&c))
+                .unwrap_or_default();
+            state.sidecar_source = Some("rrdata".to_string());
+            state
+        }
+        (None, Some(_)) => {
+            let mut state = xmp_path
+                .and_then(|p| fs::read_to_string(p).ok())
+                .map(|c| parse_sidecar_xmp(&c))
+                .unwrap_or_default();
+            state.sidecar_source = Some("xmp".to_string());
+            state
+        }
+        (None, None) => CullingState::default(),
     }
-    CullingState::default()
+}
+
+/// Reads GPS coordinates from sidecars with mtime SSoT resolution.
+pub fn read_sidecar_gps(original_path: &Path) -> Option<(Option<f64>, Option<f64>, Option<f64>)> {
+    let rr_path = get_sidecar_path(original_path);
+    let xmp_path = find_existing_xmp_path(original_path);
+
+    let rr_meta = if rr_path.is_file() {
+        fs::metadata(&rr_path).ok()
+    } else {
+        None
+    };
+    let xmp_meta = xmp_path.as_ref().and_then(|p| fs::metadata(p).ok());
+
+    match (rr_meta, xmp_meta) {
+        (Some(rr_m), Some(xmp_m)) => {
+            let rr_time = rr_m.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+            let xmp_time = xmp_m.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+            if xmp_time > rr_time {
+                read_xmp_gps(original_path).or_else(|| read_rrdata_gps(&rr_path))
+            } else {
+                read_rrdata_gps(&rr_path).or_else(|| read_xmp_gps(original_path))
+            }
+        }
+        (Some(_), None) => read_rrdata_gps(&rr_path),
+        (None, Some(_)) => read_xmp_gps(original_path),
+        (None, None) => None,
+    }
+}
+
+fn read_rrdata_gps(rr_path: &Path) -> Option<(Option<f64>, Option<f64>, Option<f64>)> {
+    let contents = fs::read_to_string(rr_path).ok()?;
+    let val = serde_json::from_str::<serde_json::Value>(&contents).ok()?;
+    let gps_val = val.get("gps")?;
+    if gps_val.is_null() {
+        // Explicit removal/clearing
+        Some((None, None, None))
+    } else if let Some(gps_obj) = gps_val.as_object() {
+        let lat = gps_obj.get("latitude").and_then(|v| v.as_f64());
+        let lon = gps_obj.get("longitude").and_then(|v| v.as_f64());
+        let alt = gps_obj.get("altitude").and_then(|v| v.as_f64());
+        if lat.is_some() || lon.is_some() {
+            Some((lat, lon, alt))
+        } else if gps_obj.get("latitude").map_or(false, |v| v.is_null()) {
+            Some((None, None, None))
+        } else {
+            None
+        }
+    } else {
+        None
+    }
 }
 
 pub fn parse_sidecar_json(contents: &str) -> CullingState {
@@ -109,7 +244,7 @@ pub fn next_orientation(current: u32, direction: &str) -> u32 {
     }
 }
 
-pub fn write_sidecar(original_path: &Path, state: &CullingState) -> anyhow::Result<()> {
+pub fn write_sidecar_rrdata(original_path: &Path, state: &CullingState) -> anyhow::Result<()> {
     let sidecar_path = get_sidecar_path(original_path);
 
     // Load existing JSON if available, or create new default map
@@ -202,11 +337,38 @@ pub fn write_sidecar(original_path: &Path, state: &CullingState) -> anyhow::Resu
     Ok(())
 }
 
+pub fn write_sidecar(original_path: &Path, state: &CullingState) -> anyhow::Result<()> {
+    match get_sidecar_mode() {
+        SidecarMode::Rrdata => {
+            write_sidecar_rrdata(original_path, state)?;
+            // If an XMP already exists on disk, update it too so it stays in sync
+            if find_existing_xmp_path(original_path).is_some() {
+                let _ = write_sidecar_xmp(original_path, state);
+            }
+        }
+        SidecarMode::Dual => {
+            let res_rr = write_sidecar_rrdata(original_path, state);
+            let res_xmp = write_sidecar_xmp(original_path, state);
+            res_rr?;
+            res_xmp?;
+        }
+        SidecarMode::Xmp => {
+            write_sidecar_xmp(original_path, state)?;
+            // If .rrdata already exists on disk, update it too
+            let rr_path = get_sidecar_path(original_path);
+            if rr_path.is_file() {
+                let _ = write_sidecar_rrdata(original_path, state);
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Atomically updates or clears GPS coordinates in the .rrdata sidecar.
 /// If latitude and longitude are Some, writes or updates `"gps": { "latitude": ..., "longitude": ..., "altitude": ... }`.
 /// If latitude and longitude are None, sets `"gps": null` to explicitly override/remove location.
 /// Preserves all existing culling metadata (ratings, flags, tags, color, orientation, adjustments).
-pub fn write_gps_sidecar(
+pub fn write_gps_sidecar_rrdata(
     original_path: &Path,
     latitude: Option<f64>,
     longitude: Option<f64>,
@@ -275,6 +437,36 @@ pub fn write_gps_sidecar(
         return Err(e.into());
     }
 
+    Ok(())
+}
+
+pub fn write_gps_sidecar(
+    original_path: &Path,
+    latitude: Option<f64>,
+    longitude: Option<f64>,
+    altitude: Option<f64>,
+) -> anyhow::Result<()> {
+    match get_sidecar_mode() {
+        SidecarMode::Rrdata => {
+            write_gps_sidecar_rrdata(original_path, latitude, longitude, altitude)?;
+            if find_existing_xmp_path(original_path).is_some() {
+                let _ = write_xmp_gps(original_path, latitude, longitude, altitude);
+            }
+        }
+        SidecarMode::Dual => {
+            let res_rr = write_gps_sidecar_rrdata(original_path, latitude, longitude, altitude);
+            let res_xmp = write_xmp_gps(original_path, latitude, longitude, altitude);
+            res_rr?;
+            res_xmp?;
+        }
+        SidecarMode::Xmp => {
+            write_xmp_gps(original_path, latitude, longitude, altitude)?;
+            let rr_path = get_sidecar_path(original_path);
+            if rr_path.is_file() {
+                let _ = write_gps_sidecar_rrdata(original_path, latitude, longitude, altitude);
+            }
+        }
+    }
     Ok(())
 }
 
@@ -357,6 +549,7 @@ mod tests {
             color: None,
             tags: vec![],
             orientation: None,
+            sidecar_source: None,
         };
         write_sidecar(&img_path, &state).unwrap();
 
@@ -396,6 +589,7 @@ mod tests {
             color: None,
             tags: vec!["vacation".to_string()],
             orientation: None,
+            sidecar_source: None,
         };
         write_sidecar(&img_path, &state).unwrap();
 
@@ -482,6 +676,7 @@ mod tests {
             color: Some("red".to_string()),
             tags: vec!["Portrait".to_string(), "Studio".to_string()],
             orientation: None,
+            sidecar_source: None,
         };
         write_sidecar(&img_path, &state).unwrap();
 
@@ -524,6 +719,7 @@ mod tests {
             color: Some("purple".to_string()),
             tags: vec!["atomic".to_string()],
             orientation: None,
+            sidecar_source: None,
         };
 
         write_sidecar(&img_path, &state).unwrap();
@@ -600,6 +796,7 @@ mod tests {
             color: Some("yellow".to_string()),
             tags: vec!["Vacation".to_string(), "Munich".to_string()],
             orientation: Some(6),
+            sidecar_source: None,
         };
         write_sidecar(&img_path, &culling).unwrap();
 
@@ -626,6 +823,152 @@ mod tests {
         let gps = val.get("gps").and_then(|v| v.as_object()).unwrap();
         assert_eq!(gps.get("latitude").and_then(|v| v.as_f64()), Some(48.137154));
         assert_eq!(gps.get("longitude").and_then(|v| v.as_f64()), Some(11.575421));
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_xmp_read_write_roundtrip() {
+        let temp_dir = std::env::temp_dir().join(format!("rr_xmp_rt_{}", std::process::id()));
+        fs::create_dir_all(&temp_dir).unwrap();
+        let img_path = temp_dir.join("photo.ARW");
+
+        // Set global mode to XMP
+        set_sidecar_mode(SidecarMode::Xmp);
+
+        // 1. Write initial culling
+        let state = CullingState {
+            flag: Some(1),
+            rating: 5,
+            color: Some("green".to_string()),
+            tags: vec!["landscape".to_string(), "mountains".to_string()],
+            orientation: Some(6),
+            sidecar_source: None,
+        };
+        write_sidecar(&img_path, &state).unwrap();
+
+        let read = read_sidecar(&img_path);
+        assert_eq!(read.rating, 5);
+        assert_eq!(read.flag, Some(1));
+        assert_eq!(read.color, Some("green".to_string()));
+        assert_eq!(read.tags, vec!["landscape", "mountains"]);
+        assert_eq!(read.orientation, Some(6));
+        assert_eq!(read.sidecar_source, Some("xmp".to_string()));
+
+        // 2. Reject transition
+        let reject_state = CullingState {
+            flag: Some(-1),
+            rating: 0,
+            color: None,
+            tags: vec!["blurry".to_string()],
+            orientation: None,
+            sidecar_source: None,
+        };
+        write_sidecar(&img_path, &reject_state).unwrap();
+
+        let read2 = read_sidecar(&img_path);
+        assert_eq!(read2.rating, 0);
+        assert_eq!(read2.flag, Some(-1));
+        assert_eq!(read2.color, None);
+        assert_eq!(read2.tags, vec!["blurry"]);
+
+        // Reset mode
+        set_sidecar_mode(SidecarMode::Rrdata);
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_xmp_non_destructive_preservation() {
+        let temp_dir = std::env::temp_dir().join(format!("rr_xmp_nd_{}", std::process::id()));
+        fs::create_dir_all(&temp_dir).unwrap();
+        let img_path = temp_dir.join("lightroom_edit.dng");
+        let xmp_path = temp_dir.join("lightroom_edit.xmp");
+
+        // Pre-populate with Lightroom and darktable blocks
+        let initial_xmp = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+   xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"
+   xmlns:darktable="http://darktable.sf.net/">
+   <crs:Exposure2012>+1.25</crs:Exposure2012>
+   <crs:Highlights2012>-30</crs:Highlights2012>
+   <darktable:history>
+     <darktable:step num="1" module="exposure" enabled="1"/>
+   </darktable:history>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>"#;
+        fs::write(&xmp_path, initial_xmp).unwrap();
+
+        // Perform culling write in RapidReady
+        let state = CullingState {
+            flag: Some(1),
+            rating: 4,
+            color: Some("blue".to_string()),
+            tags: vec!["urban".to_string()],
+            orientation: Some(1),
+            sidecar_source: None,
+        };
+        write_sidecar_xmp(&img_path, &state).unwrap();
+
+        let read_back = fs::read_to_string(&xmp_path).unwrap();
+
+        // 1. Preserves external development blocks
+        assert!(read_back.contains("<crs:Exposure2012>+1.25</crs:Exposure2012>"));
+        assert!(read_back.contains("<crs:Highlights2012>-30</crs:Highlights2012>"));
+        assert!(read_back.contains("<darktable:step num=\"1\" module=\"exposure\" enabled=\"1\"/>"));
+
+        // 2. Properly updated culling values
+        assert!(read_back.contains("xmp:Rating=\"4\"") || read_back.contains("<xmp:Rating>4</xmp:Rating>"));
+        assert!(read_back.contains("xmp:Label=\"Blue\"") || read_back.contains("<xmp:Label>Blue</xmp:Label>"));
+        assert!(read_back.contains("<rdf:li>urban</rdf:li>"));
+        assert!(read_back.contains("<rdf:li>rr:pick</rdf:li>"));
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_ssot_mtime_coexistence() {
+        let temp_dir = std::env::temp_dir().join(format!("rr_ssot_{}", std::process::id()));
+        fs::create_dir_all(&temp_dir).unwrap();
+        let img_path = temp_dir.join("photo.CR3");
+        let _rr_path = temp_dir.join("photo.CR3.rrdata");
+        let xmp_path = temp_dir.join("photo.xmp");
+
+        // 1. Create .rrdata first
+        let rr_state = CullingState {
+            rating: 2,
+            ..Default::default()
+        };
+        write_sidecar_rrdata(&img_path, &rr_state).unwrap();
+
+        // Sleep briefly to ensure distinct mtime
+        std::thread::sleep(std::time::Duration::from_millis(50));
+
+        // 2. Create .xmp with newer modification time
+        let xmp_state = CullingState {
+            rating: 5,
+            ..Default::default()
+        };
+        write_sidecar_xmp_to_path(&xmp_path, &xmp_state).unwrap();
+
+        // .xmp is newer -> xmp wins as SSoT
+        let read1 = read_sidecar(&img_path);
+        assert_eq!(read1.rating, 5);
+        assert_eq!(read1.sidecar_source, Some("both_xmp".to_string()));
+
+        // Sleep briefly and update .rrdata so .rrdata is newer
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        let rr_state_newer = CullingState {
+            rating: 3,
+            ..Default::default()
+        };
+        write_sidecar_rrdata(&img_path, &rr_state_newer).unwrap();
+
+        // .rrdata is now newer -> rrdata wins as SSoT
+        let read2 = read_sidecar(&img_path);
+        assert_eq!(read2.rating, 3);
+        assert_eq!(read2.sidecar_source, Some("both_rrdata".to_string()));
 
         let _ = fs::remove_dir_all(&temp_dir);
     }

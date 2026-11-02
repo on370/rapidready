@@ -20,7 +20,7 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
   const { t } = useTranslation('library');
   const { 
     images, activeImageIndex, 
-    selectedPaths, updateImageMetadata, activeFolderPath, selectedFolderPaths,
+    selectedPaths, updateImageMetadata, updateImageCullingByPath, activeFolderPath, selectedFolderPaths,
     lastImportPaths, isViewingLastImport, rootPath 
   } = useLibraryStore();
 
@@ -196,6 +196,23 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
       return () => { isMounted = false; };
     }
   }, [activeImage?.path, updateImageMetadata]);
+
+  // Refresh culling state and sidecar_source when active image changes
+  useEffect(() => {
+    if (!activeImage?.path) return;
+    let isMounted = true;
+    invoke<import('../../../stores/libraryStore').CullingState>('get_culling_state', { path: activeImage.path })
+      .then((culling) => {
+        if (isMounted && culling) {
+          updateImageCullingByPath(activeImage.path, culling);
+        }
+      })
+      .catch(console.error);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activeImage?.path, updateImageCullingByPath]);
 
   const isVideo = activeImage ? (activeImage.is_video ?? isVideoFilename(activeImage.name)) : false;
   const extension = activeImage?.name.split('.').pop()?.toUpperCase() || '';

@@ -110,5 +110,29 @@
     "title": "Guided Tour",
     "description": "Replay the interactive tour anytime to explore core workflows, keyboard shortcuts, and photo book features.",
     "replayButton": "Replay Tour"
+  },
+  "sidecar": {
+    "title": "Sidecar Format & RAW Developer Synchronization (.rrdata / .xmp)",
+    "subtitle": "Storage format for ratings, color labels, orientations, and GPS metadata",
+    "modeRrdataDesc": "Standard. Writes native ultra-fast .rrdata JSON sidecars. Automatically falls back to reading .xmp if only XMP exists.",
+    "modeDualDesc": "Hybrid. Synchronously writes changes to both sidecars. Seamless transition between RapidRAW and Lightroom / darktable.",
+    "modeXmpDesc": "Adobe Standard. Writes directly to .xmp (and updates existing .rrdata). Reads .rrdata as fallback.",
+    "guaranteeTitle": "Non-Destructive & Single Source of Truth (SSoT)",
+    "guaranteeDesc": "Existing development settings (such as crs:* parameters from Adobe Lightroom or history stacks from darktable, as well as RapidRAW adjustments) are never overwritten. When both sidecar files (.rrdata and .xmp) exist for a photo, the file with the newest modification timestamp (mtime) automatically acts as the authoritative Single Source of Truth.",
+    "syncSectionTitle": "Synchronize Sidecars in Active Archive",
+    "syncSectionSubtitle": "Aligns existing sidecars in the loaded folder with the selected mode.",
+    "syncButton": "Synchronize existing sidecars now (.rrdata ↔ .xmp)",
+    "nasNotice": "Notice for large archives & NAS: For archives with 20,000+ photos on a network drive (NAS/SMB), synchronization may take several minutes. Only photos with existing sidecars/ratings are processed. You can pause, resume, or cancel at any time.",
+    "syncDone": "Sync complete",
+    "syncPaused": "Paused",
+    "syncRunning": "Synchronizing...",
+    "pause": "Pause",
+    "resume": "Resume",
+    "cancel": "Cancel",
+    "syncCompletedTitle": "Sidecar Sync Complete",
+    "syncCompletedDesc": "Synchronization complete: {{synced}} sidecars updated ({{total}} photos scanned).",
+    "syncCancelledTitle": "Sync Cancelled",
+    "syncCancelledDesc": "Synchronization cancelled. {{synced}} sidecars were updated prior to cancellation.",
+    "syncErrorTitle": "Error During Sidecar Sync"
   }
 }

@@ -126,6 +126,32 @@ pub fn start_watching_dir_internal(
                             "path": img_path_str,
                             "culling": culling
                         }));
+                    } else if path_str.to_lowercase().ends_with(".xmp") {
+                        let without_xmp = &path_str[..path_str.len() - 4];
+                        let candidate = PathBuf::from(without_xmp);
+                        let mut target_paths = Vec::new();
+                        if candidate.is_file() {
+                            target_paths.push(candidate);
+                        } else if let Some(parent) = p.parent() {
+                            let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+                            if let Ok(entries) = std::fs::read_dir(parent) {
+                                for entry in entries.flatten() {
+                                    let ep = entry.path();
+                                    if ep.is_file() && ep.file_stem().and_then(|s| s.to_str()) == Some(stem) {
+                                        if rapidready_core::archive::is_supported_archive_file(&ep) {
+                                            target_paths.push(ep);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        for img_path in target_paths {
+                            let culling = rapidready_core::culling::read_sidecar(&img_path);
+                            let _ = app_handle.emit("sidecar-updated", serde_json::json!({
+                                "path": img_path.to_string_lossy(),
+                                "culling": culling
+                            }));
+                        }
                     } else if p.is_dir() {
                         let dir_norm = p.to_string_lossy().replace('\\', "/");
                         new_dirs.push(dir_norm);

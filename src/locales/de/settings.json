@@ -110,5 +110,29 @@
     "title": "Geführte Einführung",
     "description": "Starte die interaktive Tour durch RapidReady jederzeit erneut, um alle Arbeitsbereiche und Tastenkürzel kennenzulernen.",
     "replayButton": "Tour erneut starten"
+  },
+  "sidecar": {
+    "title": "Sidecar-Format & RAW-Entwickler-Synchronisation (.rrdata / .xmp)",
+    "subtitle": "Speicherformat für Bewertungen, Farblabels, Orientierungen und GPS-Metadaten",
+    "modeRrdataDesc": "Standard. Schreibt blitzschnell native .rrdata JSON-Dateien. Liest .xmp automatisch als Fallback, falls nur eine XMP existiert.",
+    "modeDualDesc": "Hybrid. Schreibt Änderungen synchron in beide Sidecars. Perfekt für den nahtlosen Wechsel zwischen RapidRAW und Lightroom / darktable.",
+    "modeXmpDesc": "Adobe Standard. Schreibt direkt in .xmp (und aktualisiert vorhandene .rrdata). Liest .rrdata als Fallback.",
+    "guaranteeTitle": "Non-Destructive & Single Source of Truth (SSoT)",
+    "guaranteeDesc": "Bestehende Entwicklungseinstellungen (z.B. crs:* Entwicklungsparameter aus Adobe Lightroom oder Entwicklungsverlauf aus darktable sowie RapidRAW-Anpassungen) werden niemals überschrieben. Falls für ein Foto beide Sidecar-Dateien (.rrdata und .xmp) existieren, gilt immer die Datei mit dem neuesten Dateimodifikationsdatum (mtime) als verbindliche Quelle der Wahrheit.",
+    "syncSectionTitle": "Sidecars im aktiven Archiv synchronisieren",
+    "syncSectionSubtitle": "Gleicht vorhandene Sidecars im geladenen Ordner an den gewählten Modus an.",
+    "syncButton": "Bestehende Sidecars jetzt abgleichen (.rrdata ↔ .xmp)",
+    "nasNotice": "Hinweis für große Archive & NAS: Bei Archiven mit 20.000+ Fotos auf einem Netzlaufwerk (NAS/SMB) kann der Abgleich einige Minuten dauern. Es werden nur Bilder mit vorhandenen Bewertungen/Sidecars abgeglichen. Der Vorgang kann jederzeit pausiert, fortgesetzt oder abgebrochen werden.",
+    "syncDone": "Abgleich abgeschlossen",
+    "syncPaused": "Pausiert",
+    "syncRunning": "Synchronisiere...",
+    "pause": "Pause",
+    "resume": "Fortsetzen",
+    "cancel": "Abbrechen",
+    "syncCompletedTitle": "Sidecar-Abgleich fertig",
+    "syncCompletedDesc": "Abgleich abgeschlossen: {{synced}} Sidecars aktualisiert ({{total}} Fotos geprüft).",
+    "syncCancelledTitle": "Abgleich abgebrochen",
+    "syncCancelledDesc": "Abgleich abgebrochen. {{synced}} Sidecars wurden bis zum Abbruch synchronisiert.",
+    "syncErrorTitle": "Fehler beim Sidecar-Abgleich"
   }
 }

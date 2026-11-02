@@ -79,6 +79,7 @@ pub fn run() {
             app.manage(commands::ArchiveCatalogState {
                 catalog,
             });
+            app.manage(commands::SidecarSyncState::default());
 
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_theme(Some(tauri::Theme::Dark));
@@ -387,6 +388,11 @@ pub fn run() {
             commands::rebuild_archive_catalog,
             commands::get_disk_cache_stats,
             commands::clear_disk_cache,
+            commands::set_sidecar_mode_cmd,
+            commands::sync_archive_sidecars,
+            commands::pause_sidecar_sync,
+            commands::resume_sidecar_sync,
+            commands::cancel_sidecar_sync,
             commands::set_active_viewport_folder,
             commands::set_active_viewport_paths,
             commands::start_archive_thumbnailing

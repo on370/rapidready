@@ -1,0 +1,711 @@
+use crate::culling::{CullingState, TAG_PICK, TAG_REJECT};
+use regex::Regex;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
+
+static RE_RATING_TAG: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?s)<xmp:Rating>([^<]*)</xmp:Rating>").unwrap());
+static RE_RATING_ATTR: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"\bxmp:Rating="([^"]*)""#).unwrap());
+
+static RE_LABEL_TAG: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?s)<xmp:Label>([^<]*)</xmp:Label>").unwrap());
+static RE_LABEL_ATTR: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"\bxmp:Label="([^"]*)""#).unwrap());
+
+static RE_ORIENT_TAG: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?s)<tiff:Orientation>([^<]*)</tiff:Orientation>").unwrap());
+static RE_ORIENT_ATTR: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"\btiff:Orientation="([^"]*)""#).unwrap());
+
+static RE_SUBJECT_BLOCK: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?s)<dc:subject\b[^>]*>.*?</dc:subject>").unwrap());
+static RE_RDF_LI: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?s)<rdf:li\b[^>]*>(.*?)</rdf:li>").unwrap());
+
+static RE_PICK_ATTR: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?:xmpDM:good="true"|xmpDM:pick="1"|photoshop:Urgency="1")"#).unwrap()
+});
+static RE_REJECT_ATTR: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"(?:xmpDM:good="false"|xmpDM:pick="-1")"#).unwrap());
+
+// GPS Regexes
+static RE_GPS_LAT_TAG: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?s)<exif:GPSLatitude>([^<]*)</exif:GPSLatitude>").unwrap());
+static RE_GPS_LAT_ATTR: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"\bexif:GPSLatitude="([^"]*)""#).unwrap());
+static RE_GPS_LAT_REF_TAG: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?s)<exif:GPSLatitudeRef>([^<]*)</exif:GPSLatitudeRef>").unwrap()
+});
+static RE_GPS_LAT_REF_ATTR: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"\bexif:GPSLatitudeRef="([^"]*)""#).unwrap());
+
+static RE_GPS_LON_TAG: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?s)<exif:GPSLongitude>([^<]*)</exif:GPSLongitude>").unwrap());
+static RE_GPS_LON_ATTR: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"\bexif:GPSLongitude="([^"]*)""#).unwrap());
+static RE_GPS_LON_REF_TAG: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?s)<exif:GPSLongitudeRef>([^<]*)</exif:GPSLongitudeRef>").unwrap()
+});
+static RE_GPS_LON_REF_ATTR: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"\bexif:GPSLongitudeRef="([^"]*)""#).unwrap());
+
+static RE_GPS_ALT_TAG: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?s)<exif:GPSAltitude>([^<]*)</exif:GPSAltitude>").unwrap());
+static RE_GPS_ALT_ATTR: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"\bexif:GPSAltitude="([^"]*)""#).unwrap());
+static RE_GPS_ALT_REF_TAG: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?s)<exif:GPSAltitudeRef>([^<]*)</exif:GPSAltitudeRef>").unwrap()
+});
+static RE_GPS_ALT_REF_ATTR: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"\bexif:GPSAltitudeRef="([^"]*)""#).unwrap());
+
+pub fn unescape_xml(s: &str) -> String {
+    s.replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&apos;", "'")
+}
+
+pub fn escape_xml(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
+}
+
+fn normalize_color_label(label: &str) -> Option<String> {
+    let lower = label.trim().to_lowercase();
+    match lower.as_str() {
+        "red" | "rot" => Some("red".to_string()),
+        "yellow" | "gelb" => Some("yellow".to_string()),
+        "green" | "grün" | "gruen" => Some("green".to_string()),
+        "blue" | "blau" => Some("blue".to_string()),
+        "purple" | "violett" | "magenta" => Some("purple".to_string()),
+        "none" | "" => None,
+        _ => Some(lower),
+    }
+}
+
+fn format_color_label_xmp(col: &str) -> String {
+    match col.to_lowercase().as_str() {
+        "red" => "Red".to_string(),
+        "yellow" => "Yellow".to_string(),
+        "green" => "Green".to_string(),
+        "blue" => "Blue".to_string(),
+        "purple" => "Purple".to_string(),
+        other => {
+            let mut c = other.chars();
+            match c.next() {
+                None => String::new(),
+                Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+            }
+        }
+    }
+}
+
+/// Parses an XMP string into a `CullingState`.
+pub fn parse_sidecar_xmp(contents: &str) -> CullingState {
+    let mut state = CullingState::default();
+
+    // 1. Rating & Reject
+    let raw_rating = RE_RATING_ATTR
+        .captures(contents)
+        .or_else(|| RE_RATING_TAG.captures(contents))
+        .and_then(|caps| caps.get(1))
+        .map(|m| m.as_str().trim());
+
+    if let Some(r_str) = raw_rating {
+        if let Ok(r) = r_str.parse::<i32>() {
+            if r == -1 {
+                state.flag = Some(-1);
+                state.rating = 0;
+            } else if (0..=5).contains(&r) {
+                state.rating = r as u8;
+            }
+        }
+    }
+
+    // 2. Color Label
+    let raw_label = RE_LABEL_ATTR
+        .captures(contents)
+        .or_else(|| RE_LABEL_TAG.captures(contents))
+        .and_then(|caps| caps.get(1))
+        .map(|m| m.as_str());
+
+    if let Some(lbl) = raw_label {
+        state.color = normalize_color_label(lbl);
+    }
+
+    // 3. Orientation
+    let raw_orient = RE_ORIENT_ATTR
+        .captures(contents)
+        .or_else(|| RE_ORIENT_TAG.captures(contents))
+        .and_then(|caps| caps.get(1))
+        .map(|m| m.as_str().trim());
+
+    if let Some(o_str) = raw_orient {
+        if let Ok(o) = o_str.parse::<u32>() {
+            if [1, 3, 6, 8].contains(&o) {
+                state.orientation = Some(o);
+            }
+        }
+    }
+
+    // 4. Tags & Flag Adapter from <dc:subject>
+    if let Some(subj_cap) = RE_SUBJECT_BLOCK.captures(contents) {
+        if let Some(subj_str) = subj_cap.get(0).map(|m| m.as_str()) {
+            for li_cap in RE_RDF_LI.captures_iter(subj_str) {
+                if let Some(tag_match) = li_cap.get(1) {
+                    let tag = unescape_xml(tag_match.as_str().trim());
+                    if tag == TAG_PICK {
+                        state.flag = Some(1);
+                    } else if tag == TAG_REJECT {
+                        state.flag = Some(-1);
+                    } else if !tag.is_empty() && !state.tags.contains(&tag) {
+                        state.tags.push(tag);
+                    }
+                }
+            }
+        }
+    }
+
+    // 5. Secondary Flag Checks if not yet determined
+    if state.flag.is_none() {
+        if RE_PICK_ATTR.is_match(contents) {
+            state.flag = Some(1);
+        } else if RE_REJECT_ATTR.is_match(contents) {
+            state.flag = Some(-1);
+        }
+    }
+
+    state
+}
+
+/// Helper to parse GPS coordinates from XMP string representations.
+pub fn parse_xmp_coord(val_str: &str, ref_str: Option<&str>) -> Option<f64> {
+    let trimmed = val_str.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let mut dir_char = None;
+    let mut num_part = trimmed;
+
+    // Check trailing direction letter (N, S, E, W)
+    if let Some(last_ch) = trimmed.chars().last() {
+        if ['N', 'S', 'E', 'W', 'n', 's', 'e', 'w'].contains(&last_ch) {
+            dir_char = Some(last_ch.to_ascii_uppercase());
+            num_part = &trimmed[..trimmed.len() - last_ch.len_utf8()].trim();
+        }
+    }
+
+    if dir_char.is_none() {
+        if let Some(r) = ref_str {
+            if let Some(ch) = r.trim().chars().next() {
+                if ['N', 'S', 'E', 'W', 'n', 's', 'e', 'w'].contains(&ch) {
+                    dir_char = Some(ch.to_ascii_uppercase());
+                }
+            }
+        }
+    }
+
+    // Check for comma or whitespace separated DMS or DM format (e.g. "37,46.500000" or "37 46 29.5")
+    let parts: Vec<&str> = num_part
+        .split(|c| c == ',' || c == ' ' || c == '\t')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    let mut val = if parts.len() >= 2 {
+        let deg = parts[0].parse::<f64>().ok()?;
+        let min = parts[1].parse::<f64>().ok()?;
+        let sec = if parts.len() >= 3 {
+            parts[2].parse::<f64>().unwrap_or(0.0)
+        } else {
+            0.0
+        };
+        deg.abs() + (min / 60.0) + (sec / 3600.0)
+    } else {
+        // Direct decimal or rational float
+        if num_part.contains('/') {
+            let frac: Vec<&str> = num_part.split('/').collect();
+            if frac.len() == 2 {
+                let num = frac[0].trim().parse::<f64>().ok()?;
+                let den = frac[1].trim().parse::<f64>().ok()?;
+                if den != 0.0 {
+                    num / den
+                } else {
+                    return None;
+                }
+            } else {
+                num_part.parse::<f64>().ok()?
+            }
+        } else {
+            num_part.parse::<f64>().ok()?
+        }
+    };
+
+    if let Some(dir) = dir_char {
+        if dir == 'S' || dir == 'W' {
+            val = -val.abs();
+        } else {
+            val = val.abs();
+        }
+    }
+
+    Some(val)
+}
+
+/// Extracts GPS coordinates from an XMP string.
+pub fn read_xmp_gps_from_str(contents: &str) -> Option<(Option<f64>, Option<f64>, Option<f64>)> {
+    let lat_str = RE_GPS_LAT_ATTR
+        .captures(contents)
+        .or_else(|| RE_GPS_LAT_TAG.captures(contents))
+        .and_then(|c| c.get(1))
+        .map(|m| m.as_str());
+
+    let lat_ref = RE_GPS_LAT_REF_ATTR
+        .captures(contents)
+        .or_else(|| RE_GPS_LAT_REF_TAG.captures(contents))
+        .and_then(|c| c.get(1))
+        .map(|m| m.as_str());
+
+    let lon_str = RE_GPS_LON_ATTR
+        .captures(contents)
+        .or_else(|| RE_GPS_LON_TAG.captures(contents))
+        .and_then(|c| c.get(1))
+        .map(|m| m.as_str());
+
+    let lon_ref = RE_GPS_LON_REF_ATTR
+        .captures(contents)
+        .or_else(|| RE_GPS_LON_REF_TAG.captures(contents))
+        .and_then(|c| c.get(1))
+        .map(|m| m.as_str());
+
+    let alt_str = RE_GPS_ALT_ATTR
+        .captures(contents)
+        .or_else(|| RE_GPS_ALT_TAG.captures(contents))
+        .and_then(|c| c.get(1))
+        .map(|m| m.as_str());
+
+    let alt_ref = RE_GPS_ALT_REF_ATTR
+        .captures(contents)
+        .or_else(|| RE_GPS_ALT_REF_TAG.captures(contents))
+        .and_then(|c| c.get(1))
+        .map(|m| m.as_str());
+
+    let lat = lat_str.and_then(|s| parse_xmp_coord(s, lat_ref));
+    let lon = lon_str.and_then(|s| parse_xmp_coord(s, lon_ref));
+
+    if lat.is_none() && lon.is_none() {
+        return None;
+    }
+
+    let alt = alt_str.and_then(|s| {
+        let v = if s.contains('/') {
+            let frac: Vec<&str> = s.split('/').collect();
+            if frac.len() == 2 {
+                let num = frac[0].trim().parse::<f64>().ok()?;
+                let den = frac[1].trim().parse::<f64>().ok()?;
+                if den != 0.0 {
+                    num / den
+                } else {
+                    return None;
+                }
+            } else {
+                s.parse::<f64>().ok()?
+            }
+        } else {
+            s.parse::<f64>().ok()?
+        };
+        // 1 = Below sea level
+        if alt_ref.map_or(false, |r| r.trim() == "1") {
+            Some(-v.abs())
+        } else {
+            Some(v)
+        }
+    });
+
+    Some((lat, lon, alt))
+}
+
+/// Locates an existing XMP sidecar for an image file.
+/// Checks `<file>.xmp`, `<file>.XMP`, `<stem>.xmp`, and `<stem>.XMP`.
+/// If multiple exist, returns the one with the newer `mtime`.
+pub fn find_existing_xmp_path(original_path: &Path) -> Option<PathBuf> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+
+    // 1. Companion / darktable style: <original_path>.xmp or .XMP
+    let p_xmp = PathBuf::from(format!("{}.xmp", original_path.to_string_lossy()));
+    if p_xmp.is_file() {
+        candidates.push(p_xmp);
+    }
+    let p_xmp_upper = PathBuf::from(format!("{}.XMP", original_path.to_string_lossy()));
+    if p_xmp_upper.is_file() && !candidates.contains(&p_xmp_upper) {
+        candidates.push(p_xmp_upper);
+    }
+
+    // 2. Lightroom / standard stem style: <stem>.xmp or .XMP
+    if original_path.extension().is_some() {
+        let stem_xmp = original_path.with_extension("xmp");
+        if stem_xmp.is_file() && !candidates.contains(&stem_xmp) {
+            candidates.push(stem_xmp);
+        }
+        let stem_xmp_upper = original_path.with_extension("XMP");
+        if stem_xmp_upper.is_file() && !candidates.contains(&stem_xmp_upper) {
+            candidates.push(stem_xmp_upper);
+        }
+    }
+
+    if candidates.is_empty() {
+        return None;
+    }
+
+    if candidates.len() == 1 {
+        return Some(candidates.remove(0));
+    }
+
+    // Multiple candidates found: return the one with the newest mtime
+    candidates
+        .into_iter()
+        .max_by_key(|p| {
+            fs::metadata(p)
+                .and_then(|m| m.modified())
+                .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+        })
+}
+
+/// Determines the canonical path to write an XMP sidecar.
+pub fn get_xmp_write_path(original_path: &Path) -> PathBuf {
+    if let Some(existing) = find_existing_xmp_path(original_path) {
+        return existing;
+    }
+
+    let is_raw = crate::metadata_resolver::is_raw_path(original_path);
+    if !is_raw {
+        // Non-RAW raster photos (e.g. .jpg, .heic) write to <path>.xmp to avoid stem collision
+        return PathBuf::from(format!("{}.xmp", original_path.to_string_lossy()));
+    }
+
+    // For RAW files, check if a companion raster file with the same stem exists in the same folder
+    if let Some(parent) = original_path.parent() {
+        let stem = original_path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+        if !stem.is_empty() {
+            for raster_ext in &["jpg", "jpeg", "heic", "hif", "png"] {
+                let companion = parent.join(format!("{}.{}", stem, raster_ext));
+                if companion.is_file() {
+                    return PathBuf::from(format!("{}.xmp", original_path.to_string_lossy()));
+                }
+            }
+        }
+    }
+
+    // Standard Lightroom style: <stem>.xmp
+    original_path.with_extension("xmp")
+}
+
+/// Reads GPS coordinates from the XMP sidecar if present.
+pub fn read_xmp_gps(original_path: &Path) -> Option<(Option<f64>, Option<f64>, Option<f64>)> {
+    let xmp_path = find_existing_xmp_path(original_path)?;
+    let contents = fs::read_to_string(&xmp_path).ok()?;
+    read_xmp_gps_from_str(&contents)
+}
+
+/// Non-destructively patches or creates an XMP sidecar for `original_path`.
+pub fn write_sidecar_xmp(original_path: &Path, state: &CullingState) -> anyhow::Result<()> {
+    let target_path = get_xmp_write_path(original_path);
+    write_sidecar_xmp_to_path(&target_path, state)
+}
+
+/// Non-destructively patches or creates an XMP sidecar at `xmp_path`.
+pub fn write_sidecar_xmp_to_path(xmp_path: &Path, state: &CullingState) -> anyhow::Result<()> {
+    let rating_val = if state.flag == Some(-1) && state.rating == 0 {
+        "-1".to_string()
+    } else {
+        state.rating.to_string()
+    };
+
+    let xml = if xmp_path.is_file() {
+        let existing = fs::read_to_string(xmp_path)?;
+        patch_xmp_xml(&existing, state, &rating_val)?
+    } else {
+        generate_fresh_xmp(state, &rating_val)
+    };
+
+    atomic_write_file(xmp_path, &xml)
+}
+
+/// Atomically updates or clears GPS coordinates in the XMP sidecar.
+pub fn write_xmp_gps(
+    original_path: &Path,
+    latitude: Option<f64>,
+    longitude: Option<f64>,
+    altitude: Option<f64>,
+) -> anyhow::Result<()> {
+    let target_path = get_xmp_write_path(original_path);
+    let xml = if target_path.is_file() {
+        let existing = fs::read_to_string(&target_path)?;
+        patch_xmp_gps(&existing, latitude, longitude, altitude)?
+    } else {
+        let state = CullingState::default();
+        let base_xml = generate_fresh_xmp(&state, "0");
+        patch_xmp_gps(&base_xml, latitude, longitude, altitude)?
+    };
+
+    atomic_write_file(&target_path, &xml)
+}
+
+fn atomic_write_file(target_path: &Path, content: &str) -> anyhow::Result<()> {
+    let parent = target_path.parent().unwrap_or_else(|| Path::new("."));
+    let pid = std::process::id();
+    let thread_id = std::thread::current().id();
+    let file_stem = target_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("sidecar");
+    let tmp_path = parent.join(format!(".{}.tmp.{:?}.{}", file_stem, thread_id, pid));
+
+    if let Err(e) = fs::write(&tmp_path, content) {
+        let _ = fs::remove_file(&tmp_path);
+        return Err(e.into());
+    }
+
+    if let Err(e) = fs::rename(&tmp_path, target_path) {
+        let _ = fs::remove_file(&tmp_path);
+        return Err(e.into());
+    }
+
+    Ok(())
+}
+
+fn patch_xmp_xml(existing: &str, state: &CullingState, rating_val: &str) -> anyhow::Result<String> {
+    let mut xml = existing.to_string();
+
+    // 1. Ensure required namespaces are declared if <rdf:Description is present
+    if xml.contains("<rdf:Description") {
+        if !xml.contains("xmlns:xmp=") && !xml.contains("xmlns:xmp\t") {
+            xml = xml.replacen("<rdf:Description", "<rdf:Description\n   xmlns:xmp=\"http://ns.adobe.com/xap/1.0/\"", 1);
+        }
+        if !xml.contains("xmlns:dc=") && !xml.contains("xmlns:dc\t") {
+            xml = xml.replacen("<rdf:Description", "<rdf:Description\n   xmlns:dc=\"http://purl.org/dc/elements/1.1/\"", 1);
+        }
+        if !xml.contains("xmlns:tiff=") && !xml.contains("xmlns:tiff\t") {
+            xml = xml.replacen("<rdf:Description", "<rdf:Description\n   xmlns:tiff=\"http://ns.adobe.com/tiff/1.0/\"", 1);
+        }
+    }
+
+    // 2. Patch xmp:Rating
+    if RE_RATING_TAG.is_match(&xml) {
+        xml = RE_RATING_TAG
+            .replace(&xml, format!("<xmp:Rating>{}</xmp:Rating>", rating_val))
+            .to_string();
+    } else if RE_RATING_ATTR.is_match(&xml) {
+        xml = RE_RATING_ATTR
+            .replace(&xml, format!("xmp:Rating=\"{}\"", rating_val))
+            .to_string();
+    } else if xml.contains("<rdf:Description") {
+        xml = xml.replacen(
+            "<rdf:Description",
+            &format!("<rdf:Description\n   xmp:Rating=\"{}\"", rating_val),
+            1,
+        );
+    }
+
+    // 3. Patch xmp:Label
+    if let Some(ref col) = state.color {
+        let label_str = format_color_label_xmp(col);
+        if RE_LABEL_TAG.is_match(&xml) {
+            xml = RE_LABEL_TAG
+                .replace(&xml, format!("<xmp:Label>{}</xmp:Label>", label_str))
+                .to_string();
+        } else if RE_LABEL_ATTR.is_match(&xml) {
+            xml = RE_LABEL_ATTR
+                .replace(&xml, format!("xmp:Label=\"{}\"", label_str))
+                .to_string();
+        } else if xml.contains("<rdf:Description") {
+            xml = xml.replacen(
+                "<rdf:Description",
+                &format!("<rdf:Description\n   xmp:Label=\"{}\"", label_str),
+                1,
+            );
+        }
+    } else {
+        // Clear label if None
+        xml = RE_LABEL_TAG.replace_all(&xml, "").to_string();
+        xml = RE_LABEL_ATTR.replace_all(&xml, "").to_string();
+    }
+
+    // 4. Patch tiff:Orientation
+    if let Some(o) = state.orientation {
+        if RE_ORIENT_TAG.is_match(&xml) {
+            xml = RE_ORIENT_TAG
+                .replace(&xml, format!("<tiff:Orientation>{}</tiff:Orientation>", o))
+                .to_string();
+        } else if RE_ORIENT_ATTR.is_match(&xml) {
+            xml = RE_ORIENT_ATTR
+                .replace(&xml, format!("tiff:Orientation=\"{}\"", o))
+                .to_string();
+        } else if xml.contains("<rdf:Description") {
+            xml = xml.replacen(
+                "<rdf:Description",
+                &format!("<rdf:Description\n   tiff:Orientation=\"{}\"", o),
+                1,
+            );
+        }
+    } else {
+        xml = RE_ORIENT_TAG.replace_all(&xml, "").to_string();
+        xml = RE_ORIENT_ATTR.replace_all(&xml, "").to_string();
+    }
+
+    // 5. Patch <dc:subject> with tags and Pick/Reject flag adapter
+    let mut clean_tags: Vec<String> = state
+        .tags
+        .iter()
+        .filter(|t| *t != TAG_PICK && *t != TAG_REJECT)
+        .cloned()
+        .collect();
+
+    match state.flag {
+        Some(1) => clean_tags.push(TAG_PICK.to_string()),
+        Some(-1) => clean_tags.push(TAG_REJECT.to_string()),
+        _ => {}
+    }
+
+    let subject_block = build_subject_block(&clean_tags);
+
+    if RE_SUBJECT_BLOCK.is_match(&xml) {
+        xml = RE_SUBJECT_BLOCK.replace(&xml, &subject_block).to_string();
+    } else if xml.contains("</rdf:Description>") {
+        xml = xml.replacen("</rdf:Description>", &format!("{}\n </rdf:Description>", subject_block), 1);
+    } else if let Some(cap) = Regex::new(r"(?s)<rdf:Description\b([^>]*?)/>").unwrap().captures(&xml) {
+        let full = cap.get(0).unwrap().as_str();
+        let attrs = cap.get(1).unwrap().as_str();
+        let expanded = format!("<rdf:Description{}>\n{}\n </rdf:Description>", attrs, subject_block);
+        xml = xml.replace(full, &expanded);
+    }
+
+    Ok(xml)
+}
+
+fn patch_xmp_gps(
+    existing: &str,
+    latitude: Option<f64>,
+    longitude: Option<f64>,
+    altitude: Option<f64>,
+) -> anyhow::Result<String> {
+    let mut xml = existing.to_string();
+
+    // Remove existing GPS tags & attributes
+    xml = RE_GPS_LAT_TAG.replace_all(&xml, "").to_string();
+    xml = RE_GPS_LAT_ATTR.replace_all(&xml, "").to_string();
+    xml = RE_GPS_LAT_REF_TAG.replace_all(&xml, "").to_string();
+    xml = RE_GPS_LAT_REF_ATTR.replace_all(&xml, "").to_string();
+
+    xml = RE_GPS_LON_TAG.replace_all(&xml, "").to_string();
+    xml = RE_GPS_LON_ATTR.replace_all(&xml, "").to_string();
+    xml = RE_GPS_LON_REF_TAG.replace_all(&xml, "").to_string();
+    xml = RE_GPS_LON_REF_ATTR.replace_all(&xml, "").to_string();
+
+    xml = RE_GPS_ALT_TAG.replace_all(&xml, "").to_string();
+    xml = RE_GPS_ALT_ATTR.replace_all(&xml, "").to_string();
+    xml = RE_GPS_ALT_REF_TAG.replace_all(&xml, "").to_string();
+    xml = RE_GPS_ALT_REF_ATTR.replace_all(&xml, "").to_string();
+
+    if let (Some(lat), Some(lon)) = (latitude, longitude) {
+        if xml.contains("<rdf:Description") {
+            if !xml.contains("xmlns:exif=") && !xml.contains("xmlns:exif\t") {
+                xml = xml.replacen(
+                    "<rdf:Description",
+                    "<rdf:Description\n   xmlns:exif=\"http://ns.adobe.com/exif/1.0/\"",
+                    1,
+                );
+            }
+
+            let lat_ref = if lat >= 0.0 { "N" } else { "S" };
+            let lon_ref = if lon >= 0.0 { "E" } else { "W" };
+            let lat_str = format!("{:.6}{}", lat.abs(), lat_ref);
+            let lon_str = format!("{:.6}{}", lon.abs(), lon_ref);
+
+            let alt_attr = if let Some(alt) = altitude {
+                let alt_ref = if alt >= 0.0 { "0" } else { "1" };
+                format!(
+                    "\n   exif:GPSAltitude=\"{:.2}\"\n   exif:GPSAltitudeRef=\"{}\"",
+                    alt.abs(),
+                    alt_ref
+                )
+            } else {
+                String::new()
+            };
+
+            let gps_attrs = format!(
+                "\n   exif:GPSLatitude=\"{}\"\n   exif:GPSLatitudeRef=\"{}\"\n   exif:GPSLongitude=\"{}\"\n   exif:GPSLongitudeRef=\"{}\"{}",
+                lat_str, lat_ref, lon_str, lon_ref, alt_attr
+            );
+
+            xml = xml.replacen("<rdf:Description", &format!("<rdf:Description{}", gps_attrs), 1);
+        }
+    }
+
+    Ok(xml)
+}
+
+fn build_subject_block(tags: &[String]) -> String {
+    if tags.is_empty() {
+        return "  <dc:subject>\n    <rdf:Bag/>\n   </dc:subject>".to_string();
+    }
+    let mut s = String::from("  <dc:subject>\n    <rdf:Bag>\n");
+    for t in tags {
+        s.push_str(&format!("     <rdf:li>{}</rdf:li>\n", escape_xml(t)));
+    }
+    s.push_str("    </rdf:Bag>\n   </dc:subject>");
+    s
+}
+
+fn generate_fresh_xmp(state: &CullingState, rating_val: &str) -> String {
+    let label_attr = state
+        .color
+        .as_ref()
+        .map(|c| format!("\n   xmp:Label=\"{}\"", format_color_label_xmp(c)))
+        .unwrap_or_default();
+
+    let orient_attr = state
+        .orientation
+        .map(|o| format!("\n   tiff:Orientation=\"{}\"", o))
+        .unwrap_or_default();
+
+    let mut clean_tags: Vec<String> = state
+        .tags
+        .iter()
+        .filter(|t| *t != TAG_PICK && *t != TAG_REJECT)
+        .cloned()
+        .collect();
+
+    match state.flag {
+        Some(1) => clean_tags.push(TAG_PICK.to_string()),
+        Some(-1) => clean_tags.push(TAG_REJECT.to_string()),
+        _ => {}
+    }
+
+    let subject_block = build_subject_block(&clean_tags);
+
+    format!(
+        r#"<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="RapidReady">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+   xmlns:xmp="http://ns.adobe.com/xap/1.0/"
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:tiff="http://ns.adobe.com/tiff/1.0/"
+   xmlns:exif="http://ns.adobe.com/exif/1.0/"
+   xmp:Rating="{}"{}{}>
+ {}
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
+"#,
+        rating_val, label_attr, orient_attr, subject_block
+    )
+}

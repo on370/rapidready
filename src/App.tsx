@@ -33,6 +33,8 @@ function App() {
   useEffect(() => {
     setActiveView(startupView);
     useCollectionsStore.getState().selectCollection(null);
+    const sidecarMode = useSettingsStore.getState().sidecarMode;
+    invoke("set_sidecar_mode_cmd", { mode: sidecarMode || "rrdata" }).catch(console.error);
     invoke("show_main_window").catch(() => {});
   }, []);
 

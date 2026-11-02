@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { invoke } from '@tauri-apps/api/core';
 import { normalizePath } from '../utils/image';
 
 export interface ArchiveLocation {
@@ -38,7 +39,9 @@ interface SettingsState {
   shortcutPreset: 'lightroom' | 'darktable';
   enableFolderDeletion: boolean;
   allowDirectFolderDeletion: boolean;
+  sidecarMode: 'rrdata' | 'dual' | 'xmp';
   
+  setSidecarMode: (mode: 'rrdata' | 'dual' | 'xmp') => void;
   setAutoDetect: (val: boolean) => void;
   setDismissDefaultPicturesWarning: (val: boolean) => void;
   setVerifyCopy: (val: boolean) => void;
@@ -82,6 +85,7 @@ export const useSettingsStore = create<SettingsState>()(
       shortcutPreset: 'lightroom',
       enableFolderDeletion: false,
       allowDirectFolderDeletion: false,
+      sidecarMode: 'rrdata',
       presets: [
         {
           id: 'default-std',
@@ -103,6 +107,10 @@ export const useSettingsStore = create<SettingsState>()(
       setLastLibraryPath: (lastLibraryPath) => set({ lastLibraryPath }),
       setGpsMapProvider: (gpsMapProvider) => set({ gpsMapProvider }),
       setShortcutPreset: (shortcutPreset) => set({ shortcutPreset }),
+      setSidecarMode: (sidecarMode) => {
+        set({ sidecarMode });
+        invoke('set_sidecar_mode_cmd', { mode: sidecarMode }).catch(console.error);
+      },
       setEnableFolderDeletion: (enableFolderDeletion) => set((state) => ({
         enableFolderDeletion,
         allowDirectFolderDeletion: enableFolderDeletion ? state.allowDirectFolderDeletion : false,
@@ -139,6 +147,11 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: 'rapidready-settings',
+      onRehydrateStorage: () => (state) => {
+        if (state?.sidecarMode) {
+          invoke('set_sidecar_mode_cmd', { mode: state.sidecarMode }).catch(console.error);
+        }
+      },
     }
   )
 );

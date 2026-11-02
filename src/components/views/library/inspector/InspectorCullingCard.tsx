@@ -51,16 +51,20 @@ export function InspectorCullingCard({
     } else {
       const globalIndex = images.findIndex(img => img.path === activeImage.path);
       if (globalIndex !== -1) updateCullingState(globalIndex, { flag, rating });
-      invoke('set_culling_state', { 
+      invoke<import('../../../../stores/libraryStore').CullingState>('set_culling_state', { 
         path: activeImage.path, 
         flag, 
         rating, 
         color: activeImage.culling.color,
         tags: activeImage.culling.tags,
+      }).then((updatedState) => {
+        if (updatedState && globalIndex !== -1) {
+          updateCullingState(globalIndex, updatedState);
+        }
       }).catch((err) => {
         console.error('Failed to save culling state:', err);
         useToastStore.getState().showError(
-          t('errors.cullingSaveFailedDesc', { defaultValue: 'Die Sidecar-Datei (.rrdata) konnte nicht geschrieben werden.' }),
+          t('errors.cullingSaveFailedDesc', { defaultValue: 'Die Sidecar-Datei konnte nicht geschrieben werden.' }),
           t('errors.cullingSaveFailed', { defaultValue: 'Fehler beim Speichern' })
         );
       });
@@ -94,16 +98,20 @@ export function InspectorCullingCard({
     } else {
       const globalIndex = images.findIndex(img => img.path === activeImage.path);
       if (globalIndex !== -1) updateCullingState(globalIndex, { color });
-      invoke('set_culling_state', { 
+      invoke<import('../../../../stores/libraryStore').CullingState>('set_culling_state', { 
         path: activeImage.path, 
         flag: activeImage.culling.flag, 
         rating: activeImage.culling.rating, 
         color,
         tags: activeImage.culling.tags,
+      }).then((updatedState) => {
+        if (updatedState && globalIndex !== -1) {
+          updateCullingState(globalIndex, updatedState);
+        }
       }).catch((err) => {
         console.error('Failed to set color:', err);
         useToastStore.getState().showError(
-          t('errors.cullingSaveFailedDesc', { defaultValue: 'Die Sidecar-Datei (.rrdata) konnte nicht geschrieben werden.' }),
+          t('errors.cullingSaveFailedDesc', { defaultValue: 'Die Sidecar-Datei konnte nicht geschrieben werden.' }),
           t('errors.cullingSaveFailed', { defaultValue: 'Fehler beim Speichern' })
         );
       });
@@ -149,29 +157,33 @@ export function InspectorCullingCard({
           </h3>
         </div>
 
-        {isCollapsed && (
-          <div className="flex items-center gap-1.5">
-            {activeImage.culling.flag === 1 && (
-              <span className="w-4 h-4 rounded-full bg-success flex items-center justify-center">
-                <Check className="w-2.5 h-2.5 text-white" />
-              </span>
-            )}
-            {activeImage.culling.flag === -1 && (
-              <span className="w-4 h-4 rounded-full bg-danger flex items-center justify-center text-[10px] font-bold text-white">
-                X
-              </span>
-            )}
-            {activeImage.culling.rating > 0 && (
-              <span className="text-[10px] text-warning flex items-center gap-0.5 font-medium">
-                <Star className="w-3 h-3 fill-warning text-warning" />
-                {activeImage.culling.rating}
-              </span>
-            )}
-            {activeImage.culling.color && (
-              <span className={`w-2.5 h-2.5 rounded-full ${COLOR_PALETTE.find(c => c.id === activeImage.culling.color)?.bg || 'bg-accent'}`} />
-            )}
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <SidecarSourceBadge source={activeImage.culling.sidecar_source} />
+
+          {isCollapsed && (
+            <div className="flex items-center gap-1.5">
+              {activeImage.culling.flag === 1 && (
+                <span className="w-4 h-4 rounded-full bg-success flex items-center justify-center">
+                  <Check className="w-2.5 h-2.5 text-white" />
+                </span>
+              )}
+              {activeImage.culling.flag === -1 && (
+                <span className="w-4 h-4 rounded-full bg-danger flex items-center justify-center text-[10px] font-bold text-white">
+                  X
+                </span>
+              )}
+              {activeImage.culling.rating > 0 && (
+                <span className="text-[10px] text-warning flex items-center gap-0.5 font-medium">
+                  <Star className="w-3 h-3 fill-warning text-warning" />
+                  {activeImage.culling.rating}
+                </span>
+              )}
+              {activeImage.culling.color && (
+                <span className={`w-2.5 h-2.5 rounded-full ${COLOR_PALETTE.find(c => c.id === activeImage.culling.color)?.bg || 'bg-accent'}`} />
+              )}
+            </div>
+          )}
+        </div>
       </div>
       
       {!isCollapsed && (
@@ -272,5 +284,66 @@ export function InspectorCullingCard({
         </>
       )}
     </div>
+  );
+}
+
+function SidecarSourceBadge({ source }: { source?: 'rrdata' | 'xmp' | 'both_rrdata' | 'both_xmp' | null }) {
+  const { t } = useTranslation('library');
+
+  if (source === 'rrdata') {
+    return (
+      <span
+        title={t('inspector.sidecarRrdataTooltip', 'Bewertungen gespeichert in RapidRAW Sidecar (.rrdata)')}
+        className="px-1.5 py-0.5 rounded text-[10px] font-mono font-medium tracking-tight bg-amber-500/10 text-amber-400 border border-amber-500/30 select-none"
+      >
+        .rrdata
+      </span>
+    );
+  }
+
+  if (source === 'xmp') {
+    return (
+      <span
+        title={t('inspector.sidecarXmpTooltip', 'Bewertungen gespeichert in Adobe Standard Sidecar (.xmp)')}
+        className="px-1.5 py-0.5 rounded text-[10px] font-mono font-medium tracking-tight bg-sky-500/10 text-sky-400 border border-sky-500/30 select-none"
+      >
+        .xmp
+      </span>
+    );
+  }
+
+  if (source === 'both_rrdata') {
+    return (
+      <span
+        title={t('inspector.sidecarBothRrdataTooltip', 'Beide Sidecars vorhanden (.rrdata + .xmp). Führend (neueste Änderung): .rrdata')}
+        className="px-1.5 py-0.5 rounded text-[10px] font-mono tracking-tight bg-app-deepest border border-app-border flex items-center gap-1 select-none"
+      >
+        <span className="text-amber-400 font-semibold">• .rrdata</span>
+        <span className="text-txt-tertiary opacity-40">|</span>
+        <span className="text-txt-tertiary">.xmp</span>
+      </span>
+    );
+  }
+
+  if (source === 'both_xmp') {
+    return (
+      <span
+        title={t('inspector.sidecarBothXmpTooltip', 'Beide Sidecars vorhanden (.rrdata + .xmp). Führend (neueste Änderung): .xmp')}
+        className="px-1.5 py-0.5 rounded text-[10px] font-mono tracking-tight bg-app-deepest border border-app-border flex items-center gap-1 select-none"
+      >
+        <span className="text-txt-tertiary">.rrdata</span>
+        <span className="text-txt-tertiary opacity-40">|</span>
+        <span className="text-sky-400 font-semibold">• .xmp</span>
+      </span>
+    );
+  }
+
+  return (
+    <span
+      title={t('inspector.sidecarNoneTooltip', 'Noch keine Sidecar-Datei für dieses Bild angelegt')}
+      className="px-1.5 py-0.5 rounded text-[10px] font-medium tracking-tight text-txt-tertiary bg-app-bg/60 border border-app-border/40 select-none"
+    >
+      {t('inspector.sidecarNone', 'Keine Sidecar')}
+    </span>
   );
 }

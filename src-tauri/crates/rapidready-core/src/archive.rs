@@ -179,8 +179,54 @@ where
     let initial_count = existing_paths.map(|s| s.len()).unwrap_or(0);
     let mut files = Vec::new();
     let mut all_directories = Vec::new();
-    let mut known_sidecars: std::collections::HashMap<String, CullingState> = std::collections::HashMap::new();
+    let mut known_rrdata: std::collections::HashMap<String, (i64, CullingState)> = std::collections::HashMap::new();
+    let mut known_exact_xmp: std::collections::HashMap<String, (i64, CullingState)> = std::collections::HashMap::new();
+    let mut known_stem_xmp: std::collections::HashMap<String, (i64, CullingState)> = std::collections::HashMap::new();
     let supported_exts = SUPPORTED_EXTENSIONS;
+
+    let resolve_culling_in_memory = |path_norm: &str,
+                                     known_rr: &std::collections::HashMap<String, (i64, CullingState)>,
+                                     known_xmp_exact: &std::collections::HashMap<String, (i64, CullingState)>,
+                                     known_xmp_stem: &std::collections::HashMap<String, (i64, CullingState)>|
+     -> CullingState {
+        let rr_entry = known_rr.get(path_norm);
+        let xmp_entry = known_xmp_exact.get(path_norm).or_else(|| {
+            let p = std::path::Path::new(path_norm);
+            let parent = p.parent().map(|d| d.to_string_lossy().to_string()).unwrap_or_default();
+            let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+            let norm_stem = if parent.is_empty() {
+                stem.to_string()
+            } else {
+                format!("{}/{}", parent, stem)
+            };
+            known_xmp_stem.get(&norm_stem)
+        });
+
+        match (rr_entry, xmp_entry) {
+            (Some(&(rr_mtime, ref rr_st)), Some(&(xmp_mtime, ref xmp_st))) => {
+                if xmp_mtime > rr_mtime {
+                    let mut st = xmp_st.clone();
+                    st.sidecar_source = Some("both_xmp".to_string());
+                    st
+                } else {
+                    let mut st = rr_st.clone();
+                    st.sidecar_source = Some("both_rrdata".to_string());
+                    st
+                }
+            }
+            (Some(&(_rr_mtime, ref rr_st)), None) => {
+                let mut st = rr_st.clone();
+                st.sidecar_source = Some("rrdata".to_string());
+                st
+            }
+            (None, Some(&(_xmp_mtime, ref xmp_st))) => {
+                let mut st = xmp_st.clone();
+                st.sidecar_source = Some("xmp".to_string());
+                st
+            }
+            (None, None) => CullingState::default(),
+        }
+    };
 
     let mut current_chunk = Vec::with_capacity(100);
     let mut current_dir_chunk = Vec::new();
@@ -269,17 +315,74 @@ where
         if path.is_file() {
             if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
                 if ext.eq_ignore_ascii_case("rrdata") {
+                    let sc_mtime = entry
+                        .metadata()
+                        .ok()
+                        .and_then(|m| m.modified().ok())
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_secs() as i64)
+                        .unwrap_or(0);
                     if let Ok(contents) = std::fs::read_to_string(path) {
-                        let state = crate::culling::parse_sidecar_json(&contents);
+                        let mut state = crate::culling::parse_sidecar_json(&contents);
+                        state.sidecar_source = Some("rrdata".to_string());
                         let mut orig_str = path.to_string_lossy().into_owned();
                         if orig_str.ends_with(".rrdata") {
                             orig_str.truncate(orig_str.len() - 7);
                         }
                         let norm_orig = orig_str.replace('\\', "/");
+                        known_rrdata.insert(norm_orig.clone(), (sc_mtime, state));
                         if let Some(f) = current_chunk.iter_mut().find(|f| f.path.replace('\\', "/") == norm_orig) {
-                            f.culling = state.clone();
+                            f.culling = resolve_culling_in_memory(&norm_orig, &known_rrdata, &known_exact_xmp, &known_stem_xmp);
                         }
-                        known_sidecars.insert(norm_orig, state);
+                    }
+                    continue;
+                }
+
+                if ext.eq_ignore_ascii_case("xmp") {
+                    let sc_mtime = entry
+                        .metadata()
+                        .ok()
+                        .and_then(|m| m.modified().ok())
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_secs() as i64)
+                        .unwrap_or(0);
+                    if let Ok(contents) = std::fs::read_to_string(path) {
+                        let mut state = crate::culling::parse_sidecar_xmp(&contents);
+                        state.sidecar_source = Some("xmp".to_string());
+                        let p_str = path.to_string_lossy();
+                        let without_xmp = &p_str[..p_str.len() - 4];
+                        let candidate = Path::new(without_xmp);
+                        if candidate.extension().is_some() {
+                            // Exact companion style: DSC001.ARW.xmp -> DSC001.ARW
+                            let norm_exact = without_xmp.replace('\\', "/");
+                            known_exact_xmp.insert(norm_exact.clone(), (sc_mtime, state));
+                            if let Some(f) = current_chunk.iter_mut().find(|f| f.path.replace('\\', "/") == norm_exact) {
+                                f.culling = resolve_culling_in_memory(&norm_exact, &known_rrdata, &known_exact_xmp, &known_stem_xmp);
+                            }
+                        } else {
+                            // Stem style: DSC001.xmp -> parent/DSC001
+                            let parent = path.parent().map(|d| d.to_string_lossy().replace('\\', "/")).unwrap_or_default();
+                            let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+                            let norm_stem = if parent.is_empty() {
+                                stem.to_string()
+                            } else {
+                                format!("{}/{}", parent, stem)
+                            };
+                            known_stem_xmp.insert(norm_stem.clone(), (sc_mtime, state));
+                            for f in current_chunk.iter_mut() {
+                                let fp = Path::new(&f.path);
+                                let fp_parent = fp.parent().map(|d| d.to_string_lossy().replace('\\', "/")).unwrap_or_default();
+                                let fp_stem = fp.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+                                let fp_norm_stem = if fp_parent.is_empty() {
+                                    fp_stem.to_string()
+                                } else {
+                                    format!("{}/{}", fp_parent, fp_stem)
+                                };
+                                if fp_norm_stem == norm_stem {
+                                    f.culling = resolve_culling_in_memory(&f.path.replace('\\', "/"), &known_rrdata, &known_exact_xmp, &known_stem_xmp);
+                                }
+                            }
+                        }
                     }
                     continue;
                 }
@@ -304,7 +407,7 @@ where
                     let date = get_streaming_discovery_date(&name, metadata.as_ref());
                     let is_raw = crate::metadata_resolver::is_raw_path(path);
                     let is_video = crate::metadata_resolver::is_video_path(path);
-                    let culling = known_sidecars.remove(&path_norm).unwrap_or_default();
+                    let culling = resolve_culling_in_memory(&path_norm, &known_rrdata, &known_exact_xmp, &known_stem_xmp);
 
                     let item = ArchiveFile {
                         path: path.to_string_lossy().into_owned(),
@@ -379,6 +482,15 @@ where
     });
 
     if !is_cancelled {
+        // Resolve culling for any files that were discovered before their sidecar files were encountered
+        for f in files.iter_mut() {
+            if f.culling.sidecar_source.is_none() {
+                let resolved = resolve_culling_in_memory(&f.path.replace('\\', "/"), &known_rrdata, &known_exact_xmp, &known_stem_xmp);
+                if resolved.sidecar_source.is_some() {
+                    f.culling = resolved;
+                }
+            }
+        }
         files.par_sort_unstable_by(|a, b| a.path.cmp(&b.path));
         all_directories.sort_unstable();
         all_directories.dedup();

@@ -9,6 +9,7 @@ export interface CullingState {
   color: string | null;
   tags: string[];
   orientation?: number | null;
+  sidecar_source?: 'rrdata' | 'xmp' | 'both_rrdata' | 'both_xmp' | null;
 }
 
 export interface LibraryImage {
@@ -1180,6 +1181,7 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
       cur.flag === culling.flag &&
       cur.color === culling.color &&
       cur.orientation === culling.orientation &&
+      cur.sidecar_source === culling.sidecar_source &&
       JSON.stringify(cur.tags) === JSON.stringify(culling.tags)
     ) {
       return state;

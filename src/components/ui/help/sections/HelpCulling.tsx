@@ -181,6 +181,113 @@ export function HelpCulling() {
           </>
         )}
       </TipBox>
+
+      {/* Sidecar Coexistence & Adobe XMP Section */}
+      <div className="p-4 bg-app-card border border-app-border rounded-xl flex flex-col gap-3.5">
+        <h3 className="text-xs font-bold text-txt-primary uppercase tracking-wider flex items-center gap-2">
+          <Zap className="w-4 h-4 text-accent" />
+          {isEn
+            ? 'Sidecar Coexistence: RapidRAW (.rrdata) & Adobe XMP (.xmp)'
+            : 'Sidecar-Koexistenz: RapidRAW (.rrdata) & Adobe XMP (.xmp)'}
+        </h3>
+        <p className="text-xs text-txt-secondary leading-relaxed">
+          {isEn
+            ? 'RapidReady seamlessly bridges native ultra-fast JSON sidecars (.rrdata) and industry-standard Adobe XMP sidecars (.xmp) used by Lightroom, Capture One, DxO, and darktable.'
+            : 'RapidReady verbindet blitzschnelle native JSON-Sidecars (.rrdata) nahtlos mit den Branchenstandards für Adobe XMP-Sidecars (.xmp), wie sie von Lightroom, Capture One, DxO und darktable verwendet werden.'}
+        </p>
+
+        {/* 3 Modes */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 pt-1">
+          <div className="p-3 bg-app-panel border border-app-border rounded-lg flex flex-col gap-1">
+            <span className="font-semibold text-txt-primary text-xs font-mono">
+              RapidRAW (.rrdata)
+            </span>
+            <p className="text-[11px] text-txt-secondary leading-relaxed">
+              {isEn
+                ? 'Default mode. Writes lightweight .rrdata files for highest performance. Automatically falls back to reading .xmp if only XMP exists.'
+                : 'Standardmodus. Schreibt schlanke .rrdata Dateien für Höchstgeschwindigkeit. Liest automatisch vorhandene .xmp Dateien als Fallback.'}
+            </p>
+          </div>
+
+          <div className="p-3 bg-app-panel border border-app-border rounded-lg flex flex-col gap-1">
+            <span className="font-semibold text-txt-primary text-xs font-mono">
+              Dual-Sync (.rrdata + .xmp)
+            </span>
+            <p className="text-[11px] text-txt-secondary leading-relaxed">
+              {isEn
+                ? 'Hybrid mode. Writes culling, ratings, labels, and tags to both formats simultaneously for instant switching between RapidReady and Lightroom / darktable.'
+                : 'Hybridmodus. Schreibt Bewertungen, Flags, Farblabels und Tags synchron in beide Formate für sofortigen Wechsel zwischen RapidReady und Lightroom / darktable.'}
+            </p>
+          </div>
+
+          <div className="p-3 bg-app-panel border border-app-border rounded-lg flex flex-col gap-1">
+            <span className="font-semibold text-txt-primary text-xs font-mono">
+              Standard XMP (.xmp)
+            </span>
+            <p className="text-[11px] text-txt-secondary leading-relaxed">
+              {isEn
+                ? 'Writes directly to Adobe-compliant .xmp sidecars while keeping any existing .rrdata updated in the background. Reads .rrdata as fallback.'
+                : 'Schreibt direkt in Adobe-konforme .xmp Sidecars und hält eventuell vorhandene .rrdata im Hintergrund synchron. Liest .rrdata als Fallback.'}
+            </p>
+          </div>
+        </div>
+
+        {/* SSoT & Badges */}
+        <div className="p-3 bg-app-deepest/60 border border-app-border/80 rounded-lg flex flex-col gap-2 text-xs">
+          <div className="font-semibold text-txt-primary flex items-center gap-1.5">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+            <span>
+              {isEn
+                ? 'Single Source of Truth (SSoT) & Inspector Badges'
+                : 'Single Source of Truth (SSoT) & Inspector-Badges'}
+            </span>
+          </div>
+          <p className="text-[11px] text-txt-secondary leading-relaxed">
+            {isEn
+              ? 'When both .rrdata and .xmp exist for a photo, RapidReady compares file modification timestamps (mtime): the newer file automatically wins as the Single Source of Truth. All Lightroom development sliders (crs:*) and darktable history are 100% preserved non-destructively.'
+              : 'Wenn für ein Foto sowohl .rrdata als auch .xmp existieren, vergleicht RapidReady die Änderungszeitpunkte (mtime): Die neuere Datei gewinnt automatisch als verbindliche Quelle. Alle Lightroom-Entwicklungseinstellungen (crs:*) und darktable-Verläufe bleiben zu 100% unberührt erhalten.'}
+          </p>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 font-mono text-[10px]">
+            <div className="p-2 bg-app-card border border-app-border rounded flex flex-col items-center gap-1 text-center">
+              <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                .rrdata
+              </span>
+              <span className="text-txt-tertiary text-[9px] font-sans">
+                {isEn ? 'Only .rrdata' : 'Nur .rrdata'}
+              </span>
+            </div>
+            <div className="p-2 bg-app-card border border-app-border rounded flex flex-col items-center gap-1 text-center">
+              <span className="px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/30">
+                .xmp
+              </span>
+              <span className="text-txt-tertiary text-[9px] font-sans">
+                {isEn ? 'Only .xmp' : 'Nur .xmp'}
+              </span>
+            </div>
+            <div className="p-2 bg-app-card border border-app-border rounded flex flex-col items-center gap-1 text-center">
+              <span className="px-1.5 py-0.5 rounded bg-app-deepest border border-app-border">
+                <span className="text-amber-400 font-semibold">• .rrdata</span>
+                <span className="text-txt-tertiary opacity-40"> | </span>
+                <span className="text-txt-tertiary">.xmp</span>
+              </span>
+              <span className="text-txt-tertiary text-[9px] font-sans">
+                {isEn ? 'Both (.rrdata newer)' : 'Beide (.rrdata neuer)'}
+              </span>
+            </div>
+            <div className="p-2 bg-app-card border border-app-border rounded flex flex-col items-center gap-1 text-center">
+              <span className="px-1.5 py-0.5 rounded bg-app-deepest border border-app-border">
+                <span className="text-txt-tertiary">.rrdata</span>
+                <span className="text-txt-tertiary opacity-40"> | </span>
+                <span className="text-sky-400 font-semibold">• .xmp</span>
+              </span>
+              <span className="text-txt-tertiary text-[9px] font-sans">
+                {isEn ? 'Both (.xmp newer)' : 'Beide (.xmp neuer)'}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

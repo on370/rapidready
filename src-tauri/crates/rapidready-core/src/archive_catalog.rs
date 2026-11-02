@@ -810,7 +810,24 @@ impl ArchiveCatalog {
                         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
                         .map(|d| d.as_secs() as i64);
                     if let Some(mt) = sc_mtime {
-                        sidecar_mtimes_on_disk.insert(norm_base, mt);
+                        let cur = sidecar_mtimes_on_disk.get(&norm_base).copied().unwrap_or(0);
+                        sidecar_mtimes_on_disk.insert(norm_base, cur.max(mt));
+                    }
+                    continue;
+                }
+
+                if path_str.to_lowercase().ends_with(".xmp") {
+                    let without_xmp = &path_str[..path_str.len() - 4];
+                    let norm_base = normalize_canonical_path(without_xmp);
+                    let sc_mtime = entry
+                        .metadata()
+                        .ok()
+                        .and_then(|m| m.modified().ok())
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_secs() as i64);
+                    if let Some(mt) = sc_mtime {
+                        let cur = sidecar_mtimes_on_disk.get(&norm_base).copied().unwrap_or(0);
+                        sidecar_mtimes_on_disk.insert(norm_base, cur.max(mt));
                     }
                     continue;
                 }
