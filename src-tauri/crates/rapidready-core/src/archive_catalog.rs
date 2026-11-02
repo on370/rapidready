@@ -22,6 +22,8 @@ pub struct ArchiveDeltaResult {
     pub updated: Vec<ArchiveFile>,
     pub removed: Vec<String>,
     pub new_dirs: Vec<String>,
+    #[serde(default)]
+    pub removed_dirs: Vec<String>,
 }
 
 static GLOBAL_ARCHIVE_CATALOG: OnceLock<Arc<ArchiveCatalog>> = OnceLock::new();
@@ -680,6 +682,7 @@ impl ArchiveCatalog {
                 updated: Vec::new(),
                 removed: Vec::new(),
                 new_dirs: Vec::new(),
+                removed_dirs: Vec::new(),
             });
         }
 
@@ -923,6 +926,7 @@ impl ArchiveCatalog {
                 updated: Vec::new(),
                 removed: Vec::new(),
                 new_dirs: Vec::new(),
+                removed_dirs: Vec::new(),
             });
         }
 
@@ -983,6 +987,7 @@ impl ArchiveCatalog {
             updated: updated_files,
             removed: removed_paths,
             new_dirs,
+            removed_dirs,
         })
     }
 }

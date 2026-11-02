@@ -268,17 +268,95 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
   removeFolder: (folderPath) => set((state) => {
     const norm = normalizeSlash(folderPath).toLowerCase();
     const prefix = norm + '/';
-    const next = new Set<string>();
-    let changed = false;
+
+    // 1. Filter discoveredFolders
+    const nextFolders = new Set<string>();
+    let foldersChanged = false;
     for (const f of state.discoveredFolders) {
       const fNorm = normalizeSlash(f).toLowerCase();
       if (fNorm === norm || fNorm.startsWith(prefix)) {
-        changed = true;
+        foldersChanged = true;
       } else {
-        next.add(f);
+        nextFolders.add(f);
       }
     }
-    return changed ? { discoveredFolders: next } : state;
+
+    // 1b. Filter selectedFolderPaths
+    const nextSelectedFolderPaths = new Set<string>();
+    let selectedFoldersChanged = false;
+    for (const f of state.selectedFolderPaths) {
+      const fNorm = normalizeSlash(f).toLowerCase();
+      if (fNorm === norm || fNorm.startsWith(prefix)) {
+        selectedFoldersChanged = true;
+      } else {
+        nextSelectedFolderPaths.add(f);
+      }
+    }
+
+    // 1c. Filter stagedDeleteFolderPaths
+    const nextStagedDelete = new Set<string>();
+    let stagedChanged = false;
+    for (const f of state.stagedDeleteFolderPaths) {
+      const fNorm = normalizeSlash(f).toLowerCase();
+      if (fNorm === norm || fNorm.startsWith(prefix)) {
+        stagedChanged = true;
+      } else {
+        nextStagedDelete.add(f);
+      }
+    }
+
+    // 2. activeFolderPath reset if it was or was inside this folder
+    let nextActiveFolderPath = state.activeFolderPath;
+    if (state.activeFolderPath) {
+      const activeNorm = normalizeSlash(state.activeFolderPath).toLowerCase();
+      if (activeNorm === norm || activeNorm.startsWith(prefix)) {
+        nextActiveFolderPath = state.rootPath;
+      }
+    }
+
+    // 3. Remove images under this folder
+    const nextImages = state.images.filter(img => {
+      const imgNorm = normalizeSlash(img.path).toLowerCase();
+      return !imgNorm.startsWith(prefix);
+    });
+
+    const imagesRemoved = nextImages.length !== state.images.length;
+
+    let nextMap = state.imageIndexMap;
+    let nextSelected = state.selectedPaths;
+    let nextActiveIndex = state.activeImageIndex;
+
+    if (imagesRemoved) {
+      nextMap = new Map<string, number>();
+      for (let i = 0; i < nextImages.length; i++) {
+        nextMap.set(normalizePath(nextImages[i].path), i);
+      }
+      nextSelected = new Set<string>();
+      for (const p of state.selectedPaths) {
+        const pNorm = normalizeSlash(p).toLowerCase();
+        if (!pNorm.startsWith(prefix)) {
+          nextSelected.add(p);
+        }
+      }
+      nextActiveIndex = state.activeImageIndex >= nextImages.length
+        ? Math.max(0, nextImages.length - 1)
+        : state.activeImageIndex;
+    }
+
+    if (!foldersChanged && !selectedFoldersChanged && !stagedChanged && !imagesRemoved && nextActiveFolderPath === state.activeFolderPath) {
+      return state;
+    }
+
+    return {
+      discoveredFolders: nextFolders,
+      selectedFolderPaths: nextSelectedFolderPaths,
+      stagedDeleteFolderPaths: nextStagedDelete,
+      activeFolderPath: nextActiveFolderPath,
+      images: nextImages,
+      imageIndexMap: nextMap,
+      selectedPaths: nextSelected,
+      activeImageIndex: nextActiveIndex,
+    };
   }),
   stagedDeleteFolderPaths: new Set<string>(),
   stageFoldersForDeletion: (folderPaths) => set((state) => {
@@ -445,14 +523,19 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
     if (!folder) return;
 
     const normFolder = normalizePath(folder);
+    const folderPrefix = normFolder + '/';
+
     const knownPaths = get().images
       .filter(img => {
         const p = normalizePath(img.path);
-        const lastSlash = p.lastIndexOf('/');
-        const dir = lastSlash >= 0 ? p.substring(0, lastSlash) : '';
-        return dir === normFolder;
+        return p.startsWith(folderPrefix);
       })
       .map(img => img.path);
+
+    const knownDirs = Array.from(get().discoveredFolders).filter(f => {
+      const fNorm = normalizePath(f);
+      return fNorm === normFolder || fNorm.startsWith(folderPrefix);
+    });
 
     try {
       const diff = await invoke<{
@@ -460,12 +543,19 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
         added: LibraryImage[];
         removed: string[];
         new_dirs: string[];
+        removed_dirs?: string[];
       }>('reconcile_folder', {
         folderPath: folder,
         knownPaths,
+        knownDirs,
       });
 
       if (diff) {
+        if (diff.removed_dirs && diff.removed_dirs.length > 0) {
+          for (const d of diff.removed_dirs) {
+            get().removeFolder(d);
+          }
+        }
         if ((diff.added && diff.added.length > 0) || (diff.new_dirs && diff.new_dirs.length > 0)) {
           get().addImages(diff.added || [], diff.new_dirs || []);
         }
@@ -579,12 +669,18 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
         updated: LibraryImage[];
         removed: string[];
         new_dirs: string[];
+        removed_dirs?: string[];
       }>('reconcile_archive_delta', {
         path: root,
         scanId,
       });
 
       if (delta) {
+        if (delta.removed_dirs && delta.removed_dirs.length > 0) {
+          for (const d of delta.removed_dirs) {
+            get().removeFolder(d);
+          }
+        }
         if ((delta.added && delta.added.length > 0) || (delta.new_dirs && delta.new_dirs.length > 0)) {
           get().addImages(delta.added || [], delta.new_dirs || []);
         }

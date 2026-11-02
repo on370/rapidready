@@ -2,7 +2,23 @@ use crate::culling::{CullingState, TAG_PICK, TAG_REJECT};
 use regex::Regex;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::LazyLock;
+
+static XMP_NAMING_MODE: AtomicU8 = AtomicU8::new(0); // 0 = standard (<stem>.xmp), 1 = darktable (<file>.<ext>.xmp)
+
+pub fn set_xmp_naming_mode(mode: &str) {
+    let val = if mode.eq_ignore_ascii_case("darktable") { 1 } else { 0 };
+    XMP_NAMING_MODE.store(val, Ordering::SeqCst);
+}
+
+pub fn get_xmp_naming_mode() -> &'static str {
+    if XMP_NAMING_MODE.load(Ordering::SeqCst) == 1 {
+        "darktable"
+    } else {
+        "standard"
+    }
+}
 
 static RE_RATING_TAG: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?s)<xmp:Rating>([^<]*)</xmp:Rating>").unwrap());
@@ -29,6 +45,16 @@ static RE_PICK_ATTR: LazyLock<Regex> = LazyLock::new(|| {
 });
 static RE_REJECT_ATTR: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"(?:xmpDM:good="false"|xmpDM:pick="-1")"#).unwrap());
+
+static RE_DARKTABLE_COLORLABELS: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?s)<darktable:colorlabels\b[^>]*>.*?<rdf:li\b[^>]*>\s*([0-4])\s*</rdf:li>.*?</darktable:colorlabels>").unwrap()
+});
+static RE_DARKTABLE_COLORLABELS_BLOCK: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?s)<darktable:colorlabels\b[^>]*>.*?</darktable:colorlabels>").unwrap()
+});
+static RE_LR_HIERARCHICAL_SUBJECT_BLOCK: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?s)<lr:hierarchicalSubject\b[^>]*>.*?</lr:hierarchicalSubject>").unwrap()
+});
 
 // GPS Regexes
 static RE_GPS_LAT_TAG: LazyLock<Regex> =
@@ -138,6 +164,21 @@ pub fn parse_sidecar_xmp(contents: &str) -> CullingState {
 
     if let Some(lbl) = raw_label {
         state.color = normalize_color_label(lbl);
+    }
+
+    if state.color.is_none() {
+        if let Some(dt_cap) = RE_DARKTABLE_COLORLABELS.captures(contents) {
+            if let Some(num_str) = dt_cap.get(1).map(|m| m.as_str().trim()) {
+                state.color = match num_str {
+                    "0" => Some("red".to_string()),
+                    "1" => Some("yellow".to_string()),
+                    "2" => Some("green".to_string()),
+                    "3" => Some("blue".to_string()),
+                    "4" => Some("purple".to_string()),
+                    _ => None,
+                };
+            }
+        }
     }
 
     // 3. Orientation
@@ -386,8 +427,8 @@ pub fn get_xmp_write_path(original_path: &Path) -> PathBuf {
     }
 
     let is_raw = crate::metadata_resolver::is_raw_path(original_path);
-    if !is_raw {
-        // Non-RAW raster photos (e.g. .jpg, .heic) write to <path>.xmp to avoid stem collision
+    if get_xmp_naming_mode() == "darktable" || !is_raw {
+        // darktable style or non-RAW raster photos (e.g. .jpg, .heic) write to <path>.xmp to avoid stem collision
         return PathBuf::from(format!("{}.xmp", original_path.to_string_lossy()));
     }
 
@@ -496,6 +537,12 @@ fn patch_xmp_xml(existing: &str, state: &CullingState, rating_val: &str) -> anyh
         if !xml.contains("xmlns:tiff=") && !xml.contains("xmlns:tiff\t") {
             xml = xml.replacen("<rdf:Description", "<rdf:Description\n   xmlns:tiff=\"http://ns.adobe.com/tiff/1.0/\"", 1);
         }
+        if !xml.contains("xmlns:lr=") && !xml.contains("xmlns:lr\t") {
+            xml = xml.replacen("<rdf:Description", "<rdf:Description\n   xmlns:lr=\"http://ns.adobe.com/lightroom/1.0/\"", 1);
+        }
+        if !xml.contains("xmlns:darktable=") && !xml.contains("xmlns:darktable\t") {
+            xml = xml.replacen("<rdf:Description", "<rdf:Description\n   xmlns:darktable=\"http://darktable.sf.net/\"", 1);
+        }
     }
 
     // 2. Patch xmp:Rating
@@ -515,7 +562,7 @@ fn patch_xmp_xml(existing: &str, state: &CullingState, rating_val: &str) -> anyh
         );
     }
 
-    // 3. Patch xmp:Label
+    // 3. Patch xmp:Label & darktable:colorlabels
     if let Some(ref col) = state.color {
         let label_str = format_color_label_xmp(col);
         if RE_LABEL_TAG.is_match(&xml) {
@@ -533,10 +580,22 @@ fn patch_xmp_xml(existing: &str, state: &CullingState, rating_val: &str) -> anyh
                 1,
             );
         }
+
+        if let Some(dt_idx) = color_to_darktable_index(col) {
+            let dt_block = build_darktable_colorlabels_block(dt_idx);
+            if RE_DARKTABLE_COLORLABELS_BLOCK.is_match(&xml) {
+                xml = RE_DARKTABLE_COLORLABELS_BLOCK.replace(&xml, &dt_block).to_string();
+            } else if xml.contains("</rdf:Description>") {
+                xml = xml.replacen("</rdf:Description>", &format!("{}\n </rdf:Description>", dt_block), 1);
+            }
+        } else {
+            xml = RE_DARKTABLE_COLORLABELS_BLOCK.replace_all(&xml, "").to_string();
+        }
     } else {
         // Clear label if None
         xml = RE_LABEL_TAG.replace_all(&xml, "").to_string();
         xml = RE_LABEL_ATTR.replace_all(&xml, "").to_string();
+        xml = RE_DARKTABLE_COLORLABELS_BLOCK.replace_all(&xml, "").to_string();
     }
 
     // 4. Patch tiff:Orientation
@@ -561,7 +620,7 @@ fn patch_xmp_xml(existing: &str, state: &CullingState, rating_val: &str) -> anyh
         xml = RE_ORIENT_ATTR.replace_all(&xml, "").to_string();
     }
 
-    // 5. Patch <dc:subject> with tags and Pick/Reject flag adapter
+    // 5. Patch <dc:subject> and <lr:hierarchicalSubject> with tags and Pick/Reject flag adapter
     let mut clean_tags: Vec<String> = state
         .tags
         .iter()
@@ -576,6 +635,7 @@ fn patch_xmp_xml(existing: &str, state: &CullingState, rating_val: &str) -> anyh
     }
 
     let subject_block = build_subject_block(&clean_tags);
+    let hierarchical_block = build_hierarchical_subject_block(&clean_tags);
 
     if RE_SUBJECT_BLOCK.is_match(&xml) {
         xml = RE_SUBJECT_BLOCK.replace(&xml, &subject_block).to_string();
@@ -586,6 +646,12 @@ fn patch_xmp_xml(existing: &str, state: &CullingState, rating_val: &str) -> anyh
         let attrs = cap.get(1).unwrap().as_str();
         let expanded = format!("<rdf:Description{}>\n{}\n </rdf:Description>", attrs, subject_block);
         xml = xml.replace(full, &expanded);
+    }
+
+    if RE_LR_HIERARCHICAL_SUBJECT_BLOCK.is_match(&xml) {
+        xml = RE_LR_HIERARCHICAL_SUBJECT_BLOCK.replace(&xml, &hierarchical_block).to_string();
+    } else if xml.contains("</rdf:Description>") {
+        xml = xml.replacen("</rdf:Description>", &format!("{}\n </rdf:Description>", hierarchical_block), 1);
     }
 
     Ok(xml)
@@ -653,6 +719,36 @@ fn patch_xmp_gps(
     Ok(xml)
 }
 
+fn color_to_darktable_index(col: &str) -> Option<u8> {
+    match col.to_lowercase().as_str() {
+        "red" => Some(0),
+        "yellow" => Some(1),
+        "green" => Some(2),
+        "blue" => Some(3),
+        "purple" => Some(4),
+        _ => None,
+    }
+}
+
+fn build_darktable_colorlabels_block(idx: u8) -> String {
+    format!(
+        "  <darktable:colorlabels>\n   <rdf:Seq>\n    <rdf:li>{}</rdf:li>\n   </rdf:Seq>\n  </darktable:colorlabels>",
+        idx
+    )
+}
+
+fn build_hierarchical_subject_block(tags: &[String]) -> String {
+    if tags.is_empty() {
+        return "  <lr:hierarchicalSubject>\n    <rdf:Bag/>\n   </lr:hierarchicalSubject>".to_string();
+    }
+    let mut s = String::from("  <lr:hierarchicalSubject>\n    <rdf:Bag>\n");
+    for t in tags {
+        s.push_str(&format!("     <rdf:li>{}</rdf:li>\n", escape_xml(t)));
+    }
+    s.push_str("    </rdf:Bag>\n   </lr:hierarchicalSubject>");
+    s
+}
+
 fn build_subject_block(tags: &[String]) -> String {
     if tags.is_empty() {
         return "  <dc:subject>\n    <rdf:Bag/>\n   </dc:subject>".to_string();
@@ -670,6 +766,13 @@ fn generate_fresh_xmp(state: &CullingState, rating_val: &str) -> String {
         .color
         .as_ref()
         .map(|c| format!("\n   xmp:Label=\"{}\"", format_color_label_xmp(c)))
+        .unwrap_or_default();
+
+    let dt_block = state
+        .color
+        .as_ref()
+        .and_then(|c| color_to_darktable_index(c))
+        .map(|idx| format!("\n{}", build_darktable_colorlabels_block(idx)))
         .unwrap_or_default();
 
     let orient_attr = state
@@ -691,6 +794,7 @@ fn generate_fresh_xmp(state: &CullingState, rating_val: &str) -> String {
     }
 
     let subject_block = build_subject_block(&clean_tags);
+    let hierarchical_block = build_hierarchical_subject_block(&clean_tags);
 
     format!(
         r#"<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="RapidReady">
@@ -700,12 +804,87 @@ fn generate_fresh_xmp(state: &CullingState, rating_val: &str) -> String {
    xmlns:dc="http://purl.org/dc/elements/1.1/"
    xmlns:tiff="http://ns.adobe.com/tiff/1.0/"
    xmlns:exif="http://ns.adobe.com/exif/1.0/"
+   xmlns:lr="http://ns.adobe.com/lightroom/1.0/"
+   xmlns:darktable="http://darktable.sf.net/"
    xmp:Rating="{}"{}{}>
  {}
+ {}{}
   </rdf:Description>
  </rdf:RDF>
 </x:xmpmeta>
 "#,
-        rating_val, label_attr, orient_attr, subject_block
+        rating_val, label_attr, orient_attr, subject_block, hierarchical_block, dt_block
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_darktable_colorlabels_parsing() {
+        let xmp_data = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+   xmlns:xmp="http://ns.adobe.com/xap/1.0/"
+   xmlns:darktable="http://darktable.sf.net/">
+   <xmp:Rating>3</xmp:Rating>
+   <darktable:colorlabels>
+    <rdf:Seq>
+     <rdf:li>2</rdf:li>
+    </rdf:Seq>
+   </darktable:colorlabels>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>"#;
+
+        let state = parse_sidecar_xmp(xmp_data);
+        assert_eq!(state.rating, 3);
+        assert_eq!(state.color, Some("green".to_string()));
+    }
+
+    #[test]
+    fn test_patch_darktable_and_lr_subject() {
+        let base_xmp = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+   xmlns:xmp="http://ns.adobe.com/xap/1.0/">
+   <xmp:Rating>0</xmp:Rating>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>"#;
+
+        let mut state = CullingState::default();
+        state.rating = 4;
+        state.color = Some("red".to_string());
+        state.flag = Some(1);
+        state.tags = vec!["landscape".to_string()];
+
+        let patched = patch_xmp_xml(base_xmp, &state, "4").unwrap();
+        assert!(patched.contains("xmlns:darktable=\"http://darktable.sf.net/\""));
+        assert!(patched.contains("xmlns:lr=\"http://ns.adobe.com/lightroom/1.0/\""));
+        assert!(patched.contains("<xmp:Label>Red</xmp:Label>") || patched.contains("xmp:Label=\"Red\""));
+        assert!(patched.contains("<darktable:colorlabels>"));
+        assert!(patched.contains("<rdf:li>0</rdf:li>"));
+        assert!(patched.contains("<dc:subject>"));
+        assert!(patched.contains("<lr:hierarchicalSubject>"));
+        assert!(patched.contains(TAG_PICK));
+        assert!(patched.contains("landscape"));
+
+        // Now parse it back
+        let reloaded = parse_sidecar_xmp(&patched);
+        assert_eq!(reloaded.rating, 4);
+        assert_eq!(reloaded.color, Some("red".to_string()));
+        assert_eq!(reloaded.flag, Some(1));
+        assert!(reloaded.tags.contains(&"landscape".to_string()));
+    }
+
+    #[test]
+    fn test_xmp_naming_mode() {
+        set_xmp_naming_mode("standard");
+        assert_eq!(get_xmp_naming_mode(), "standard");
+        set_xmp_naming_mode("darktable");
+        assert_eq!(get_xmp_naming_mode(), "darktable");
+        set_xmp_naming_mode("standard");
+    }
 }

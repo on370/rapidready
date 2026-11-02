@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
-import { SectionHeading, Kbd, TipBox, FeatureCard } from '../HelpShared';
-import { Zap, CheckCircle2, XCircle, Flag, ZoomIn, Eye, ArrowRightToLine, Maximize2 } from 'lucide-react';
+import { SectionHeading, Kbd, TipBox, InfoBox, FeatureCard } from '../HelpShared';
+import { Zap, CheckCircle2, XCircle, Flag, ZoomIn, Eye, ArrowRightToLine, Maximize2, FileCode } from 'lucide-react';
 
 export function HelpCulling() {
   const { i18n } = useTranslation();
@@ -287,7 +287,87 @@ export function HelpCulling() {
             </div>
           </div>
         </div>
+
+        {/* Naming Conventions */}
+        <div className="p-3 bg-app-deepest/60 border border-app-border/80 rounded-lg flex flex-col gap-2 text-xs">
+          <div className="font-semibold text-txt-primary flex items-center gap-1.5">
+            <FileCode className="w-3.5 h-3.5 text-accent" />
+            <span>
+              {isEn
+                ? 'XMP Naming Conventions: Standard (STD) vs. darktable (DT)'
+                : 'XMP-Namenskonventionen: Standard (STD) vs. darktable (DT)'}
+            </span>
+          </div>
+          <p className="text-[11px] text-txt-secondary leading-relaxed">
+            {isEn
+              ? 'In Settings, you can configure how newly created XMP sidecars are named:'
+              : 'In den Einstellungen kannst Du festlegen, wie neu erstellte XMP-Dateien benannt werden:'}
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+            <div className="p-2.5 bg-app-card border border-app-border rounded-lg space-y-1">
+              <span className="font-semibold text-txt-primary font-mono text-[10px]">
+                Standard (STD): &lt;stem&gt;.xmp
+              </span>
+              <p className="text-txt-secondary text-[11px]">
+                {isEn
+                  ? 'Adobe Lightroom Classic, Camera Raw, and Bridge standard (e.g. DSC001.xmp). For non-RAW photos or RAW+JPG pairs with the same stem, RapidReady automatically creates <file>.<ext>.xmp to prevent accidental overwrites.'
+                  : 'Standard für Adobe Lightroom Classic, Camera Raw und Bridge (z.B. DSC001.xmp). Bei Nicht-RAWs oder RAW+JPG-Paaren mit gleichem Stamm erzeugt RapidReady automatisch <Datei>.<Ext>.xmp, um Kollisionen zu verhindern.'}
+              </p>
+            </div>
+            <div className="p-2.5 bg-app-card border border-app-border rounded-lg space-y-1">
+              <span className="font-semibold text-txt-primary font-mono text-[10px]">
+                darktable (DT): &lt;file&gt;.&lt;ext&gt;.xmp
+              </span>
+              <p className="text-txt-secondary text-[11px]">
+                {isEn
+                  ? 'darktable standard (e.g. DSC001.ARW.xmp). Dedicated sidecar file per file extension, allowing fully independent development of RAW and companion raster images.'
+                  : 'Standard für darktable (z.B. DSC001.ARW.xmp). Eigene Begleitdatei pro Dateierweiterung, was die getrennte Entwicklung von RAW und Begleit-JPEG ermöglicht.'}
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
+
+      {/* darktable InfoBox */}
+      <InfoBox
+        title={
+          isEn
+            ? 'Important Note for darktable Users (library.db & XMP Sync)'
+            : 'Wichtiger Hinweis für darktable-Anwender (library.db & XMP-Sync)'
+        }
+      >
+        {isEn ? (
+          <>
+            darktable caches image metadata in its internal SQLite database (<code>library.db</code>). If you change ratings, tags, or color labels in RapidReady for photos already imported into darktable:
+            <ul className="list-disc list-inside mt-1.5 space-y-1 text-[11px]">
+              <li>
+                <strong>Automatic check on startup:</strong> In darktable, go to <em>Settings &gt; Storage</em> and enable <em>&quot;Look for updated xmp files on startup&quot;</em>.
+              </li>
+              <li>
+                <strong>Manual reload:</strong> In the Lighttable view, select the images and choose <em>History stack &gt; Load sidecar file</em> or <em>Selected images &gt; Refresh XMP</em>.
+              </li>
+              <li>
+                RapidReady fully supports darktable&apos;s native color labels (<code>&lt;darktable:colorlabels&gt;</code>) and hierarchical tags (<code>&lt;lr:hierarchicalSubject&gt;</code>) bidirectionally.
+              </li>
+            </ul>
+          </>
+        ) : (
+          <>
+            darktable puffert Bild-Metadaten in seiner internen SQLite-Datenbank (<code>library.db</code>). Wenn Du in RapidReady Bewertungen, Tags oder Farblabels für Fotos änderst, die bereits in darktable importiert sind:
+            <ul className="list-disc list-inside mt-1.5 space-y-1 text-[11px]">
+              <li>
+                <strong>Automatischer Startabgleich:</strong> Aktiviere in darktable unter <em>Einstellungen &gt; Speicher</em> die Option <em>„Nach aktualisierten XMP-Dateien beim Start suchen“</em>.
+              </li>
+              <li>
+                <strong>Manuelles Neuladen:</strong> Wähle im Leuchttisch die Fotos aus und klicke auf <em>Verlaufsstapel &gt; Begleitdatei laden</em> oder <em>Ausgewählte Bilder &gt; XMP-Dateien aktualisieren</em>.
+              </li>
+              <li>
+                RapidReady unterstützt darktables Farbetiketten-Schema (<code>&lt;darktable:colorlabels&gt;</code>) und hierarchische Stichwörter (<code>&lt;lr:hierarchicalSubject&gt;</code>) vollumfänglich und bidirektional.
+              </li>
+            </ul>
+          </>
+        )}
+      </InfoBox>
     </div>
   );
 }

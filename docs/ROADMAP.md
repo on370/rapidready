@@ -367,12 +367,12 @@
   - [x] **1. Non-Destructive Read-Modify-Write Engine (`.rrdata` & `.xmp`):**
     - **Dual XMP Naming Support:**
       - Reads both `<filename>.<ext>.xmp` (e.g. `DSC0123.ARW.xmp`, darktable/DigiKam standard) and `<stem>.xmp` (e.g. `DSC0123.xmp`, Lightroom/Capture One standard).
-      - When updating an existing `.xmp`, writes back to whichever file already exists on disk; when creating a new `.xmp`, uses `<filename>.<ext>.xmp` if `shortcutPreset === 'darktable'` (or darktable naming preference) and `<stem>.xmp` otherwise (or `<filename>.<ext>.xmp` if a companion JPEG with the same stem exists in the folder to avoid collisions).
+      - When updating an existing `.xmp`, writes back to whichever file already exists on disk; when creating a new `.xmp`, uses a dedicated 2-way XMP Naming Selector in Settings (`STD: <stem>.xmp` for Adobe/Capture One vs. `DT: <filename>.<ext>.xmp` for darktable/DigiKam, with automatic `<filename>.<ext>.xmp` collision protection when a companion JPEG with the same stem exists in the folder).
     - **Standardized XMP Field Mappings (In-Place Patching):**
       - **Ratings:** `xmp:Rating="0..5"` (attribute and/or element).
-      - **Color Labels:** `xmp:Label="Red|Yellow|Green|Blue|Purple"` (mapped bidirectionally to RapidReady's color keys `red`, `yellow`, `green`, `blue`, `purple`).
+      - **Color Labels:** `xmp:Label="Red|Yellow|Green|Blue|Purple"` plus bidirectional `<darktable:colorlabels>` (`0..4`) support for darktable compatibility.
       - **Picks & Rejects:** `xmpDM:good="true"` / `xmp:Rating="-1"` (or `photoshop:Urgency` / `rr:pick` & `rr:reject` in `dc:subject` / custom namespace) so flags round-trip losslessly while remaining compatible with Lightroom/darktable/Bridge.
-      - **Tags & Keywords:** `<dc:subject><rdf:Bag><rdf:li>...</rdf:li></rdf:Bag></dc:subject>`.
+      - **Tags & Keywords:** `<dc:subject><rdf:Bag><rdf:li>...</rdf:li></rdf:Bag></dc:subject>` and `<lr:hierarchicalSubject>` for universal Lightroom & darktable tag recognition.
       - **Geotags:** `exif:GPSLatitude`, `exif:GPSLongitude`, `exif:GPSAltitude`.
       - **Orientation:** `tiff:Orientation`.
     - **Preservation Guarantee:** Updating a `.xmp` sidecar patches only the culling/GPS/orientation nodes and preserves all third-party XML namespaces, attributes, and RAW development blocks (`crs:*`, `darktable:*`, `exif:*`, `photoshop:*`) via atomic temp-file write + rename.

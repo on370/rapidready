@@ -46,6 +46,12 @@ pub fn set_sidecar_mode_cmd(mode: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn set_xmp_naming_mode_cmd(mode: String) -> Result<(), String> {
+    rapidready_core::culling_xmp::set_xmp_naming_mode(&mode);
+    Ok(())
+}
+
+#[tauri::command]
 pub fn get_culling_state(path: String) -> rapidready_core::culling::CullingState {
     let p = PathBuf::from(path);
     rapidready_core::culling::read_sidecar(&p)

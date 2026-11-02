@@ -389,6 +389,7 @@ pub fn run() {
             commands::get_disk_cache_stats,
             commands::clear_disk_cache,
             commands::set_sidecar_mode_cmd,
+            commands::set_xmp_naming_mode_cmd,
             commands::sync_archive_sidecars,
             commands::pause_sidecar_sync,
             commands::resume_sidecar_sync,

@@ -133,8 +133,14 @@ function App() {
       added: LibraryImage[];
       removed: string[];
       new_dirs: string[];
+      removed_dirs?: string[];
     }>("archive-files-changed", (event) => {
       const store = useLibraryStore.getState();
+      if (event.payload.removed_dirs && event.payload.removed_dirs.length > 0) {
+        for (const dir of event.payload.removed_dirs) {
+          store.removeFolder(dir);
+        }
+      }
       if ((event.payload.added && event.payload.added.length > 0) || (event.payload.new_dirs && event.payload.new_dirs.length > 0)) {
         store.addImages(event.payload.added || [], event.payload.new_dirs || []);
       }

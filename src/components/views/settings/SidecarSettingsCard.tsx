@@ -28,7 +28,7 @@ interface SidecarSyncProgress {
 
 export function SidecarSettingsCard() {
   const { t } = useTranslation('settings');
-  const { sidecarMode, setSidecarMode } = useSettingsStore();
+  const { sidecarMode, setSidecarMode, xmpNaming, setXmpNaming } = useSettingsStore();
   const images = useLibraryStore((s) => s.images);
 
   const [isSyncing, setIsSyncing] = useState(false);
@@ -233,6 +233,48 @@ export function SidecarSettingsCard() {
             <div className="mt-2.5 pt-2 border-t border-app-border/40 text-[10px] text-txt-tertiary font-mono">
               Write: .xmp • Read: .xmp ➔ .rrdata
             </div>
+          </div>
+        </div>
+
+        {/* XMP Naming Convention Switcher (Standard vs darktable) */}
+        <div className={`p-3.5 bg-app-deepest/40 border border-app-border rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-opacity ${
+          sidecarMode === 'rrdata' ? 'opacity-40 pointer-events-none' : 'opacity-100'
+        }`}>
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-semibold text-txt-primary">
+                {t('sidecar.xmpNamingTitle', 'XMP-Dateinamenskonvention')}
+              </span>
+            </div>
+            <p className="text-[11px] text-txt-secondary mt-0.5">
+              {xmpNaming === 'standard'
+                ? t('sidecar.xmpNamingStandardDesc', 'Standard (Lightroom / Camera Raw / Bridge): <Dateiname>.xmp bei RAWs. Schützt Rasterdateien vor Namenskollisionen.')
+                : t('sidecar.xmpNamingDarktableDesc', 'darktable: <Dateiname>.<Ext>.xmp (z.B. DSC001.ARW.xmp). Erlaubt getrennte Sidecars für RAW+JPG Paare.')}
+            </p>
+          </div>
+          <div className="flex items-center bg-app-card border border-app-border rounded-lg p-0.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => setXmpNaming('standard')}
+              className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                xmpNaming === 'standard'
+                  ? 'bg-accent text-white shadow-xs'
+                  : 'text-txt-secondary hover:text-txt-primary'
+              }`}
+            >
+              {t('sidecar.xmpNamingStandard', 'Standard (STD)')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setXmpNaming('darktable')}
+              className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                xmpNaming === 'darktable'
+                  ? 'bg-accent text-white shadow-xs'
+                  : 'text-txt-secondary hover:text-txt-primary'
+              }`}
+            >
+              {t('sidecar.xmpNamingDarktable', 'darktable (DT)')}
+            </button>
           </div>
         </div>
 

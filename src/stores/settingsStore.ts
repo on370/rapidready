@@ -40,8 +40,10 @@ interface SettingsState {
   enableFolderDeletion: boolean;
   allowDirectFolderDeletion: boolean;
   sidecarMode: 'rrdata' | 'dual' | 'xmp';
+  xmpNaming: 'standard' | 'darktable';
   
   setSidecarMode: (mode: 'rrdata' | 'dual' | 'xmp') => void;
+  setXmpNaming: (mode: 'standard' | 'darktable') => void;
   setAutoDetect: (val: boolean) => void;
   setDismissDefaultPicturesWarning: (val: boolean) => void;
   setVerifyCopy: (val: boolean) => void;
@@ -86,6 +88,7 @@ export const useSettingsStore = create<SettingsState>()(
       enableFolderDeletion: false,
       allowDirectFolderDeletion: false,
       sidecarMode: 'rrdata',
+      xmpNaming: 'standard',
       presets: [
         {
           id: 'default-std',
@@ -110,6 +113,10 @@ export const useSettingsStore = create<SettingsState>()(
       setSidecarMode: (sidecarMode) => {
         set({ sidecarMode });
         invoke('set_sidecar_mode_cmd', { mode: sidecarMode }).catch(console.error);
+      },
+      setXmpNaming: (xmpNaming) => {
+        set({ xmpNaming });
+        invoke('set_xmp_naming_mode_cmd', { mode: xmpNaming }).catch(console.error);
       },
       setEnableFolderDeletion: (enableFolderDeletion) => set((state) => ({
         enableFolderDeletion,
@@ -150,6 +157,9 @@ export const useSettingsStore = create<SettingsState>()(
       onRehydrateStorage: () => (state) => {
         if (state?.sidecarMode) {
           invoke('set_sidecar_mode_cmd', { mode: state.sidecarMode }).catch(console.error);
+        }
+        if (state?.xmpNaming) {
+          invoke('set_xmp_naming_mode_cmd', { mode: state.xmpNaming }).catch(console.error);
         }
       },
     }

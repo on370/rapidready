@@ -567,6 +567,8 @@ pub struct ReconcileDiff {
     pub added: Vec<ArchiveFile>,
     pub removed: Vec<String>,
     pub new_dirs: Vec<String>,
+    #[serde(default)]
+    pub removed_dirs: Vec<String>,
 }
 
 pub fn normalize_path_for_comparison(p: &str) -> String {
@@ -596,18 +598,24 @@ pub fn normalize_path_for_comparison(p: &str) -> String {
 ///    The real-time background file watcher (`notify` in `commands.rs`) handles recursive events at
 ///    any folder depth asynchronously. This function serves as a zero-cost safety net focused on the
 ///    currently active folder viewport.
-pub fn reconcile_directory_files(folder: &Path, known_paths: &[String]) -> Result<ReconcileDiff> {
+pub fn reconcile_directory_files(
+    folder: &Path,
+    known_paths: &[String],
+    known_dirs: &[String],
+) -> Result<ReconcileDiff> {
     let folder_norm = folder.to_string_lossy().replace('\\', "/").trim_end_matches('/').to_string();
     if !folder.exists() || !folder.is_dir() {
         return Ok(ReconcileDiff {
-            folder_path: folder_norm,
+            folder_path: folder_norm.clone(),
             added: Vec::new(),
-            removed: Vec::new(),
+            removed: known_paths.to_vec(),
             new_dirs: Vec::new(),
+            removed_dirs: vec![folder_norm],
         });
     }
 
     let folder_comp = normalize_path_for_comparison(&folder_norm);
+    let folder_prefix = format!("{}/", folder_comp);
 
     let known_set: std::collections::HashSet<String> = known_paths
         .iter()
@@ -617,12 +625,14 @@ pub fn reconcile_directory_files(folder: &Path, known_paths: &[String]) -> Resul
     let mut added = Vec::new();
     let mut new_dirs = Vec::new();
     let mut current_on_disk = std::collections::HashSet::new();
+    let mut current_dirs_on_disk = std::collections::HashSet::new();
 
     if let Ok(entries) = std::fs::read_dir(folder) {
         for entry in entries.flatten() {
             let p = entry.path();
             if p.is_dir() {
                 let dir_norm = p.to_string_lossy().replace('\\', "/");
+                current_dirs_on_disk.insert(normalize_path_for_comparison(&dir_norm));
                 new_dirs.push(dir_norm);
             } else if p.is_file() && is_supported_archive_file(&p) {
                 let norm = p.to_string_lossy().replace('\\', "/");
@@ -637,9 +647,22 @@ pub fn reconcile_directory_files(folder: &Path, known_paths: &[String]) -> Resul
         }
     }
 
+    let mut removed_dirs = Vec::new();
+    for d in known_dirs {
+        let d_norm = d.replace('\\', "/");
+        let d_comp = normalize_path_for_comparison(&d_norm);
+        if d_comp.starts_with(&folder_prefix) {
+            if !current_dirs_on_disk.contains(&d_comp) && !Path::new(d).exists() {
+                removed_dirs.push(d.clone());
+            }
+        }
+    }
+
     let mut removed = Vec::new();
     for p in known_paths {
         let p_norm = p.replace('\\', "/");
+        let p_comp = normalize_path_for_comparison(&p_norm);
+
         let is_in_folder = if let Some(parent) = p_norm.rfind('/') {
             let parent_dir = &p_norm[..parent];
             normalize_path_for_comparison(parent_dir) == folder_comp
@@ -647,23 +670,32 @@ pub fn reconcile_directory_files(folder: &Path, known_paths: &[String]) -> Resul
             false
         };
 
+        let is_under_removed_dir = removed_dirs.iter().any(|rd| {
+            let rd_prefix = format!("{}/", normalize_path_for_comparison(rd));
+            p_comp.starts_with(&rd_prefix)
+        });
+
         if is_in_folder {
-            let comp_key = normalize_path_for_comparison(&p_norm);
-            if !current_on_disk.contains(&comp_key) && !Path::new(p).exists() {
+            let comp_key = &p_comp;
+            if !current_on_disk.contains(comp_key) && !Path::new(p).exists() {
                 removed.push(p.clone());
             }
+        } else if is_under_removed_dir || (p_comp.starts_with(&folder_prefix) && !Path::new(p).exists()) {
+            removed.push(p.clone());
         }
     }
 
     added.sort_unstable_by(|a, b| a.path.cmp(&b.path));
     removed.sort_unstable();
     new_dirs.sort_unstable();
+    removed_dirs.sort_unstable();
 
     Ok(ReconcileDiff {
         folder_path: folder_norm,
         added,
         removed,
         new_dirs,
+        removed_dirs,
     })
 }
 
@@ -800,14 +832,14 @@ mod tests {
         assert_eq!(af1.size, 4);
 
         // Initial reconcile with no known paths: photo1 should be added
-        let diff1 = reconcile_directory_files(&temp_dir, &[]).expect("reconcile should succeed");
+        let diff1 = reconcile_directory_files(&temp_dir, &[], &[]).expect("reconcile should succeed");
         assert_eq!(diff1.added.len(), 1);
         assert_eq!(diff1.added[0].name, "photo1.jpg");
         assert!(diff1.removed.is_empty());
 
         // Reconcile with photo1 known: nothing added, nothing removed
         let known = vec![file1.to_string_lossy().replace('\\', "/")];
-        let diff2 = reconcile_directory_files(&temp_dir, &known).expect("reconcile should succeed");
+        let diff2 = reconcile_directory_files(&temp_dir, &known, &[]).expect("reconcile should succeed");
         assert!(diff2.added.is_empty());
         assert!(diff2.removed.is_empty());
 
@@ -815,7 +847,7 @@ mod tests {
         let file2 = temp_dir.join("photo2.jpg");
         std::fs::write(&file2, b"jpg2_new").unwrap();
 
-        let diff3 = reconcile_directory_files(&temp_dir, &known).expect("reconcile should succeed");
+        let diff3 = reconcile_directory_files(&temp_dir, &known, &[]).expect("reconcile should succeed");
         assert_eq!(diff3.added.len(), 1);
         assert_eq!(diff3.added[0].name, "photo2.jpg");
         assert!(diff3.removed.is_empty());
@@ -826,10 +858,31 @@ mod tests {
             file1.to_string_lossy().replace('\\', "/"),
             file2.to_string_lossy().replace('\\', "/"),
         ];
-        let diff4 = reconcile_directory_files(&temp_dir, &known2).expect("reconcile should succeed");
+        let diff4 = reconcile_directory_files(&temp_dir, &known2, &[]).expect("reconcile should succeed");
         assert!(diff4.added.is_empty());
         assert_eq!(diff4.removed.len(), 1);
         assert_eq!(diff4.removed[0].replace('\\', "/"), file1.to_string_lossy().replace('\\', "/"));
+
+        // Subdirectory and directory removal test
+        let sub_dir = temp_dir.join("subfolder");
+        std::fs::create_dir_all(&sub_dir).unwrap();
+        let sub_file = sub_dir.join("subphoto.jpg");
+        std::fs::write(&sub_file, b"subphoto").unwrap();
+        let sub_dir_str = sub_dir.to_string_lossy().replace('\\', "/");
+        let sub_file_str = sub_file.to_string_lossy().replace('\\', "/");
+
+        let known_dirs = vec![sub_dir_str.clone()];
+        let known_files = vec![
+            file2.to_string_lossy().replace('\\', "/"),
+            sub_file_str.clone(),
+        ];
+
+        // Delete subfolder with its file
+        let _ = std::fs::remove_dir_all(&sub_dir);
+        let diff5 = reconcile_directory_files(&temp_dir, &known_files, &known_dirs).expect("reconcile should succeed");
+        assert_eq!(diff5.removed_dirs.len(), 1);
+        assert_eq!(diff5.removed_dirs[0], sub_dir_str);
+        assert!(diff5.removed.contains(&sub_file_str));
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }

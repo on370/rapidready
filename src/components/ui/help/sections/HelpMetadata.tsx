@@ -51,16 +51,15 @@ export function HelpMetadata() {
 
         <FeatureCard
           icon={<FileCode className="w-4 h-4" />}
-          title={isEn ? 'Industry Standard XMP Sidecars' : 'Industriestandard XMP-Sidecars'}
-          badge={isEn ? 'Coming Soon' : 'In Vorbereitung'}
+          title={isEn ? 'Industry Standard XMP & .rrdata Sidecars' : 'Industriestandard XMP & .rrdata Sidecars'}
         >
           {isEn ? (
             <>
-              Ratings, color labels, and keywords are currently managed without delay in RapidReady&apos;s local high-speed database. Direct, bidirectional synchronization with standard <code>.xmp</code> sidecar files for seamless exchange with Lightroom, Capture One, and RapidRAW is currently in preparation and will arrive in an upcoming update.
+              RapidReady features full bidirectional sidecar synchronization supporting both native <code>.rrdata</code> and industry-standard Adobe <code>.xmp</code> files. Ratings, color labels, orientation, flags, and GPS coordinates are preserved non-destructively without touching existing RAW development parameters (such as Lightroom <code>crs:*</code> or darktable history). Automatic Single Source of Truth (SSoT) resolution relies on filesystem timestamps (<code>mtime</code>), ensuring seamless roundtrips across Adobe Lightroom, Capture One, darktable, and Bridge—including Olympus <code>.ORF</code> and Capture One <code>.DNG</code>.
             </>
           ) : (
             <>
-              Bewertungen, Farblabels und Stichwörter werden aktuell verzögerungsfrei in RapidReadys lokaler Hochgeschwindigkeits-Datenbank verwaltet. Die direkte, bidirektionale Synchronisation in standards-konforme <code>.xmp</code>-Dateien für den nahtlosen Austausch mit Lightroom, Capture One und RapidRAW befindet sich in Vorbereitung und folgt in einem kommenden Update.
+              RapidReady bietet volle, bidirektionale Sidecar-Synchronisation sowohl für native <code>.rrdata</code>- als auch für Industriestandard-Adobe-<code>.xmp</code>-Dateien. Bewertungen, Farblabels, Bildorientierung, Flags und GPS-Koordinaten werden absolut zerstörungsfrei gepatcht, ohne vorhandene RAW-Entwicklungsparameter (wie Lightroom <code>crs:*</code> oder darktable-Verlaufsstapel) zu verändern. Dank automatischer Single Source of Truth (SSoT) via Dateizeitstempel (<code>mtime</code>) arbeiten Adobe Lightroom, Capture One, darktable und Bridge nahtlos Hand in Hand – inklusive voller Unterstützung für Olympus <code>.ORF</code> und Capture One <code>.DNG</code>.
             </>
           )}
         </FeatureCard>
@@ -69,13 +68,13 @@ export function HelpMetadata() {
       <TipBox
         title={
           isEn
-            ? 'Seamless Integration with Lightroom & Capture One'
-            : 'Nahtlose Zusammenarbeit mit Lightroom & Capture One'
+            ? 'Seamless Integration with Lightroom, darktable & Capture One'
+            : 'Nahtlose Zusammenarbeit mit Lightroom, darktable & Capture One'
         }
       >
         {isEn
-          ? 'With the upcoming XMP sidecar update, Adobe Lightroom, Adobe Bridge, Capture One, and RapidRAW will automatically recognize your star ratings, color codes, and tags as soon as you open the folders.'
-          : 'Mit dem bevorstehenden XMP-Sidecar-Update werden Adobe Lightroom, Adobe Bridge, Capture One und RapidRAW Deine vergebenen Sterne, Farbcodes und Stichwörter automatisch erkennen, sobald Du die Ordner dort öffnest.'}
+          ? 'With configurable sidecar modes (RapidRAW, Dual-Sync, and Standard XMP) and naming conventions (STD vs DT), Adobe Lightroom, Adobe Bridge, Capture One, and darktable recognize your ratings, color codes, tags, and GPS coordinates directly.'
+          : 'Dank konfigurierbarer Sidecar-Modi (RapidRAW, Dual-Sync und Standard-XMP) sowie flexibler Dateinamenskonventionen (STD vs DT) erkennen Adobe Lightroom, Adobe Bridge, Capture One und darktable Deine vergebenen Sterne, Farbcodes, Stichwörter und GPS-Daten sofort.'}
       </TipBox>
 
       <InfoBox

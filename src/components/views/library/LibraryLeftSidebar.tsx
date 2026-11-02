@@ -562,6 +562,24 @@ export function LibraryLeftSidebar() {
 
   const [expandedMap, setExpandedMap] = useState<Record<string, boolean>>({});
   const [extraFolders, setExtraFolders] = useState<Set<string>>(new Set());
+
+  // Clean up extraFolders whenever discoveredFolders changes
+  useEffect(() => {
+    setExtraFolders(prev => {
+      if (prev.size === 0) return prev;
+      const discoveredNorm = new Set(Array.from(discoveredFolders).map(p => normalizePath(p)));
+      let changed = false;
+      const next = new Set<string>();
+      for (const p of prev) {
+        if (discoveredNorm.has(normalizePath(p))) {
+          next.add(p);
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [discoveredFolders]);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -627,7 +645,7 @@ export function LibraryLeftSidebar() {
   const [tree, setTree] = useState<TreeNode | null>(() => {
     const store = useLibraryStore.getState();
     if (!store.rootPath) return null;
-    const allKnown = new Set<string>([...store.discoveredFolders, ...extraFolders]);
+    const allKnown = store.discoveredFolders;
     return (store.images.length > 0 || allKnown.size > 0) ? buildTree(store.images, store.rootPath, allKnown) : null;
   });
   const lastTreeUpdateRef = useRef<number>(0);
@@ -646,7 +664,7 @@ export function LibraryLeftSidebar() {
   const updateTreeNow = () => {
     const store = useLibraryStore.getState();
     if (rootPath) {
-      const allKnown = new Set<string>([...store.discoveredFolders, ...extraFolders]);
+      const allKnown = store.discoveredFolders;
       setTree(buildTree(store.images, rootPath, allKnown));
     }
     lastTreeUpdateRef.current = Date.now();

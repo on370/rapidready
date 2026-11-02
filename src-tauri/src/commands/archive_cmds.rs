@@ -80,6 +80,7 @@ pub fn start_watching_dir_internal(
 
         let (tx, rx) = std::sync::mpsc::channel::<PathBuf>();
         let app_handle = app.clone();
+        let root_path_str = dir.to_string_lossy().replace('\\', "/");
 
         std::thread::spawn(move || {
             while let Ok(first_path) = rx.recv() {
@@ -106,6 +107,7 @@ pub fn start_watching_dir_internal(
                 let mut added_files = Vec::new();
                 let mut removed_files = Vec::new();
                 let mut new_dirs = Vec::new();
+                let mut removed_dirs = Vec::new();
 
                 for p in paths {
                     let file_name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
@@ -164,14 +166,30 @@ pub fn start_watching_dir_internal(
                             let norm = p.to_string_lossy().replace('\\', "/");
                             removed_files.push(norm);
                         }
+                    } else if !p.exists() {
+                        let norm = p.to_string_lossy().replace('\\', "/");
+                        removed_dirs.push(norm);
                     }
                 }
 
-                if !added_files.is_empty() || !removed_files.is_empty() || !new_dirs.is_empty() {
+                if let Ok(catalog) = get_archive_catalog(&app_handle) {
+                    if !added_files.is_empty() || !new_dirs.is_empty() {
+                        let _ = catalog.upsert_archive_files(&root_path_str, &added_files, &new_dirs);
+                    }
+                    if !removed_files.is_empty() {
+                        let _ = catalog.delete_files(&removed_files);
+                    }
+                    if !removed_dirs.is_empty() {
+                        let _ = catalog.delete_folders(&removed_dirs);
+                    }
+                }
+
+                if !added_files.is_empty() || !removed_files.is_empty() || !new_dirs.is_empty() || !removed_dirs.is_empty() {
                     let _ = app_handle.emit("archive-files-changed", serde_json::json!({
                         "added": added_files,
                         "removed": removed_files,
-                        "new_dirs": new_dirs
+                        "new_dirs": new_dirs,
+                        "removed_dirs": removed_dirs,
                     }));
                 }
             }
@@ -228,18 +246,23 @@ pub fn stop_watching_directory(
 pub async fn reconcile_folder(
     folder_path: String,
     known_paths: Vec<String>,
+    known_dirs: Option<Vec<String>>,
     catalog_state: tauri::State<'_, ArchiveCatalogState>,
 ) -> Result<rapidready_core::archive::ReconcileDiff, String> {
     let catalog = catalog_state.catalog.clone();
+    let known_dirs_vec = known_dirs.unwrap_or_default();
     tauri::async_runtime::spawn_blocking(move || {
         let p = std::path::PathBuf::from(&folder_path);
-        let diff = rapidready_core::archive::reconcile_directory_files(&p, &known_paths)
+        let diff = rapidready_core::archive::reconcile_directory_files(&p, &known_paths, &known_dirs_vec)
             .map_err(|e| e.to_string())?;
         if !diff.added.is_empty() || !diff.new_dirs.is_empty() {
             let _ = catalog.upsert_archive_files(&folder_path, &diff.added, &diff.new_dirs);
         }
         if !diff.removed.is_empty() {
             let _ = catalog.delete_files(&diff.removed);
+        }
+        if !diff.removed_dirs.is_empty() {
+            let _ = catalog.delete_folders(&diff.removed_dirs);
         }
         Ok(diff)
     })
@@ -413,9 +436,12 @@ pub fn cancel_archive_scan(
 
 #[tauri::command]
 pub async fn get_cached_archive_files(
+    app: AppHandle,
     path: String,
+    state: tauri::State<'_, SidecarWatcherState>,
     catalog_state: tauri::State<'_, ArchiveCatalogState>,
 ) -> Result<rapidready_core::archive::ArchiveScanResult, String> {
+    let _ = start_watching_dir_internal(&app, Path::new(&path), &state);
     let catalog = catalog_state.catalog.clone();
     tauri::async_runtime::spawn_blocking(move || {
         catalog.get_cached_archive_files(&path).map_err(|e| e.to_string())
