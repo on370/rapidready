@@ -48,6 +48,31 @@ pub fn get_archive_catalog(app: &AppHandle) -> Result<Arc<rapidready_core::archi
     Ok(Arc::new(catalog))
 }
 
+/// Registers library files in the "already imported" index in the background, so photos that
+/// were never imported through the app are still detected as imported during source scans.
+fn spawn_import_index_backfill(
+    app: &AppHandle,
+    files: Vec<(String, u64)>,
+    controller: rapidready_core::archive::ScanController,
+) {
+    if files.is_empty() {
+        return;
+    }
+    let Ok(app_dir) = app.path().app_data_dir() else {
+        return;
+    };
+    tauri::async_runtime::spawn_blocking(move || {
+        match rapidready_core::import_index::ImportIndex::new(&app_dir) {
+            Ok(index) => {
+                if let Err(e) = index.backfill_files(&files, || controller.is_cancelled()) {
+                    eprintln!("Import index backfill failed: {}", e);
+                }
+            }
+            Err(e) => eprintln!("Import index backfill could not open index: {}", e),
+        }
+    });
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArchiveChunkPayload {
     pub scan_id: u64,
@@ -258,6 +283,9 @@ pub async fn scan_archive_directory(
     let catalog_for_chunk = catalog_state.catalog.clone();
     let catalog_for_cancel = catalog_state.catalog.clone();
     let path_clone = path.clone();
+    let app_for_backfill = app.clone();
+    let catalog_for_backfill = catalog_state.catalog.clone();
+    let path_for_backfill = path.clone();
     let path_for_cancel = path.clone();
 
     if existing_paths.is_none() {
@@ -327,6 +355,11 @@ pub async fn scan_archive_directory(
 
         let mut final_res = walk_res;
         final_res.is_fully_indexed = false;
+
+        if let Ok(cached) = catalog_for_backfill.get_cached_archive_files(&path_for_backfill) {
+            let files = cached.files.into_iter().map(|f| (f.path, f.size)).collect();
+            spawn_import_index_backfill(&app_for_backfill, files, controller_clone.clone());
+        }
 
         Ok(final_res)
     })
@@ -464,6 +497,7 @@ pub async fn reconcile_archive_delta(
     }
 
     let app_clone = app.clone();
+    let app_for_backfill = app.clone();
     let catalog = catalog_state.catalog.clone();
     let scan_state_clone = scan_state.current_scan.clone();
     let path_clone = path.clone();
@@ -481,6 +515,14 @@ pub async fn reconcile_archive_delta(
         .map_err(|e| e.to_string())?;
 
         if !controller_clone.is_cancelled() {
+            let backfill_files: Vec<(String, u64)> = delta_res
+                .added
+                .iter()
+                .chain(delta_res.updated.iter())
+                .map(|f| (f.path.clone(), f.size))
+                .collect();
+            spawn_import_index_backfill(&app_for_backfill, backfill_files, controller_clone.clone());
+
             let is_indexed = catalog.is_archive_fully_indexed(&path_clone).unwrap_or(false);
             let needs_thumbs = !delta_res.added.is_empty()
                 || !delta_res.updated.is_empty()

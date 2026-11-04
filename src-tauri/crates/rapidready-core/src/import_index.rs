@@ -97,6 +97,46 @@ impl ImportIndex {
         }
         Ok(sizes)
     }
+
+    /// Registers existing library files (path, size) that are not yet tracked, so photos that were
+    /// never imported through the app are still recognised as "already imported".
+    /// Files whose path is already in the index are skipped without any disk read.
+    /// Returns the number of newly registered files.
+    pub fn backfill_files<F>(&self, files: &[(String, u64)], should_stop: F) -> Result<usize>
+    where
+        F: Fn() -> bool,
+    {
+        let normalize = |p: &str| p.replace('\\', "/");
+
+        let known: std::collections::HashSet<String> = {
+            let conn = self.conn.lock().unwrap();
+            let mut stmt = conn.prepare("SELECT target_path FROM imported_files")?;
+            let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+            rows.flatten().map(|p| normalize(&p)).collect()
+        };
+
+        let mut added = 0usize;
+        for (path, size) in files {
+            if should_stop() {
+                break;
+            }
+            if *size == 0 || known.contains(&normalize(path)) {
+                continue;
+            }
+            let hash = match crate::hasher::hash_file_head(Path::new(path)) {
+                Ok(h) if !h.is_empty() => h,
+                _ => continue,
+            };
+            let name = Path::new(path)
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            self.mark_imported(&hash, *size, &name, path)?;
+            added += 1;
+        }
+
+        Ok(added)
+    }
 }
 
 #[cfg(test)]
@@ -119,6 +159,29 @@ mod tests {
         assert!(sizes.contains(&1024));
         assert!(sizes.contains(&2048));
         assert!(!sizes.contains(&4096));
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_import_index_backfill_files() {
+        let temp_dir = std::env::temp_dir().join(format!("rr_idx_backfill_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        let index = ImportIndex::new(&temp_dir).unwrap();
+
+        let photo = temp_dir.join("lib_photo.jpg");
+        std::fs::write(&photo, b"library photo bytes").unwrap();
+        let photo_str = photo.to_string_lossy().to_string();
+        let size = std::fs::metadata(&photo).unwrap().len();
+        let files = vec![(photo_str.clone(), size)];
+
+        assert_eq!(index.backfill_files(&files, || false).unwrap(), 1);
+        let hash = crate::hasher::hash_file_head(&photo).unwrap();
+        assert!(index.is_imported(&hash, size).unwrap());
+
+        // Second run recognises the path and does not add a duplicate row
+        assert_eq!(index.backfill_files(&files, || false).unwrap(), 0);
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }
