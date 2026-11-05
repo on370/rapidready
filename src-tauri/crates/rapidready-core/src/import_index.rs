@@ -97,6 +97,17 @@ impl ImportIndex {
         }
         Ok(sizes)
     }
+
+    pub fn get_imported_target_paths(&self) -> Result<std::collections::HashSet<String>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT target_path FROM imported_files")?;
+        let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+        let mut paths = std::collections::HashSet::new();
+        for p in rows.flatten() {
+            paths.insert(p.replace('\\', "/"));
+        }
+        Ok(paths)
+    }
 }
 
 #[cfg(test)]
@@ -119,6 +130,11 @@ mod tests {
         assert!(sizes.contains(&1024));
         assert!(sizes.contains(&2048));
         assert!(!sizes.contains(&4096));
+
+        let paths = index.get_imported_target_paths().unwrap();
+        assert_eq!(paths.len(), 2);
+        assert!(paths.contains("/dest/test.jpg"));
+        assert!(paths.contains("/dest/test2.jpg"));
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }

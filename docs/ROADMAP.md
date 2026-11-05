@@ -409,6 +409,9 @@
       - Context menus (`ContextMenu.tsx`), Share/Export toolbar popover (`CullingToolbar.tsx`), Post-Import action button (`ImportExecuteStep.tsx`), Settings toggles (`SettingsView.tsx`), and Shortcut references (`HelpShortcuts.tsx`) dynamically display the configured developer name (e.g. *„In darktable öffnen (Shift+R)“* / *„In RapidRAW öffnen (R)“*) and matching shortcut badge (`R` in Lightroom preset vs. `Shift+R` in darktable preset).
     - **Dedicated Help Chapter (`HelpRawDevelopers.tsx` in `HelpModal.tsx`):**
       - Own navigation tab in the Help modal covering the end-to-end workflow with RapidRAW, darktable, Adobe Lightroom, and custom RAW converters (shortcuts, sidecar modes, XMP naming conventions, direct handoff via `R` / `Shift+R`, and darktable reload tips).
+  - [x] **7. Lazy On-Demand Import-Index Backfill from Existing Archive Catalog (`archive_catalog.rs` / `import_index.rs` / `scanner.rs`, inspired by PR #7 from `@DanieGu`):**
+    - Recognizes photos that already exist in a pre-existing photo archive (not originally imported via RapidReady) as `already_imported` during SD card / source folder scans without triggering eager background disk hashing during library browsing (preserving 100% CTSP).
+    - During `scan_directory`, pre-fetches a lightweight `file_size -> Vec<(canonical_path, filename)>` map from `archive_catalog.db` (excluding paths already tracked in `import_index.db`). Only when a scanned source file matches an existing archive file's exact byte size does it lazily compute the 64 KB head hash (`hash_file_head`) of the archive candidate, backfill it into `import_index.db`, and mark the source file as `already_imported`.
 
 ---
 

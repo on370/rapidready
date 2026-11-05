@@ -213,6 +213,37 @@ impl ArchiveCatalog {
         Ok(())
     }
 
+    /// Returns a map of `file_size -> Vec<(canonical_path, filename)>` for all files in the catalog.
+    pub fn get_files_by_size_map(&self) -> Result<HashMap<u64, Vec<(String, String)>>> {
+        let query_fn = |conn: &Connection| -> Result<HashMap<u64, Vec<(String, String)>>> {
+            let mut stmt = conn.prepare(
+                "SELECT canonical_path, filename, file_size FROM archive_files WHERE file_size > 0",
+            )?;
+            let rows = stmt.query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)?,
+                ))
+            })?;
+            let mut map: HashMap<u64, Vec<(String, String)>> = HashMap::new();
+            for r in rows.flatten() {
+                if r.2 > 0 {
+                    map.entry(r.2 as u64).or_default().push((r.0, r.1));
+                }
+            }
+            Ok(map)
+        };
+
+        if self.db_path.is_some() {
+            if let Ok(conn) = self.get_read_conn() {
+                return query_fn(&conn);
+            }
+        }
+        let conn = self.conn.lock().unwrap();
+        query_fn(&conn)
+    }
+
     /// Returns the number of cached files for `root` (or any parent containing `root`).
     pub fn get_cached_count(&self, root: &str) -> Result<usize> {
         let norm_root = normalize_canonical_path(root);
