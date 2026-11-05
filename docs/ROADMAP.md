@@ -361,7 +361,7 @@
     - Der physische `images`-Array in `libraryStore` sowie die Backend-Scanner- und Thumbnail-Pipeline bleiben zu 100 % unberührt. Die `1:N`-Gruppierung erfolgt rein virtuell im Frontend über einen $O(N)$ Hash-Map-Lookup nach `(parentDir, lowercaseStem)` im `useMemo`-Selector (`< 3 ms` für 50.000 Bilder, null Disk-/NAS-I/O). Das Ein- und Ausschalten erfordert keinen Neuscan.
 
 ### Milestone: Multi-RAW Developer & Universal Sidecar Architecture
-- [x] **Industry Standard Adobe XMP Sidecars (`.xmp`), `.rrdata` Coexistence & Multi-RAW Developer Integration:**
+- [x] **Industry Standard Adobe XMP Sidecars (`.xmp`), `.rrdata` Coexistence & Multi-RAW Developer Integration (`v0.6.0` / Build `0178`):**
   - **Context & Goal:**  
     RapidReady natively operates with RapidRAW's JSON sidecars (`<file>.rrdata`). Professional photographers and hybrid workflows frequently also use **Adobe Lightroom Classic / Camera Raw**, **Capture One**, **darktable**, **RawTherapee / ART**, or **DxO PhotoLab**, which rely on **Adobe XMP (`.xmp`)** sidecars. RapidReady serves as the non-destructive, high-speed ingest and culling hub across both worlds without ever overwriting RAW development sliders (`adjustments` in `.rrdata` or `crs:*` / `darktable:*` in `.xmp`).
   - [x] **1. Non-Destructive Read-Modify-Write Engine (`.rrdata` & `.xmp`):**

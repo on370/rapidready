@@ -5,6 +5,38 @@ All notable changes to RapidReady will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-11-05
+
+Major architectural milestone release introducing universal **Adobe XMP (`.xmp`)** sidecar support with rock-solid coexistence alongside native RapidRAW sidecars (`.rrdata`), an `mtime`-based Single Source of Truth (SSoT) engine, non-destructive editing guarantees, a configurable external RAW developer launcher (RapidRAW, darktable, Adobe Lightroom Classic, System Default, or Custom Applications), lazy on-demand import duplicate detection for pre-existing archives, robust rendering and metadata parsing for reverse-layout Capture One DNGs, and archive deletion reconciliation.
+
+### Added & Improved
+- **Universal Adobe XMP (`.xmp`) & RapidRAW (`.rrdata`) Sidecar Architecture (`culling.rs`, `culling_xmp.rs`, `SidecarSettingsCard.tsx`):**
+  - **Non-Destructive Read-Modify-Write Engine:** Atomically updates ratings, picks, rejects, color labels, tags, GPS coordinates, and orientations via temp-file write and rename (`.tmp -> rename`). Strictly preserves all foreign XML tags, attributes, and RAW development blocks (such as Lightroom `crs:*` parameters, darktable history stacks, and RapidRAW `adjustments`).
+  - **Three Configurable Sidecar Modes:**
+    - `RapidRAW Native (.rrdata)` *(Default)*: Writes native `.rrdata` with automatic fallback to `.xmp` if only an XMP exists.
+    - `Dual-Sync (.rrdata + .xmp)` *(Hybrid)*: Writes changes synchronously to both `.rrdata` and `.xmp` for seamless transitions between RapidRAW, Lightroom, and darktable.
+    - `Standard XMP (.xmp)`: Writes directly to `.xmp` (updating existing `.rrdata` if present) with read fallback to `.rrdata`.
+  - **Filesystem `mtime` Single Source of Truth (SSoT):** When both `.rrdata` and `.xmp` exist for an image, RapidReady automatically resolves conflicts in favor of the file with the most recent modification timestamp (`mtime`).
+  - **Dual XMP Naming Conventions:** Configurable in Settings between Adobe Standard `STD` (`<stem>.xmp`, e.g. `DSC001.xmp`) and darktable `DT` (`<file>.<ext>.xmp`, e.g. `DSC001.ARW.xmp`). Includes automatic `<file>.<ext>.xmp` collision protection whenever non-RAW files or companion JPEGs with the same stem exist in the directory.
+  - **Full darktable Color Label & Hierarchical Tag Support:** Reads and writes darktable's native color labels (`<darktable:colorlabels>`) and hierarchical keywords (`<lr:hierarchicalSubject>`) bidirectionally.
+  - **Inspector Sidecar Source Badges (`InspectorCullingCard.tsx`):** Compact header badges (`[ .rrdata ]`, `[ .xmp ]`, `[ .rrdata · .xmp ]`) with interactive tooltips identifying the authoritative SSoT source based on `mtime`.
+  - **NAS-Safe Bulk Sidecar Sync with Pause / Resume / Cancel:** Background synchronization tool in Settings to reconcile existing archives (`20k+` files) between `.rrdata` and `.xmp` with a responsive progress indicator and thread-safe pause/resume/cancel controls (`ScanController`).
+- **Configurable External RAW Developer Launcher (`system_cmds.rs`, `settingsStore.ts`, `SidecarSettingsCard.tsx`, `HelpRawDevelopers.tsx`):**
+  - **Target Application Selector:** Choose between **RapidRAW** *(Default)*, **darktable**, **Adobe Lightroom Classic**, **System Default**, or a **Custom Application** (`.app` on macOS, `.exe` on Windows).
+  - **Dynamic UI Labels & Shortcuts:** Context menus, toolbar popovers, import completion buttons, and shortcut references dynamically display the target app name and key combination (e.g. *„In darktable öffnen (Shift+R)“* vs. *„In RapidRAW öffnen (R)“*).
+  - **Layout & Truncate Protection:** 5-column button grid in Settings with hover tooltips and dynamic explanation text. All UI labels and shortcut badges use text truncation and flex protection (`min-w-0 truncate` + `shrink-0`) to prevent long custom app names from obscuring shortcut badges.
+  - **Dedicated In-App Help Chapter (`HelpRawDevelopers.tsx`):** New chapter in the Help modal covering end-to-end integration, recommended sidecar modes per tool, darktable `library.db` XMP refresh tips, and an explanation of darktable's default 1-star import behavior.
+- **Lazy On-Demand Import-Index Backfill (`archive_catalog.rs`, `import_index.rs`, `scanner.rs`):**
+  - **Zero-I/O Archive Duplicate Detection:** Photos already existing in a photo archive (e.g. imported prior to RapidReady) are automatically recognized as `already_imported = true` when scanning an SD card or source directory.
+  - **100% CTSP Compliance:** Eliminates background disk hashing during library browsing. During source scanning, pre-filters files by exact byte size and lazily computes 64 KB head hashes only for matching candidates, caching results permanently in `import_index.db`.
+- **Capture One & Reverse-Layout DNG Preview & EXIF Support (`thumbnail/`, `metadata_resolver/`):**
+  - Added support for reverse TIFF layout DNGs where `IFD0` sits at the end of the file (e.g. exported from Capture One 23 Windows from Sony ILCE-6700).
+  - Enabled Apple ImageIO RAW decoding fallback for uncompressed sensor CFA files lacking embedded JPEGs.
+  - Filtered letterbox border artifacts in `thumb_rs` to prevent false 404 preview errors.
+- **Archive Catalog Deletion Reconciliation (`archive_catalog.rs`, `archive.rs`):**
+  - Added `removed_dirs` tracking to `ArchiveDeltaResult` and `reconcile_directory_files`.
+  - Automatically identifies and purges externally deleted folders and orphaned photos upon folder refresh or archive delta sync, eliminating ghost folders in the directory tree.
+
 ## [0.5.4] - 2026-10-28
 
 Major feature, format support, and user experience release introducing an integrated Fullscreen Presentation & Slideshow Mode with 2-layer hardware-accelerated crossfades and live culling; native Olympus and OM System RAW (`.ORF`) MakerNote preview extraction and Handheld High-Res Shot (HHHR) support (GitHub Issue #4); a real-time Inspector Live Histogram (<kbd>H</kbd>); a safe two-stage folder deletion workflow; configurable keyboard shortcut presets (Standard vs. Darktable); graceful video codec fallback handling; and comprehensive i18n toolbar polish.
