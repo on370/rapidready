@@ -402,6 +402,13 @@
   - [x] **5. Settings Explanations, Hover Tooltips & Dedicated Help Section (`HelpModal.tsx`):**
     - Structured explanation box and hover tooltips in `SettingsView.tsx` detailing the 3 sidecar modes, the `mtime` SSoT rule, and non-destructive patching.
     - Dedicated section in `HelpModal.tsx` (fully localized in DE & EN) explaining `.rrdata` vs. `.xmp` coexistence, SSoT priority, the Inspector badges, and archive synchronization.
+  - [x] **6. Configurable External RAW Developer Launcher (`R` / `Shift+R`, Context Menus, Toolbar, Post-Import & Dedicated Help Chapter):**
+    - **Configurable Target App (`rawDeveloper: 'rapidraw' | 'darktable' | 'lightroom' | 'system' | 'custom'` + `customRawDeveloperPath`):**
+      - Allows launching the active photo or imported folder directly in **RapidRAW** *(Default)*, **darktable** (`org.darktable` / `darktable.app` / `darktable.exe`), **Adobe Lightroom Classic** (`com.adobe.LightroomClassicCC7` / `Lightroom.exe`), the **OS Default App**, or a **Custom Application** selected via file picker.
+    - **Dynamic UI Labels, Buttons & Tooltips:**
+      - Context menus (`ContextMenu.tsx`), Share/Export toolbar popover (`CullingToolbar.tsx`), Post-Import action button (`ImportExecuteStep.tsx`), Settings toggles (`SettingsView.tsx`), and Shortcut references (`HelpShortcuts.tsx`) dynamically display the configured developer name (e.g. *„In darktable öffnen (Shift+R)“* / *„In RapidRAW öffnen (R)“*) and matching shortcut badge (`R` in Lightroom preset vs. `Shift+R` in darktable preset).
+    - **Dedicated Help Chapter (`HelpRawDevelopers.tsx` in `HelpModal.tsx`):**
+      - Own navigation tab in the Help modal covering the end-to-end workflow with RapidRAW, darktable, Adobe Lightroom, and custom RAW converters (shortcuts, sidecar modes, XMP naming conventions, direct handoff via `R` / `Shift+R`, and darktable reload tips).
 
 ---
 

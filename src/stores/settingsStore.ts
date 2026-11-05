@@ -3,6 +3,44 @@ import { persist } from 'zustand/middleware';
 import { invoke } from '@tauri-apps/api/core';
 import { normalizePath } from '../utils/image';
 
+export type RawDeveloperId = 'rapidraw' | 'darktable' | 'lightroom' | 'system' | 'custom';
+
+export function getRawDeveloperDisplayName(
+  rawDeveloper: RawDeveloperId,
+  customPath: string | null,
+  isEn = false
+): string {
+  switch (rawDeveloper) {
+    case 'rapidraw':
+      return 'RapidRAW';
+    case 'darktable':
+      return 'darktable';
+    case 'lightroom':
+      return 'Lightroom';
+    case 'system':
+      return isEn ? 'System Default' : 'System-Standard';
+    case 'custom': {
+      if (customPath) {
+        const norm = customPath.replace(/\\/g, '/');
+        const filename = norm.split('/').pop() || customPath;
+        return filename.replace(/\.(app|exe)$/i, '');
+      }
+      return isEn ? 'Custom App' : 'Eigene App';
+    }
+    default:
+      return 'RapidRAW';
+  }
+}
+
+export async function openInConfiguredRawDeveloper(path: string): Promise<void> {
+  const { rawDeveloper, customRawDeveloperPath } = useSettingsStore.getState();
+  await invoke('open_in_rapidraw', {
+    path,
+    developer: rawDeveloper,
+    customPath: customRawDeveloperPath,
+  });
+}
+
 export interface ArchiveLocation {
   id: string;
   name: string;
@@ -41,9 +79,13 @@ interface SettingsState {
   allowDirectFolderDeletion: boolean;
   sidecarMode: 'rrdata' | 'dual' | 'xmp';
   xmpNaming: 'standard' | 'darktable';
+  rawDeveloper: RawDeveloperId;
+  customRawDeveloperPath: string | null;
   
   setSidecarMode: (mode: 'rrdata' | 'dual' | 'xmp') => void;
   setXmpNaming: (mode: 'standard' | 'darktable') => void;
+  setRawDeveloper: (dev: RawDeveloperId) => void;
+  setCustomRawDeveloperPath: (path: string | null) => void;
   setAutoDetect: (val: boolean) => void;
   setDismissDefaultPicturesWarning: (val: boolean) => void;
   setVerifyCopy: (val: boolean) => void;
@@ -75,7 +117,7 @@ export const useSettingsStore = create<SettingsState>()(
       verifyCopy: true,
       deleteSource: false,
       launchSystem: false,
-      openRapidRaw: true,
+      openRapidRaw: false,
       startupView: 'library',
       lastLibraryPath: null,
       gpsMapProvider: 'google',
@@ -89,6 +131,8 @@ export const useSettingsStore = create<SettingsState>()(
       allowDirectFolderDeletion: false,
       sidecarMode: 'rrdata',
       xmpNaming: 'standard',
+      rawDeveloper: 'rapidraw',
+      customRawDeveloperPath: null,
       presets: [
         {
           id: 'default-std',
@@ -118,6 +162,8 @@ export const useSettingsStore = create<SettingsState>()(
         set({ xmpNaming });
         invoke('set_xmp_naming_mode_cmd', { mode: xmpNaming }).catch(console.error);
       },
+      setRawDeveloper: (rawDeveloper) => set({ rawDeveloper }),
+      setCustomRawDeveloperPath: (customRawDeveloperPath) => set({ customRawDeveloperPath }),
       setEnableFolderDeletion: (enableFolderDeletion) => set((state) => ({
         enableFolderDeletion,
         allowDirectFolderDeletion: enableFolderDeletion ? state.allowDirectFolderDeletion : false,

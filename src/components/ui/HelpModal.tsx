@@ -11,6 +11,7 @@ import {
   Download,
   Tag,
   ShieldCheck,
+  Sliders,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { listen } from '@tauri-apps/api/event';
@@ -20,12 +21,22 @@ import { HelpShortcuts } from './help/sections/HelpShortcuts';
 import { HelpArchive } from './help/sections/HelpArchive';
 import { HelpImport } from './help/sections/HelpImport';
 import { HelpCulling } from './help/sections/HelpCulling';
+import { HelpRawDevelopers } from './help/sections/HelpRawDevelopers';
 import { HelpCollections } from './help/sections/HelpCollections';
 import { HelpExport } from './help/sections/HelpExport';
 import { HelpMetadata } from './help/sections/HelpMetadata';
 import { HelpSafety } from './help/sections/HelpSafety';
 
-type SectionId = 'shortcuts' | 'archive' | 'import' | 'culling' | 'collections' | 'export' | 'metadata' | 'safety';
+type SectionId =
+  | 'shortcuts'
+  | 'archive'
+  | 'import'
+  | 'culling'
+  | 'raw_developers'
+  | 'collections'
+  | 'export'
+  | 'metadata'
+  | 'safety';
 
 interface HelpSection {
   id: SectionId;
@@ -171,6 +182,35 @@ export function HelpModal() {
           'koexistenz',
         ],
         component: HelpCulling,
+      },
+      {
+        id: 'raw_developers',
+        title: isEn ? 'RAW Developers & External Tools' : 'RAW-Entwickler & Externe Tools',
+        shortTitle: isEn ? 'RAW Developers' : 'RAW-Entwickler',
+        icon: <Sliders className="w-4 h-4" />,
+        keywords: [
+          'rapidraw',
+          'darktable',
+          'lightroom',
+          'capture one',
+          'bridge',
+          'rawtherapee',
+          'dxo',
+          'photolab',
+          'xmp',
+          'rrdata',
+          'sidecar',
+          'begleitdatei',
+          'raw',
+          'developer',
+          'entwickler',
+          'external',
+          'tools',
+          'handoff',
+          'übergabe',
+          'shortcut',
+        ],
+        component: HelpRawDevelopers,
       },
       {
         id: 'collections',

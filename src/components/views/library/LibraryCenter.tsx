@@ -18,6 +18,7 @@ import { useLibraryUIStore } from "../../../stores/libraryUIStore";
 import { useToastStore } from "../../../stores/toastStore";
 import { useDialogStore } from "../../../stores/dialogStore";
 import { useCollectionsStore, findAlbumById } from "../../../stores/collectionsStore";
+import { openInConfiguredRawDeveloper } from "../../../stores/settingsStore";
 import { FolderHeart, Download, ArrowDownAZ, X } from "lucide-react";
 
 interface LibraryCenterProps {
@@ -990,7 +991,7 @@ export function LibraryCenter({
           onCulling={(flag, rating) => handleCulling(flag !== undefined ? flag : (activeImage?.culling.flag ?? null), rating ?? activeImage?.culling.rating ?? 0)}
           onSetColor={(color) => handleSetColor(color)}
           onOpenInRapidRaw={() => {
-            if (activeImage) invoke('open_in_rapidraw', { path: activeImage.path });
+            if (activeImage) openInConfiguredRawDeveloper(activeImage.path);
           }}
           onShowInFinder={() => {
             if (activeImage) invoke('show_in_finder', { path: activeImage.path });

@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { useSettingsStore } from '../../../../stores/settingsStore';
+import { useSettingsStore, getRawDeveloperDisplayName } from '../../../../stores/settingsStore';
 import { SectionHeading, Kbd, TipBox } from '../HelpShared';
 import { isMac } from '../../../../utils/platform';
 
@@ -16,8 +16,9 @@ interface ShortcutGroup {
 export function HelpShortcuts() {
   const { i18n } = useTranslation();
   const isEn = i18n.language?.startsWith('en');
-  const shortcutPreset = useSettingsStore(s => s.shortcutPreset);
+  const { shortcutPreset, rawDeveloper, customRawDeveloperPath } = useSettingsStore();
   const isDarktable = shortcutPreset === 'darktable';
+  const devName = getRawDeveloperDisplayName(rawDeveloper, customRawDeveloperPath, isEn);
 
   const groups: ShortcutGroup[] = isEn
     ? [
@@ -67,7 +68,7 @@ export function HelpShortcuts() {
         {
           title: 'System & Workflow Integration',
           items: [
-            { desc: 'Edit in RapidRAW', keys: isDarktable ? ['Shift', 'R'] : ['R'] },
+            { desc: `Edit in ${devName}`, keys: isDarktable ? ['Shift', 'R'] : ['R'] },
             { desc: 'Show in Explorer / Finder', keys: ['Cmd', 'Shift', 'F'] },
             { desc: 'Open Settings', keys: ['Cmd', ','] },
             { desc: 'Show Help & Manual', keys: ['F1', '|', 'Cmd', '/'] },
@@ -122,7 +123,7 @@ export function HelpShortcuts() {
         {
           title: 'System & Workflow-Integration',
           items: [
-            { desc: 'In RapidRAW bearbeiten', keys: isDarktable ? ['Shift', 'R'] : ['R'] },
+            { desc: `In ${devName} bearbeiten`, keys: isDarktable ? ['Shift', 'R'] : ['R'] },
             { desc: 'Im Explorer / Finder anzeigen', keys: ['Cmd', 'Shift', 'F'] },
             { desc: 'Einstellungen öffnen', keys: ['Cmd', ','] },
             { desc: 'Hilfe & Handbuch anzeigen', keys: ['F1', '|', 'Cmd', '/'] },
@@ -163,18 +164,18 @@ export function HelpShortcuts() {
         ))}
       </div>
 
-      <TipBox title={isEn ? 'Configurable Shortcut Schemes' : 'Konfigurierbare Tastenkürzel-Schemata'}>
+      <TipBox title={isEn ? 'Configurable Shortcut Schemes & RAW Developer' : 'Konfigurierbare Tastenkürzel & RAW-Entwickler'}>
         {isEn ? (
           <>
-            RapidReady supports both the <strong>Lightroom standard</strong> (P = Pick, X = Reject, R = RapidRAW)
-            and the <strong>darktable scheme</strong> (R = Reject, Shift+R = RapidRAW, F2–F5 = Colors). You can
-            switch schemas at any time in <em>Settings → General</em>.
+            RapidReady supports both the <strong>Lightroom standard</strong> (P = Pick, X = Reject, R = Open in {devName})
+            and the <strong>darktable scheme</strong> (R = Reject, Shift+R = Open in {devName}, F2–F5 = Colors). You can
+            switch schemas and configure your preferred RAW developer (RapidRAW, darktable, Lightroom, System Default, or Custom App) at any time in <em>Settings</em>.
           </>
         ) : (
           <>
-            RapidReady unterstützt sowohl den <strong>Lightroom-Standard</strong> (P = Pick, X = Reject, R = RapidRAW)
-            als auch das <strong>darktable-Schema</strong> (R = Reject, Shift+R = RapidRAW, F2–F5 = Farben). Du kannst
-            das Schema jederzeit unter <em>Einstellungen → Allgemein</em> umstellen.
+            RapidReady unterstützt sowohl den <strong>Lightroom-Standard</strong> (P = Pick, X = Reject, R = In {devName} öffnen)
+            als auch das <strong>darktable-Schema</strong> (R = Reject, Shift+R = In {devName} öffnen, F2–F5 = Farben). Du kannst
+            das Schema und Deinen bevorzugten RAW-Entwickler (RapidRAW, darktable, Lightroom, System-Standard oder Eigene App) jederzeit unter <em>Einstellungen</em> anpassen.
           </>
         )}
       </TipBox>

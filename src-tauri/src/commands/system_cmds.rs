@@ -477,74 +477,217 @@ fn find_rapidraw_binary() -> Option<std::path::PathBuf> {
     None
 }
 
-#[tauri::command]
-pub fn open_in_rapidraw(path: String) -> Result<(), String> {
+fn open_system_default(file_path: &str) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
-        let file_to_open = find_first_image_in_path(&path);
-
-        // If binary is found, launch it directly so tauri-plugin-single-instance in RapidRAW
-        // can receive the CLI argument and forward it via IPC socket to the running instance!
-        if let Some(bin_path) = find_rapidraw_binary() {
-            let _ = std::process::Command::new(&bin_path)
-                .arg(&file_to_open)
-                .spawn();
-
-            // Bring RapidRAW to the foreground
-            let _ = std::process::Command::new("osascript")
-                .args(["-e", "tell application id \"io.github.CyberTimon.RapidRAW\" to activate"])
-                .spawn();
-
-            return Ok(());
-        }
-
-        // Fallback: try bundle id
-        let status = std::process::Command::new("open")
-            .args(["-b", "io.github.CyberTimon.RapidRAW", &file_to_open])
-            .status();
-
-        if let Ok(s) = status {
-            if s.success() {
-                return Ok(());
-            }
-        }
-
-        // Fallback: system default open
         std::process::Command::new("open")
-            .arg(&file_to_open)
+            .arg(file_path)
             .spawn()
             .map_err(|e| format!("Failed to open: {}", e))?;
-
         Ok(())
     }
-    #[cfg(target_os = "windows")]
+    #[cfg(not(target_os = "macos"))]
     {
-        let file_to_open = find_first_image_in_path(&path);
-        
-        let candidate_paths = [
-            // User-Installation (Standard bei Tauri / Squirrel / NSIS)
-            std::env::var("LOCALAPPDATA").map(|p| format!("{}\\Programs\\RapidRaw\\RapidRaw.exe", p)).ok(),
-            std::env::var("LOCALAPPDATA").map(|p| format!("{}\\RapidRaw\\RapidRaw.exe", p)).ok(),
-            // Systemweite Installation
-            std::env::var("ProgramFiles").map(|p| format!("{}\\RapidRaw\\RapidRaw.exe", p)).ok(),
-            std::env::var("ProgramFiles(x86)").map(|p| format!("{}\\RapidRaw\\RapidRaw.exe", p)).ok(),
-        ];
+        open::that(file_path).map_err(|e| e.to_string())
+    }
+}
 
-        for candidate in candidate_paths.into_iter().flatten() {
-            if std::path::Path::new(&candidate).exists() {
-                let _ = std::process::Command::new(&candidate)
-                    .arg(&file_to_open)
-                    .spawn();
-                return Ok(());
+#[tauri::command]
+pub fn open_in_rapidraw(
+    path: String,
+    developer: Option<String>,
+    custom_path: Option<String>,
+) -> Result<(), String> {
+    let file_to_open = find_first_image_in_path(&path);
+    let dev = developer.as_deref().unwrap_or("rapidraw").to_lowercase();
+
+    match dev.as_str() {
+        "custom" => {
+            if let Some(ref cp) = custom_path.filter(|s| !s.trim().is_empty()) {
+                let cp_path = std::path::Path::new(cp);
+                if cp_path.exists() {
+                    #[cfg(target_os = "macos")]
+                    {
+                        if cp.ends_with(".app") {
+                            let _ = std::process::Command::new("open")
+                                .args(["-a", cp, &file_to_open])
+                                .spawn()
+                                .map_err(|e| format!("Failed to open custom app: {}", e))?;
+                            return Ok(());
+                        } else {
+                            let _ = std::process::Command::new(cp)
+                                .arg(&file_to_open)
+                                .spawn()
+                                .map_err(|e| format!("Failed to launch custom binary: {}", e))?;
+                            return Ok(());
+                        }
+                    }
+                    #[cfg(not(target_os = "macos"))]
+                    {
+                        let _ = std::process::Command::new(cp)
+                            .arg(&file_to_open)
+                            .spawn()
+                            .map_err(|e| format!("Failed to launch custom binary: {}", e))?;
+                        return Ok(());
+                    }
+                }
+            }
+            open_system_default(&file_to_open)
+        }
+        "darktable" => {
+            #[cfg(target_os = "macos")]
+            {
+                let mut dt_candidates = vec![std::path::PathBuf::from("/Applications/darktable.app")];
+                if let Ok(home) = std::env::var("HOME") {
+                    dt_candidates.push(std::path::PathBuf::from(home).join("Applications/darktable.app"));
+                }
+                for cand in dt_candidates {
+                    if cand.exists() {
+                        let _ = std::process::Command::new("open")
+                            .args(["-a", &cand.to_string_lossy(), &file_to_open])
+                            .spawn();
+                        return Ok(());
+                    }
+                }
+                let status = std::process::Command::new("open")
+                    .args(["-b", "org.darktable", &file_to_open])
+                    .status();
+                if let Ok(s) = status {
+                    if s.success() {
+                        return Ok(());
+                    }
+                }
+                open_system_default(&file_to_open)
+            }
+            #[cfg(target_os = "windows")]
+            {
+                let candidate_paths = [
+                    std::env::var("ProgramFiles").map(|p| format!("{}\\darktable\\bin\\darktable.exe", p)).ok(),
+                    std::env::var("LOCALAPPDATA").map(|p| format!("{}\\Programs\\darktable\\bin\\darktable.exe", p)).ok(),
+                    std::env::var("ProgramFiles(x86)").map(|p| format!("{}\\darktable\\bin\\darktable.exe", p)).ok(),
+                ];
+                for candidate in candidate_paths.into_iter().flatten() {
+                    if std::path::Path::new(&candidate).exists() {
+                        let _ = std::process::Command::new(&candidate)
+                            .arg(&file_to_open)
+                            .spawn();
+                        return Ok(());
+                    }
+                }
+                open_system_default(&file_to_open)
+            }
+            #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+            {
+                if let Ok(_child) = std::process::Command::new("darktable").arg(&file_to_open).spawn() {
+                    return Ok(());
+                }
+                open_system_default(&file_to_open)
             }
         }
+        "lightroom" => {
+            #[cfg(target_os = "macos")]
+            {
+                let lr_app = std::path::Path::new("/Applications/Adobe Lightroom Classic/Adobe Lightroom Classic.app");
+                if lr_app.exists() {
+                    let _ = std::process::Command::new("open")
+                        .args(["-a", "/Applications/Adobe Lightroom Classic/Adobe Lightroom Classic.app", &file_to_open])
+                        .spawn();
+                    return Ok(());
+                }
+                let status = std::process::Command::new("open")
+                    .args(["-b", "com.adobe.LightroomClassicCC7", &file_to_open])
+                    .status();
+                if let Ok(s) = status {
+                    if s.success() {
+                        return Ok(());
+                    }
+                }
+                open_system_default(&file_to_open)
+            }
+            #[cfg(target_os = "windows")]
+            {
+                let candidate_paths = [
+                    std::env::var("ProgramFiles").map(|p| format!("{}\\Adobe\\Adobe Lightroom Classic\\Lightroom.exe", p)).ok(),
+                    std::env::var("ProgramFiles(x86)").map(|p| format!("{}\\Adobe\\Adobe Lightroom Classic\\Lightroom.exe", p)).ok(),
+                ];
+                for candidate in candidate_paths.into_iter().flatten() {
+                    if std::path::Path::new(&candidate).exists() {
+                        let _ = std::process::Command::new(&candidate)
+                            .arg(&file_to_open)
+                            .spawn();
+                        return Ok(());
+                    }
+                }
+                open_system_default(&file_to_open)
+            }
+            #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+            {
+                open_system_default(&file_to_open)
+            }
+        }
+        "system" => {
+            open_system_default(&file_to_open)
+        }
+        _ => {
+            #[cfg(target_os = "macos")]
+            {
+                // If binary is found, launch it directly so tauri-plugin-single-instance in RapidRAW
+                // can receive the CLI argument and forward it via IPC socket to the running instance!
+                if let Some(bin_path) = find_rapidraw_binary() {
+                    let _ = std::process::Command::new(&bin_path)
+                        .arg(&file_to_open)
+                        .spawn();
 
-        // Fallback: systemweites Öffnen
-        open::that(&file_to_open).map_err(|e| e.to_string())
-    }
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-    {
-        open::that(&path).map_err(|e| e.to_string())
+                    // Bring RapidRAW to the foreground
+                    let _ = std::process::Command::new("osascript")
+                        .args(["-e", "tell application id \"io.github.CyberTimon.RapidRAW\" to activate"])
+                        .spawn();
+
+                    return Ok(());
+                }
+
+                // Fallback: try bundle id
+                let status = std::process::Command::new("open")
+                    .args(["-b", "io.github.CyberTimon.RapidRAW", &file_to_open])
+                    .status();
+
+                if let Ok(s) = status {
+                    if s.success() {
+                        return Ok(());
+                    }
+                }
+
+                // Fallback: system default open
+                open_system_default(&file_to_open)
+            }
+            #[cfg(target_os = "windows")]
+            {
+                let candidate_paths = [
+                    // User-Installation (Standard bei Tauri / Squirrel / NSIS)
+                    std::env::var("LOCALAPPDATA").map(|p| format!("{}\\Programs\\RapidRaw\\RapidRaw.exe", p)).ok(),
+                    std::env::var("LOCALAPPDATA").map(|p| format!("{}\\RapidRaw\\RapidRaw.exe", p)).ok(),
+                    // Systemweite Installation
+                    std::env::var("ProgramFiles").map(|p| format!("{}\\RapidRaw\\RapidRaw.exe", p)).ok(),
+                    std::env::var("ProgramFiles(x86)").map(|p| format!("{}\\RapidRaw\\RapidRaw.exe", p)).ok(),
+                ];
+
+                for candidate in candidate_paths.into_iter().flatten() {
+                    if std::path::Path::new(&candidate).exists() {
+                        let _ = std::process::Command::new(&candidate)
+                            .arg(&file_to_open)
+                            .spawn();
+                        return Ok(());
+                    }
+                }
+
+                // Fallback: systemweites Öffnen
+                open_system_default(&file_to_open)
+            }
+            #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+            {
+                open_system_default(&file_to_open)
+            }
+        }
     }
 }
 

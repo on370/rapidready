@@ -10,7 +10,7 @@ import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { LibraryImage, useLibraryStore } from '../../../../stores/libraryStore';
 import { useLibraryUIStore } from '../../../../stores/libraryUIStore';
-import { useSettingsStore } from '../../../../stores/settingsStore';
+import { useSettingsStore, getRawDeveloperDisplayName, openInConfiguredRawDeveloper } from '../../../../stores/settingsStore';
 import { HelpPopover } from '../../../ui/HelpPopover';
 import { COLOR_PALETTE, getColorConfig } from '../../../../constants/culling';
 import { normalizeSlash } from '../../../../utils/image';
@@ -43,8 +43,10 @@ export const CullingToolbar = React.memo(function CullingToolbar({
   handleDeleteRejected,
   toggleInspector,
 }: CullingToolbarProps) {
-  const { t } = useTranslation('library');
-  const shortcutPreset = useSettingsStore(s => s.shortcutPreset);
+  const { t, i18n } = useTranslation('library');
+  const isEn = i18n.language?.startsWith('en');
+  const { shortcutPreset, rawDeveloper, customRawDeveloperPath } = useSettingsStore();
+  const devName = getRawDeveloperDisplayName(rawDeveloper, customRawDeveloperPath, isEn);
 
   // Domain Store
   const {
@@ -877,17 +879,18 @@ export const CullingToolbar = React.memo(function CullingToolbar({
             <div className="absolute right-0 top-full mt-2 w-56 bg-app-card/95 backdrop-blur-md border border-app-border rounded-xl shadow-xl py-1 z-50 animate-in fade-in zoom-in-95 duration-100">
               <button
                 onClick={() => {
-                  invoke('open_in_rapidraw', { path: activeImage.path });
+                  openInConfiguredRawDeveloper(activeImage.path);
                   setIsShareOpen(false);
                 }}
-                className="w-full flex items-center justify-between px-3 py-2 text-xs text-txt-primary hover:bg-accent hover:text-white transition-colors cursor-pointer group"
+                title={isEn ? `Open in ${devName}` : `In ${devName} öffnen`}
+                className="w-full flex items-center justify-between px-3 py-2 text-xs text-txt-primary hover:bg-accent hover:text-white transition-colors cursor-pointer group gap-2"
               >
-                <div className="flex items-center gap-2">
-                  <Rocket className="w-3.5 h-3.5 text-accent group-hover:text-white transition-colors" />
-                  <span className="font-medium">{t('toolbar.openInRapidRaw')}</span>
+                <div className="flex items-center gap-2 min-w-0 pr-1">
+                  <Rocket className="w-3.5 h-3.5 text-accent group-hover:text-white transition-colors shrink-0" />
+                  <span className="font-medium truncate">{isEn ? `Open in ${devName}` : `In ${devName} öffnen`}</span>
                 </div>
-                <kbd className="text-[10px] text-txt-tertiary group-hover:text-white/80 font-mono px-1 py-0.5 rounded bg-black/20">
-                  R
+                <kbd className="text-[10px] text-txt-tertiary group-hover:text-white/80 font-mono px-1 py-0.5 rounded bg-black/20 shrink-0">
+                  {shortcutPreset === 'darktable' ? `${shiftSymbol}R` : 'R'}
                 </kbd>
               </button>
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { open } from "@tauri-apps/plugin-dialog";
 import { 
   FileCode2, 
   Check, 
@@ -10,7 +11,9 @@ import {
   Play, 
   X, 
   ShieldCheck, 
-  Info
+  Info,
+  Rocket,
+  FolderOpen
 } from "lucide-react";
 import { useSettingsStore } from "../../../stores/settingsStore";
 import { useLibraryStore } from "../../../stores/libraryStore";
@@ -27,12 +30,36 @@ interface SidecarSyncProgress {
 }
 
 export function SidecarSettingsCard() {
-  const { t } = useTranslation('settings');
-  const { sidecarMode, setSidecarMode, xmpNaming, setXmpNaming } = useSettingsStore();
+  const { t, i18n } = useTranslation('settings');
+  const isEn = i18n.language?.startsWith('en');
+  const { 
+    sidecarMode, 
+    setSidecarMode, 
+    xmpNaming, 
+    setXmpNaming,
+    rawDeveloper,
+    setRawDeveloper,
+    customRawDeveloperPath,
+    setCustomRawDeveloperPath,
+  } = useSettingsStore();
   const images = useLibraryStore((s) => s.images);
 
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState<SidecarSyncProgress | null>(null);
+
+  const handleSelectCustomApp = async () => {
+    try {
+      const selected = await open({
+        multiple: false,
+        directory: false,
+      });
+      if (selected && typeof selected === 'string') {
+        setCustomRawDeveloperPath(selected);
+      }
+    } catch (err) {
+      console.error("Failed to select custom app:", err);
+    }
+  };
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -137,6 +164,127 @@ export function SidecarSettingsCard() {
       </div>
 
       <div className="p-5 space-y-4">
+        {/* Preferred RAW Developer Selector */}
+        <div className="p-3.5 bg-app-deepest/40 border border-app-border rounded-xl space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <div className="text-xs font-semibold text-txt-primary flex items-center gap-1.5">
+                <Rocket className="w-4 h-4 text-accent" />
+                <span>{t('sidecar.rawDevTitle', 'Bevorzugter RAW-Entwickler (Taste R / Shift+R & Import)')}</span>
+              </div>
+              <p className="text-[11px] text-txt-secondary mt-0.5">
+                {t('sidecar.rawDevSubtitle', 'Bestimmt, mit welchem RAW-Entwickler Fotos zur direkten Bearbeitung übergeben werden')}
+              </p>
+            </div>
+          </div>
+
+          {/* Pills / Buttons */}
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 pt-0.5">
+            {[
+              {
+                id: 'rapidraw' as const,
+                label: 'RapidRAW',
+                title: isEn
+                  ? 'Opens the photo directly in RapidRAW'
+                  : 'Öffnet das Foto direkt in RapidRAW',
+              },
+              {
+                id: 'darktable' as const,
+                label: 'darktable',
+                title: isEn
+                  ? 'Opens the photo directly in darktable'
+                  : 'Öffnet das Foto direkt in darktable',
+              },
+              {
+                id: 'lightroom' as const,
+                label: 'Lightroom',
+                title: isEn
+                  ? 'Opens the photo in Adobe Lightroom Classic / Lightroom'
+                  : 'Öffnet das Foto in Adobe Lightroom Classic / Lightroom',
+              },
+              {
+                id: 'system' as const,
+                label: isEn ? 'System' : 'System',
+                title: isEn
+                  ? 'System Default: Opens the RAW file with the default application registered for this file type in macOS (Finder) or Windows (Explorer).'
+                  : 'System-Standard: Öffnet die RAW-Datei mit dem Programm, das in macOS (Finder) bzw. Windows (Explorer) als Standard-App für diesen Dateityp hinterlegt ist.',
+              },
+              {
+                id: 'custom' as const,
+                label: isEn ? 'Custom…' : 'Eigene App…',
+                title: isEn
+                  ? 'Choose a custom application (.app / .exe)'
+                  : 'Eigene Anwendung (.app / .exe) frei auswählen',
+              },
+            ].map(dev => (
+              <button
+                key={dev.id}
+                type="button"
+                onClick={() => setRawDeveloper(dev.id)}
+                title={dev.title}
+                className={`w-full px-2 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer border text-center truncate ${
+                  rawDeveloper === dev.id
+                    ? 'border-accent bg-accent text-white shadow-xs'
+                    : 'border-app-border bg-app-card hover:bg-app-hover text-txt-secondary hover:text-txt-primary'
+                }`}
+              >
+                {dev.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Dynamic explanation line */}
+          <p className="text-[11px] text-txt-tertiary leading-relaxed">
+            {rawDeveloper === 'rapidraw' && (
+              isEn
+                ? 'Launches RapidRAW with the selected photo or target folder.'
+                : 'Startet RapidRAW mit dem ausgewählten Foto bzw. Zielordner.'
+            )}
+            {rawDeveloper === 'darktable' && (
+              isEn
+                ? 'Launches darktable directly with the selected photo or folder (Tip: set sidecar mode to .xmp / DT).'
+                : 'Startet darktable direkt mit dem ausgewählten Foto bzw. Ordner (Tipp: Sidecar-Modus auf .xmp / DT stellen).'
+            )}
+            {rawDeveloper === 'lightroom' && (
+              isEn
+                ? 'Passes the selected photo to Adobe Lightroom Classic / Lightroom.'
+                : 'Übergibt das ausgewählte Foto an Adobe Lightroom Classic / Lightroom.'
+            )}
+            {rawDeveloper === 'system' && (
+              isEn
+                ? 'System Default: Hands the file to the OS and launches the default app registered for this RAW type in Finder / Explorer.'
+                : 'System-Standard: Übergibt die Datei an das Betriebssystem und startet die im Finder / Explorer für diesen RAW-Typ hinterlegte Standard-App.'
+            )}
+            {rawDeveloper === 'custom' && (
+              isEn
+                ? 'Launches the custom application selected below with the photo path as argument.'
+                : 'Startet die unten ausgewählte eigene Anwendung mit dem Foto als Übergabeparameter.'
+            )}
+          </p>
+
+          {/* Custom App Path row when 'custom' is selected */}
+          {rawDeveloper === 'custom' && (
+            <div className="pt-2 border-t border-app-border/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+              <div className="min-w-0 flex-1">
+                <span className="text-[11px] text-txt-tertiary block">
+                  {t('sidecar.rawDevCustomAppPath', 'Gewählte Anwendung:')}
+                </span>
+                <span className="text-xs font-mono text-txt-primary truncate block" title={customRawDeveloperPath || undefined}>
+                  {customRawDeveloperPath || t('sidecar.rawDevNoCustomApp', 'Keine Anwendung ausgewählt')}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleSelectCustomApp}
+                className="px-3 py-1 text-xs font-medium rounded-lg border border-app-border bg-app-card hover:bg-app-hover text-txt-primary transition-colors shrink-0 cursor-pointer flex items-center gap-1.5"
+              >
+                <FolderOpen className="w-3.5 h-3.5" />
+                <span>{t('sidecar.rawDevBrowseApp', 'App auswählen…')}</span>
+              </button>
+            </div>
+          )}
+        </div>
+
         {/* 3-Way Mode Selector */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {/* Mode 1: RapidRAW .rrdata */}

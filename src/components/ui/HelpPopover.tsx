@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Info } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { isMac, modSymbol, shiftSymbol } from '../../utils/platform';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { useSettingsStore, getRawDeveloperDisplayName } from '../../stores/settingsStore';
 
 interface HelpPopoverProps {
   viewMode: 'grid' | 'loupe' | 'fullscreen';
@@ -11,9 +11,11 @@ interface HelpPopoverProps {
 export function HelpPopover({ viewMode }: HelpPopoverProps) {
   const [isOpen, setIsOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
-  const { t } = useTranslation('help');
-  const shortcutPreset = useSettingsStore((s) => s.shortcutPreset);
+  const { t, i18n } = useTranslation('help');
+  const isEn = i18n.language?.startsWith('en');
+  const { shortcutPreset, rawDeveloper, customRawDeveloperPath } = useSettingsStore();
   const isDarktable = shortcutPreset === 'darktable';
+  const devName = getRawDeveloperDisplayName(rawDeveloper, customRawDeveloperPath, isEn);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -75,9 +77,16 @@ export function HelpPopover({ viewMode }: HelpPopoverProps) {
                   <span className="text-txt-secondary">{t('shortcuts.actions.rotateCcw')}</span>
                   <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">{modSymbol}L / ,</span>
                 </div>
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-txt-secondary">{t('shortcuts.actions.openRapidRaw')}</span>
-                  <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">{isDarktable ? `${shiftSymbol}R` : 'R'}</span>
+                <div className="flex justify-between items-center text-xs gap-3">
+                  <span 
+                    className="text-txt-secondary truncate min-w-0" 
+                    title={t('shortcuts.actions.openInDev', { dev: devName, defaultValue: isEn ? `Open in ${devName}` : `In ${devName} öffnen` })}
+                  >
+                    {t('shortcuts.actions.openInDev', { dev: devName, defaultValue: isEn ? `Open in ${devName}` : `In ${devName} öffnen` })}
+                  </span>
+                  <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary shrink-0">
+                    {isDarktable ? `${shiftSymbol}R` : 'R'}
+                  </span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-txt-secondary">{t('shortcuts.actions.next')}</span>
@@ -134,9 +143,16 @@ export function HelpPopover({ viewMode }: HelpPopoverProps) {
                   <span className="text-txt-secondary">{t('shortcuts.actions.rotateCcw')}</span>
                   <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">{modSymbol}L / ,</span>
                 </div>
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-txt-secondary">{t('shortcuts.actions.openRapidRaw')}</span>
-                  <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">{isDarktable ? `${shiftSymbol}R` : 'R'}</span>
+                <div className="flex justify-between items-center text-xs gap-3">
+                  <span 
+                    className="text-txt-secondary truncate min-w-0" 
+                    title={t('shortcuts.actions.openInDev', { dev: devName, defaultValue: isEn ? `Open in ${devName}` : `In ${devName} öffnen` })}
+                  >
+                    {t('shortcuts.actions.openInDev', { dev: devName, defaultValue: isEn ? `Open in ${devName}` : `In ${devName} öffnen` })}
+                  </span>
+                  <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary shrink-0">
+                    {isDarktable ? `${shiftSymbol}R` : 'R'}
+                  </span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-txt-secondary">{isMac ? t('shortcuts.actions.showInFinder') : t('shortcuts.actions.showInExplorer')}</span>

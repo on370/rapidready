@@ -9,7 +9,7 @@ import { listen } from '@tauri-apps/api/event';
 import { useImportStore } from '../../../stores/importStore';
 import { useLibraryStore, LibraryImage } from '../../../stores/libraryStore';
 import { useNavigationStore } from '../../../stores/navigationStore';
-import { useSettingsStore } from '../../../stores/settingsStore';
+import { useSettingsStore, getRawDeveloperDisplayName, openInConfiguredRawDeveloper } from '../../../stores/settingsStore';
 import { useCollectionsStore, findAlbumById } from '../../../stores/collectionsStore';
 import { useThroughput } from '../../../utils/throughput';
 
@@ -27,7 +27,10 @@ interface ImportExecuteStepProps {
 }
 
 export function ImportExecuteStep({ onReset }: ImportExecuteStepProps) {
-  const { t } = useTranslation('import');
+  const { t, i18n } = useTranslation('import');
+  const isEn = i18n.language?.startsWith('en');
+  const { rawDeveloper, customRawDeveloperPath } = useSettingsStore();
+  const devName = getRawDeveloperDisplayName(rawDeveloper, customRawDeveloperPath, isEn);
   const [isComplete, setIsComplete] = useState(false);
   const [progress, setProgress] = useState<ImportProgress | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
@@ -126,12 +129,6 @@ export function ImportExecuteStep({ onReset }: ImportExecuteStepProps) {
         });
         
         setIsComplete(true);
-
-        if (useSettingsStore.getState().openRapidRaw && resultPaths && resultPaths.length > 0) {
-          invoke('open_in_rapidraw', { path: resultPaths[0] }).catch(err => {
-            console.error("Auto-open in RapidRaw failed:", err);
-          });
-        }
       } catch (error) {
         console.error("Import failed:", error);
         setLogs(prev => [...prev, `ERROR: ${error}`]);
@@ -201,9 +198,9 @@ export function ImportExecuteStep({ onReset }: ImportExecuteStepProps) {
     if (targetToOpen) {
       setIsOpeningRapidRaw(true);
       try {
-        await invoke('open_in_rapidraw', { path: targetToOpen });
+        await openInConfiguredRawDeveloper(targetToOpen);
       } catch (e) {
-        console.error("Failed to open RapidRaw:", e);
+        console.error("Failed to open RAW developer:", e);
       } finally {
         setIsOpeningRapidRaw(false);
       }
@@ -386,7 +383,7 @@ export function ImportExecuteStep({ onReset }: ImportExecuteStepProps) {
                 className="px-5 py-2.5 bg-app-card border border-app-border hover:border-app-border-hover text-txt-primary hover:bg-app-hover text-sm font-medium rounded-lg transition-all duration-150 flex items-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 <Rocket className="w-4 h-4 text-accent" />
-                <span>{isOpeningRapidRaw ? t('execute.starting') : t('execute.openInRapidRaw')}</span>
+                <span>{isOpeningRapidRaw ? t('execute.starting') : (isEn ? `Open in ${devName}` : `In ${devName} öffnen`)}</span>
               </button>
 
               <button 

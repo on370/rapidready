@@ -1,10 +1,14 @@
 import { useTranslation } from 'react-i18next';
+import { useSettingsStore, getRawDeveloperDisplayName } from '../../../../stores/settingsStore';
 import { SectionHeading, Kbd, TipBox, InfoBox, FeatureCard } from '../HelpShared';
 import { Trash2, ShieldAlert, Sparkles, FolderSearch } from 'lucide-react';
 
 export function HelpSafety() {
   const { i18n } = useTranslation();
   const isEn = i18n.language?.startsWith('en');
+  const { rawDeveloper, customRawDeveloperPath, shortcutPreset } = useSettingsStore();
+  const devName = getRawDeveloperDisplayName(rawDeveloper, customRawDeveloperPath, isEn);
+  const openKeys = shortcutPreset === 'darktable' ? ['Shift', 'R'] : ['R'];
 
   return (
     <div className="flex flex-col gap-5">
@@ -16,8 +20,8 @@ export function HelpSafety() {
         }
         subtitle={
           isEn
-            ? 'Safety guardrails preventing data loss, native operating system trash, and seamless handover to RapidRAW.'
-            : 'Sicherheits-Guardrails vor Datenverlust, echter Betriebssystem-Papierkorb und nahtlose Übergabe an RapidRAW.'
+            ? `Safety guardrails preventing data loss, native operating system trash, and seamless handover to ${devName}.`
+            : `Sicherheits-Guardrails vor Datenverlust, echter Betriebssystem-Papierkorb und nahtlose Übergabe an ${devName}.`
         }
       />
 
@@ -42,17 +46,17 @@ export function HelpSafety() {
 
         <FeatureCard
           icon={<Sparkles className="w-4 h-4" />}
-          title={isEn ? 'Direct Link to RapidRAW' : 'Direktlink zu RapidRAW'}
+          title={isEn ? `Direct Link to ${devName}` : `Direktlink zu ${devName}`}
         >
           {isEn ? (
             <>
-              Press <Kbd keys={['R']} /> at any time to open the currently selected photo directly in the
-              powerful RAW developer RapidRAW for seamless editing.
+              Press <Kbd keys={openKeys} /> at any time to open the currently selected photo directly in{' '}
+              <strong>{devName}</strong> for seamless editing.
             </>
           ) : (
             <>
-              Drücke jederzeit die Taste <Kbd keys={['R']} />, um das aktuell ausgewählte Foto sofort im
-              leistungsfähigen RAW-Entwickler RapidRAW zu öffnen und nahtlos weiterzubearbeiten.
+              Drücke jederzeit die Taste <Kbd keys={openKeys} />, um das aktuell ausgewählte Foto sofort in{' '}
+              <strong>{devName}</strong> zu öffnen und nahtlos weiterzubearbeiten.
             </>
           )}
         </FeatureCard>

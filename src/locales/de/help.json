@@ -45,6 +45,7 @@
       "rotateCw": "Im UZS drehen",
       "rotateCcw": "Gegen UZS drehen",
       "focusPeaking": "Focus Peaking an/aus",
+      "openInDev": "In {{dev}} öffnen",
       "openRapidRaw": "In RapidRAW bearbeiten",
       "showInFinder": "Im Finder anzeigen",
       "showInExplorer": "Im Explorer anzeigen",

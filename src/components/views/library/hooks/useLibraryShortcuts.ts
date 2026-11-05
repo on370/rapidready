@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useLibraryStore, LibraryImage } from '../../../../stores/libraryStore';
 import { useCollectionsStore } from '../../../../stores/collectionsStore';
 import { useLibraryUIStore } from '../../../../stores/libraryUIStore';
-import { useSettingsStore } from '../../../../stores/settingsStore';
+import { useSettingsStore, openInConfiguredRawDeveloper } from '../../../../stores/settingsStore';
 
 interface UseLibraryShortcutsProps {
   activeImage: LibraryImage | undefined;
@@ -127,11 +127,11 @@ export function useLibraryShortcuts({
         return;
       }
 
-      // Shortcut: Shift + R in darktable mode -> Open in RapidRAW
+      // Shortcut: Shift + R in darktable mode -> Open in configured RAW developer
       if (shortcutPreset === 'darktable' && !e.metaKey && !e.ctrlKey && !e.altKey && e.shiftKey && (e.key === 'r' || e.key === 'R')) {
         e.preventDefault();
         if (activeImage) {
-          invoke('open_in_rapidraw', { path: activeImage.path });
+          openInConfiguredRawDeveloper(activeImage.path);
         }
         return;
       }
@@ -143,9 +143,9 @@ export function useLibraryShortcuts({
           // In darktable: R toggles Reject (-1 vs null)
           handleCulling(activeImage?.culling.flag === -1 ? null : -1, activeImage?.culling.rating || 0);
         } else {
-          // In Lightroom standard: R opens in RapidRAW
+          // In Lightroom standard: R opens in configured RAW developer
           if (activeImage) {
-            invoke('open_in_rapidraw', { path: activeImage.path });
+            openInConfiguredRawDeveloper(activeImage.path);
           }
         }
         return;

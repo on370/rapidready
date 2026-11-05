@@ -8,6 +8,7 @@ import {
 import { isMac, modSymbol, shiftSymbol } from '../../../utils/platform';
 import { COLOR_PALETTE } from '../../../constants/culling';
 import { useCollectionsStore, AlbumItem, findAlbumsContainingPaths } from '../../../stores/collectionsStore';
+import { useSettingsStore, getRawDeveloperDisplayName } from '../../../stores/settingsStore';
 
 function getFlatAlbums(nodes: AlbumItem[], prefix = ''): Array<{ id: string; name: string; count: number }> {
   const list: Array<{ id: string; name: string; count: number }> = [];
@@ -67,7 +68,10 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
   onAddToCollection,
   onCreateCollectionAndAdd,
 }) => {
-  const { t } = useTranslation('library');
+  const { t, i18n } = useTranslation('library');
+  const isEn = i18n.language?.startsWith('en');
+  const { shortcutPreset, rawDeveloper, customRawDeveloperPath } = useSettingsStore();
+  const devName = getRawDeveloperDisplayName(rawDeveloper, customRawDeveloperPath, isEn);
   const menuRef = useRef<HTMLDivElement>(null);
   const [hoverRating, setHoverRating] = useState<number | null>(null);
   const [openSubmenu, setOpenSubmenu] = useState<'add' | 'remove' | null>(null);
@@ -505,13 +509,16 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
       <div className="px-1 py-0.5 space-y-0.5">
         <button
           onClick={() => { onOpenInRapidRaw(); onClose(); }}
-          className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-accent hover:text-white transition-colors cursor-pointer group"
+          className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-accent hover:text-white transition-colors cursor-pointer group gap-2"
+          title={isEn ? `Open in ${devName}` : `In ${devName} öffnen`}
         >
-          <div className="flex items-center gap-2">
-            <Rocket className="w-3.5 h-3.5 text-accent group-hover:text-white" />
-            <span>{t('toolbar.openInRapidRaw')}</span>
+          <div className="flex items-center gap-2 min-w-0 pr-1">
+            <Rocket className="w-3.5 h-3.5 text-accent group-hover:text-white shrink-0" />
+            <span className="truncate">{isEn ? `Open in ${devName}` : `In ${devName} öffnen`}</span>
           </div>
-          <span className="text-[10px] text-txt-tertiary group-hover:text-white/80 font-mono">R</span>
+          <span className="text-[10px] text-txt-tertiary group-hover:text-white/80 font-mono shrink-0">
+            {shortcutPreset === 'darktable' ? `${shiftSymbol}R` : 'R'}
+          </span>
         </button>
         <button
           onClick={() => { onShowInFinder(); onClose(); }}

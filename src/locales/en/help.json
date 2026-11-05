@@ -45,6 +45,7 @@
       "rotateCw": "Rotate Clockwise",
       "rotateCcw": "Rotate Counter-Clockwise",
       "focusPeaking": "Toggle Focus Peaking",
+      "openInDev": "Open in {{dev}}",
       "openRapidRaw": "Edit in RapidRAW",
       "showInFinder": "Show in Finder",
       "showInExplorer": "Show in Explorer",

@@ -93,8 +93,8 @@ export function SettingsView() {
     verifyCopy, setVerifyCopy,
     deleteSource, setDeleteSource,
     launchSystem, setLaunchSystem,
-    */
     openRapidRaw, setOpenRapidRaw,
+    */
     startupView, setStartupView,
     shortcutPreset, setShortcutPreset,
     enableFolderDeletion, setEnableFolderDeletion,
@@ -416,22 +416,6 @@ export function SettingsView() {
                 </span>
               </div>
             </label>
-          </div>
-        </div>
-
-        {/* RapidRaw Integration */}
-        <div className="bg-app-card border border-app-border rounded-xl overflow-hidden">
-          <div className="px-5 py-3 border-b border-app-border">
-            <h3 className="text-sm font-semibold text-txt-primary">{t('rapidraw.title')}</h3>
-          </div>
-          <div className="px-5 py-4 flex items-center justify-between">
-            <div>
-              <p className="text-sm text-txt-primary">{t('rapidraw.openAfterImport.title')}</p>
-              <p className="text-xs text-txt-tertiary">{t('rapidraw.openAfterImport.desc')}</p>
-            </div>
-            <div className={`toggle-track ${openRapidRaw ? 'on' : ''}`} onClick={() => setOpenRapidRaw(!openRapidRaw)}>
-              <div className="toggle-knob"></div>
-            </div>
           </div>
         </div>
 
