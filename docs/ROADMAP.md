@@ -17,6 +17,44 @@
 
 ## 🚀 Released Milestones
 
+### Released in `v0.6.1` (Build `0180`)
+- [x] **Fast Non-Blocking Trash Deletion on macOS (`system_cmds.rs`):**
+  - Cocoa `NSFileManager.trashItemAtURL` (`DeleteMethod::NsFileManager`) integration replacing synchronous Finder AppleScript processes.
+  - Decoupled deletion and SQLite pruning using `tauri::async_runtime::spawn_blocking` to protect Tokio worker threads and `rr-image://` streaming.
+  - Comprehensive sidecar deletion removing both `.rrdata` (`get_sidecar_path`) and `.xmp` (`find_existing_xmp_path`) companion files.
+- [x] **Fail-Safe React Error Boundary (`AppErrorBoundary.tsx`, `main.tsx`, `LibraryCenter.tsx`):**
+  - Added dedicated `<AppErrorBoundary>` preventing black-screen crashes and providing a 1-click **„Oberfläche wiederherstellen“** (Restore Interface) button.
+- [x] **Loupe View Deletion Stability & Index Clamping (`LoupeViewer.tsx`, `LibraryCenter.tsx`, `libraryStore.ts`):**
+  - Resolved `TypeError: undefined is not an object` in Loupe View's RAM warmup preloader and footer with strictly clamped index lookups and per-element existence checks.
+  - Introduced derived `safeActiveIndex` in `LibraryCenter.tsx` and updated `removeImages` to shift `activeImageIndex` forward by deleted preceding images.
+  - Immediate fallback to Grid View when all scoped images are deleted.
+- [x] **Folder Tree & Keyboard Navigation Ergonomics (`useLibraryShortcuts.ts`, `LibraryLeftSidebar.tsx`):**
+  - Added `e.preventDefault()` to all navigation keys (<kbd>↑</kbd>, <kbd>↓</kbd>, <kbd>←</kbd>, <kbd>→</kbd>, <kbd>J</kbd>, <kbd>K</kbd>) to prevent unwanted browser default scrolling on the folder tree container.
+  - Removed disruptive `scrollIntoView` auto-scrolling in `TreeView` during photo navigation.
+- [x] **File Watcher Ghost Event Suppression & Post-Import Hardening (`archive_cmds.rs`, `ImportExecuteStep.tsx`, `SourceDrivePicker.tsx`):**
+  - Suppressed ghost `sidecar-updated` events by checking existence of both sidecar and target image.
+  - Filtered `.DS_Store` and non-archive files from being misclassified as deleted directories.
+  - Fixed false-positive removable media badge on external SSD subfolders and reset scan state to `idle` upon library navigation.
+
+### Released in `v0.6.0` (Build `0178`)
+- [x] **Universal Adobe XMP (`.xmp`) & RapidRAW (`.rrdata`) Sidecar Architecture (`culling.rs`, `culling_xmp.rs`, `SidecarSettingsCard.tsx`):**
+  - Non-destructive read-modify-write engine with 3 configurable sync modes (`RapidRAW Native`, `Dual-Sync`, `Standard XMP`).
+  - Filesystem `mtime` Single Source of Truth (SSoT) conflict resolution.
+  - Dual XMP naming conventions (`STD: <stem>.xmp` vs `DT: <file>.<ext>.xmp`) with companion JPEG collision protection.
+  - Full bidirectional darktable color label (`<darktable:colorlabels>`) and hierarchical tag (`<lr:hierarchicalSubject>`) support.
+  - Inspector header sidecar source badges (`[ .rrdata ]`, `[ .xmp ]`, `[ .rrdata · .xmp ]`).
+  - NAS-safe bulk sidecar sync with thread-safe pause/resume/cancel controls (`ScanController`).
+- [x] **Configurable External RAW Developer Launcher (`system_cmds.rs`, `settingsStore.ts`, `SidecarSettingsCard.tsx`, `HelpRawDevelopers.tsx`):**
+  - Multi-app launcher (<kbd>R</kbd> / <kbd>Shift</kbd>+<kbd>R</kbd>) supporting RapidRAW, darktable, Adobe Lightroom Classic, System Default, or Custom Applications.
+  - Dynamic UI labels, menus, toolbar popovers, and truncate protection for long application names.
+  - Dedicated in-app help chapter (`HelpRawDevelopers.tsx`) with end-to-end integration workflows.
+- [x] **Lazy On-Demand Import Duplicate Detection (`archive_catalog.rs`, `import_index.rs`, `scanner.rs`):**
+  - Zero-I/O pre-existing archive duplicate detection during SD card / source scans (100% CTSP compliant).
+- [x] **Capture One & Reverse-Layout DNG Support (`thumbnail/`, `metadata_resolver/`):**
+  - Decoding for reverse TIFF layout DNGs and Apple ImageIO fallback for uncompressed sensor CFA files.
+- [x] **Archive Deletion Reconciliation (`archive_catalog.rs`, `archive.rs`):**
+  - Automatic purging of externally deleted folders and orphaned photos, eliminating ghost folders.
+
 ### Released in `v0.5.4` (Build `0175`)
 - [x] **Fullscreen Presentation & Integrated Slideshow Mode (`FullscreenViewer.tsx`, `libraryUIStore.ts`, `CullingToolbar.tsx`):**
   - **Zero-Lag Full Window Presentation Mode (<kbd>F</kbd>):** Dedicated distraction-free full window viewing unmounting sidebars and navigation while keeping `LibraryGrid` resident in the background DOM (`z-0 invisible pointer-events-none`) for 0 ms return transitions and 100% preserved scroll state.
@@ -1134,6 +1172,19 @@
        - Collection Export destination: Export curated collections directly into an Immich Album.
   - **CTSP Guardrail:**
     - Strictly isolate remote REST/HTTP calls from the local filesystem scanner and `rr-image://` fast-path. Once an Immich thumbnail is fetched once, serve it in `< 0.5 ms` from local L1 RAM / L2 SSD `ChunkCache`.
+
+---
+
+### Milestone: UX & Navigation Ergonomics (`v0.7.0` Backlog)
+- [ ] **Loupe View Folder-Tree Navigation via <kbd>↑</kbd> / <kbd>↓</kbd> (`useLibraryShortcuts.ts`, `LibraryLeftSidebar.tsx`, `libraryStore.ts`):**
+  - **Goal:** In Loupe View, <kbd>←</kbd> / <kbd>→</kbd> step through images while <kbd>↑</kbd> / <kbd>↓</kbd> switch to the previous/next folder in the sidebar tree (including automatic tree scroll at the top/bottom viewport edges).
+  - **Requirements & Edge Cases:**
+    - **Shared Tree State:** Lift `expandedMap` / `getVisibleTreeNodes` (or expose `navigateFolder(delta: -1 | 1)`) so `useLibraryShortcuts` can resolve the adjacent visible tree node.
+    - **Traversal Semantics:** Define whether <kbd>↑</kbd> / <kbd>↓</kbd> steps through all visible tree nodes (including subtrees), only sibling folders, or only non-empty folders (`fileCount > 0`), and ensure folder switching in Loupe View immediately selects the first image (`activeImageIndex = 0`, `selectedPaths = Set([first.path])`).
+    - **Scope Guards:** In *Collections* (`activeCollectionId`) and *Last Import* (`isViewingLastImport`), where no folder tree node is active, keep <kbd>↑</kbd> / <kbd>↓</kbd> as image navigation or no-op.
+    - **Tree Viewport Auto-Scroll:** Scroll the newly selected folder node (`isDirectlySelected`) into view (`scrollIntoView({ block: 'nearest' })`) without re-introducing unwanted tree scrolling during Grid navigation.
+    - **Docs & i18n:** Update shortcut help popover (`HelpPopover.tsx`), help docs, and DE/EN locale strings.
+
 
 
 

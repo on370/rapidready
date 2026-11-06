@@ -168,6 +168,7 @@ export function useLibraryShortcuts({
       }
 
       if (e.key === 'ArrowRight' || e.key === 'j') {
+        e.preventDefault();
         if (displayedImages.length === 0) return;
         const next = Math.min(displayedImages.length - 1, activeImageIndex + 1);
         setActiveImageIndex(next);
@@ -175,6 +176,7 @@ export function useLibraryShortcuts({
           setSelectedPaths(new Set([displayedImages[next].path]));
         }
       } else if (e.key === 'ArrowLeft' || e.key === 'k') {
+        e.preventDefault();
         if (displayedImages.length === 0) return;
         const prev = Math.max(0, activeImageIndex - 1);
         setActiveImageIndex(prev);
@@ -182,6 +184,7 @@ export function useLibraryShortcuts({
           setSelectedPaths(new Set([displayedImages[prev].path]));
         }
       } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
         if (displayedImages.length === 0) return;
         const step = viewMode === 'grid' ? numColumns : 1;
         const next = Math.min(displayedImages.length - 1, activeImageIndex + step);
@@ -190,6 +193,7 @@ export function useLibraryShortcuts({
           setSelectedPaths(new Set([displayedImages[next].path]));
         }
       } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
         if (displayedImages.length === 0) return;
         const step = viewMode === 'grid' ? numColumns : 1;
         const prev = Math.max(0, activeImageIndex - step);

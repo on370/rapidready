@@ -197,7 +197,6 @@ function TreeView({
   const { t } = useTranslation('library');
   const { activeImageFolder, isViewingLastImport, stagedDeleteFolderPaths } = useLibraryStore();
   const activeCollectionId = useCollectionsStore((s) => s.activeCollectionId);
-  const nodeRef = useRef<HTMLDivElement>(null);
   const isStaged = stagedDeleteFolderPaths.has(normalizeSlash(node.path));
   
   const isExplicitlySet = expandedMap[node.path] !== undefined;
@@ -227,16 +226,6 @@ function TreeView({
     }
   }, [normImageFolder]);
 
-  // Auto-scroll the folder containing the active photo (or its visible collapsed ancestor) into view
-  useEffect(() => {
-    if (showsImageBadge && nodeRef.current) {
-      const timer = setTimeout(() => {
-        nodeRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      }, 80);
-      return () => clearTimeout(timer);
-    }
-  }, [showsImageBadge]);
-
   const childNodes = Object.values(node.children).sort((a, b) => a.name.localeCompare(b.name));
 
   // Distinct visual styling for folder selection vs. photo location
@@ -252,7 +241,6 @@ function TreeView({
   return (
     <div className="space-y-0.5">
       <div 
-        ref={nodeRef}
         className={`flex items-center gap-1.5 py-1 px-2 rounded-lg transition-colors cursor-pointer text-left ${containerStyle}`}
         style={{ paddingLeft: `${depth * 12 + 4}px` }}
         onClick={(e) => {

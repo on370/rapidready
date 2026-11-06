@@ -5,6 +5,35 @@ All notable changes to RapidReady will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2026-11-06
+
+Maintenance and stability release resolving a critical macOS black-screen/freeze issue during Loupe View deletion, preventing unwanted folder tree scrolling during keyboard navigation, eliminating watcher ghost events, ensuring fail-safe React error recovery, and hardening post-import scan and badge state.
+
+### Added & Improved
+- **Fast Non-Blocking Trash Deletion on macOS (`system_cmds.rs`):**
+  - Switched deletion engine on macOS from synchronous AppleScript Finder events (`DeleteMethod::Finder`) to Cocoa's native `NSFileManager.trashItemAtURL` (`DeleteMethod::NsFileManager`), moving files to Trash in milliseconds without spawning blocking `/usr/bin/osascript` processes.
+  - Wrapped file and folder deletions in `tauri::async_runtime::spawn_blocking` to decouple filesystem and SQLite operations from Tokio worker threads, keeping image streaming (`rr-image://`) and UI events completely responsive.
+  - Extended sidecar deletion to remove both `.rrdata` (`get_sidecar_path`) and `.xmp` (`find_existing_xmp_path`) companion files upon image deletion.
+- **Fail-Safe React Error Boundary (`AppErrorBoundary.tsx`, `main.tsx`, `LibraryCenter.tsx`):**
+  - Integrated a dedicated `<AppErrorBoundary>` around `<App />` and `<LoupeViewer />` to eliminate black-screen unmounts during unhandled runtime exceptions.
+  - Displays a dark diagnostic card with stack trace and a 1-click **„Oberfläche wiederherstellen“** (Restore Interface) button that resets view mode to Grid, clears selections, and restores the UI without restarting the application.
+- **Loupe View Deletion Stability & Index Clamping (`LoupeViewer.tsx`, `LibraryCenter.tsx`, `libraryStore.ts`):**
+  - Resolved `TypeError: undefined is not an object (evaluating 'i[s-1].path')` in Loupe View's RAM cache warmup preloader and footer by strictly clamping index lookups (`idx0 = Math.min(activeImageIndex, displayedImages.length - 1)`) with per-element existence checks.
+  - Introduced a derived, always-valid `safeActiveIndex` in `LibraryCenter.tsx` passed synchronously to `LibraryGrid`, `LoupeViewer`, `FullscreenViewer`, and keyboard shortcuts.
+  - Updated `removeImages` in `libraryStore.ts` to shift `activeImageIndex` forward by the exact number of deleted preceding images (`deletedBeforeActive`), allowing `LibraryCenter`'s safeguard to smoothly follow surviving selections.
+  - Added an automatic fallback to Grid View whenever all images in the active view are deleted.
+- **Folder Tree & Keyboard Navigation Ergonomics (`useLibraryShortcuts.ts`, `LibraryLeftSidebar.tsx`):**
+  - Added `e.preventDefault()` to all navigation shortcut handlers (<kbd>↑</kbd>, <kbd>↓</kbd>, <kbd>←</kbd>, <kbd>→</kbd>, <kbd>J</kbd>, <kbd>K</kbd>), preventing the browser from triggering unwanted default scrolling on the folder tree sidebar when it was previously clicked.
+  - Removed disruptive `scrollIntoView` auto-scrolling from `TreeView` when navigating photos in the grid, keeping the tree view completely stable.
+- **File Watcher Ghost Event Suppression (`archive_cmds.rs`):**
+  - Guarded against ghost `sidecar-updated` events by verifying that both the sidecar and target image exist before emitting update events.
+  - Filtered hidden system files (`.DS_Store`, AppleDouble `._*`) and verified file extensions before recording deleted paths to prevent non-archive files from being misidentified as deleted directories.
+- **Post-Import & SSD Source Badge Hardening (`ImportExecuteStep.tsx`, `SourceDrivePicker.tsx`, `App.tsx`):**
+  - Fixed false-positive removable media badge (`isRemovableSource`) on external SSD subfolders by strictly matching root mount paths against detected drives.
+  - Guaranteed `scanState: 'idle'` and `isLoading: false` when navigating to the library or collections after import.
+  - Prevented race conditions in `App.tsx` where delayed scan chunk buffers could revert an idle scan state back to scanning.
+  - Hardened destructive confirmation modals (`dialogStore.ts`) to reset modal state before resolving asynchronous actions.
+
 ## [0.6.0] - 2026-11-05
 
 Major architectural milestone release introducing universal **Adobe XMP (`.xmp`)** sidecar support with rock-solid coexistence alongside native RapidRAW sidecars (`.rrdata`), an `mtime`-based Single Source of Truth (SSoT) engine, non-destructive editing guarantees, a configurable external RAW developer launcher (RapidRAW, darktable, Adobe Lightroom Classic, System Default, or Custom Applications), lazy on-demand import duplicate detection for pre-existing archives, robust rendering and metadata parsing for reverse-layout Capture One DNGs, and archive deletion reconciliation.
