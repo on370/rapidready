@@ -494,28 +494,71 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
       }
     }
 
-    if (!anyFound) return state;
+    const nextLastImportPaths = state.lastImportPaths.filter(
+      (p) => !toRemove.has(normalizePath(p))
+    );
+    const lastImportChanged = nextLastImportPaths.length !== state.lastImportPaths.length;
 
-    const nextImages = state.images.filter(img => !toRemove.has(normalizePath(img.path)));
-    const nextMap = new Map<string, number>();
-    for (let i = 0; i < nextImages.length; i++) {
-      nextMap.set(normalizePath(nextImages[i].path), i);
+    if (!anyFound && !lastImportChanged) return state;
+
+    if (lastImportChanged) {
+      try {
+        localStorage.setItem('rapidready_last_import', JSON.stringify(nextLastImportPaths));
+      } catch (e) {
+        console.warn('Failed to update localStorage rapidready_last_import:', e);
+      }
     }
 
-    const nextSelected = new Set(state.selectedPaths);
-    for (const p of toRemove) {
-      nextSelected.delete(p);
+    const nextImages = anyFound
+      ? state.images.filter(img => !toRemove.has(normalizePath(img.path)))
+      : state.images;
+    const nextMap = anyFound
+      ? new Map<string, number>()
+      : state.imageIndexMap;
+    if (anyFound) {
+      for (let i = 0; i < nextImages.length; i++) {
+        nextMap.set(normalizePath(nextImages[i].path), i);
+      }
     }
 
-    const nextActiveIndex = state.activeImageIndex >= nextImages.length
-      ? Math.max(0, nextImages.length - 1)
-      : state.activeImageIndex;
+    const nextSelected = new Set<string>();
+    for (const s of state.selectedPaths) {
+      if (!toRemove.has(normalizePath(s))) {
+        nextSelected.add(s);
+      }
+    }
+
+    const exitEmptyLastImport = state.isViewingLastImport && nextLastImportPaths.length === 0;
+    if (exitEmptyLastImport) {
+      useLibraryUIStore.getState().setViewMode('grid');
+      return {
+        images: nextImages,
+        imageIndexMap: nextMap,
+        selectedPaths: nextImages.length > 0 ? new Set([nextImages[0].path]) : new Set(),
+        activeImageIndex: 0,
+        lastImportPaths: nextLastImportPaths,
+        isViewingLastImport: false,
+        activeFolderPath: state.rootPath,
+        selectedFolderPaths: state.rootPath ? new Set([normalizePath(state.rootPath)]) : new Set(),
+        viewMode: 'grid',
+      };
+    }
+
+    let deletedBeforeActive = 0;
+    const activeIdx = state.activeImageIndex;
+    for (let i = 0; i < Math.min(activeIdx, state.images.length); i++) {
+      if (toRemove.has(normalizePath(state.images[i].path))) {
+        deletedBeforeActive++;
+      }
+    }
+    const nextActiveIndex = Math.max(0, activeIdx - deletedBeforeActive);
 
     return {
       images: nextImages,
       imageIndexMap: nextMap,
       selectedPaths: nextSelected,
       activeImageIndex: nextActiveIndex,
+      lastImportPaths: nextLastImportPaths,
     };
   }),
   reconcileFolder: async (targetPath?: string) => {
@@ -754,6 +797,7 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
           const isFullyIndexed = cached.is_fully_indexed === true;
           const initialBytes = sorted.reduce((sum, img) => sum + (img.size || 0), 0);
 
+          useLibraryUIStore.getState().setViewMode('grid');
           set({
             activeScanId: scanId,
             rootPath: path,
@@ -804,6 +848,7 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
     const existingPaths = isContinuing ? currentImages.map(i => i.path) : null;
     const initialBytes = isContinuing ? currentImages.reduce((sum, img) => sum + (img.size || 0), 0) : 0;
 
+    useLibraryUIStore.getState().setViewMode('grid');
     set((s) => ({
       activeScanId: scanId,
       rootPath: path,

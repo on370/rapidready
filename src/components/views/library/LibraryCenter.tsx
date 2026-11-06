@@ -13,6 +13,7 @@ import { LibraryGrid } from "./components/LibraryGrid";
 import { LoupeViewer } from "./components/LoupeViewer";
 import { FullscreenViewer } from "./components/FullscreenViewer";
 import { useLibraryShortcuts } from "./hooks/useLibraryShortcuts";
+import { AppErrorBoundary } from "../../ui/AppErrorBoundary";
 
 import { useLibraryUIStore } from "../../../stores/libraryUIStore";
 import { useToastStore } from "../../../stores/toastStore";
@@ -215,16 +216,18 @@ export function LibraryCenter({
     return counts;
   }, [scopedImages, scanState]);
 
+  const safeActiveIndex = displayedImages.length === 0 ? 0 : Math.min(Math.max(activeImageIndex, 0), displayedImages.length - 1);
+
   const activeImage = useMemo(() => {
     if (selectedPaths.size === 0) return undefined;
-    const candidate = displayedImages[activeImageIndex];
+    const candidate = displayedImages[safeActiveIndex];
     if (candidate && selectedPaths.has(candidate.path)) {
       return candidate;
     }
     const found = displayedImages.find(img => selectedPaths.has(img.path));
     if (found) return found;
     return images.find(img => selectedPaths.has(img.path));
-  }, [selectedPaths, displayedImages, activeImageIndex, images]);
+  }, [selectedPaths, displayedImages, safeActiveIndex, images]);
 
   // Sync active photo folder with libraryStore so sidebar tree highlights and scrolls to location
   useEffect(() => {
@@ -286,13 +289,53 @@ export function LibraryCenter({
     }
   }, [activeFolderPath, selectedFoldersKey, isViewingLastImport, activeCollectionId, activeCollection, displayedImages, setActiveImageIndex, setSelectedPaths, setGridScrollTop]);
 
-  // Safeguard: keep activeImageIndex within valid range if displayedImages shrinks (e.g. filter change or deletes)
+  // Safeguard: keep activeImageIndex and selection synchronized when displayedImages changes (e.g. filter change or deletes)
   useEffect(() => {
-    if (displayedImages.length > 0 && activeImageIndex >= displayedImages.length) {
-      setActiveImageIndex(0);
-      setSelectedPaths(new Set([displayedImages[0].path]));
+    if (displayedImages.length > 0) {
+      if (activeImageIndex !== safeActiveIndex) {
+        setActiveImageIndex(safeActiveIndex);
+      }
+
+      const currentAtIdx = displayedImages[safeActiveIndex];
+
+      // Normalized set of selected paths to prevent casing mismatches
+      const normSelectedPaths = new Set(Array.from(selectedPaths).map(p => normalizePath(p)));
+      const isCurrentSelected = currentAtIdx && normSelectedPaths.has(normalizePath(currentAtIdx.path));
+
+      if (!isCurrentSelected) {
+        // 1. Falls das bisher ausgewählte Bild noch in displayedImages existiert (nur verschobener Index), folge ihm:
+        const survivingIdx = normSelectedPaths.size > 0
+          ? displayedImages.findIndex((img) => normSelectedPaths.has(normalizePath(img.path)))
+          : -1;
+
+        if (survivingIdx !== -1) {
+          if (survivingIdx !== activeImageIndex) {
+            setActiveImageIndex(survivingIdx);
+          }
+        } else if (
+          activeImageIndex >= displayedImages.length ||
+          viewMode === 'loupe' ||
+          viewMode === 'fullscreen' ||
+          selectedPaths.size > 0
+        ) {
+          // 2. Falls das ausgewählte Bild selbst gelöscht wurde (oder der Index out-of-bounds ist), wähle den Nachrücker am geclampten Index:
+          const clampedIdx = Math.max(0, Math.min(activeImageIndex, displayedImages.length - 1));
+          const fallbackImg = displayedImages[clampedIdx];
+          if (fallbackImg) {
+            setActiveImageIndex(clampedIdx);
+            setSelectedPaths(new Set([fallbackImg.path]));
+          }
+        }
+      }
+    } else if (displayedImages.length === 0 && (viewMode === 'loupe' || viewMode === 'fullscreen')) {
+      // Keine Bilder mehr in der aktuellen Ansicht -> zurück zu Grid
+      setViewMode('grid');
+      if (selectedPaths.size > 0) {
+        setSelectedPaths(new Set());
+        setActiveImageIndex(0);
+      }
     }
-  }, [displayedImages.length, activeImageIndex, setActiveImageIndex, setSelectedPaths]);
+  }, [displayedImages, activeImageIndex, safeActiveIndex, setActiveImageIndex, setSelectedPaths, viewMode, setViewMode, selectedPaths]);
 
   const handleRotate = useCallback(async (direction: 'cw' | 'ccw') => {
     if (!activeImage) return;
@@ -517,6 +560,29 @@ export function LibraryCenter({
           return normStagedTargets.some(t => norm.startsWith(t + '/') || norm === t);
         };
 
+        // Determine successor in displayedImages before deleting
+        const toDeleteNormSet = new Set(rejectedImages.map(i => normalizePath(i.path)));
+        const isDeletingPath = (p: string) => {
+          const norm = normalizePath(p);
+          return toDeleteNormSet.has(norm) || isUnderAnyStaged(p);
+        };
+
+        let nextCandidatePath: string | null = null;
+        for (let i = activeImageIndex; i < displayedImages.length; i++) {
+          if (!isDeletingPath(displayedImages[i].path)) {
+            nextCandidatePath = displayedImages[i].path;
+            break;
+          }
+        }
+        if (!nextCandidatePath) {
+          for (let i = activeImageIndex - 1; i >= 0; i--) {
+            if (!isDeletingPath(displayedImages[i].path)) {
+              nextCandidatePath = displayedImages[i].path;
+              break;
+            }
+          }
+        }
+
         // 1. Delete staged folders if any
         if (topStagedFolders.length > 0) {
           await invoke('delete_folders', {
@@ -528,6 +594,13 @@ export function LibraryCenter({
             useLibraryStore.getState().removeFolder(fp);
           }
           useLibraryStore.getState().clearStagedDeleteFolders();
+
+          const currentImages = useLibraryStore.getState().images;
+          const stagedFolderImages = currentImages.filter(i => isUnderAnyStaged(i.path)).map(i => i.path);
+          if (stagedFolderImages.length > 0) {
+            useLibraryStore.getState().removeImages(stagedFolderImages);
+            useCollectionsStore.getState().pruneDeletedPaths(stagedFolderImages);
+          }
         }
 
         // 2. Delete remaining rejected images outside deleted folders
@@ -542,9 +615,7 @@ export function LibraryCenter({
           });
 
           deletedPhotosCount = result.deleted.length;
-          const rejectedPathSet = new Set(result.deleted);
-          const remaining = images.filter(i => !rejectedPathSet.has(i.path) && !isUnderAnyStaged(i.path));
-          useLibraryStore.getState().setImages(remaining);
+          useLibraryStore.getState().removeImages(result.deleted);
           useCollectionsStore.getState().pruneDeletedPaths(result.deleted);
 
           if (result.failed.length > 0) {
@@ -557,9 +628,20 @@ export function LibraryCenter({
               })
             );
           }
-        } else if (topStagedFolders.length > 0) {
-          const remaining = images.filter(i => !isUnderAnyStaged(i.path));
-          useLibraryStore.getState().setImages(remaining);
+        }
+
+        // Update selection to successor, or fallback to grid if no images remain
+        const remainingImagesCount = displayedImages.filter(img => !toDeleteNormSet.has(normalizePath(img.path)) && !isUnderAnyStaged(img.path)).length;
+        if (remainingImagesCount === 0) {
+          setViewMode('grid');
+          setSelectedPaths(new Set());
+          setActiveImageIndex(0);
+        } else if (nextCandidatePath) {
+          setSelectedPaths(new Set([nextCandidatePath]));
+        } else if (viewMode !== 'grid') {
+          setViewMode('grid');
+          setSelectedPaths(new Set());
+          setActiveImageIndex(0);
         }
 
         // 3. Feedback Toast
@@ -829,7 +911,7 @@ export function LibraryCenter({
   // Global Keyboard Shortcuts
   useLibraryShortcuts({
     activeImage,
-    activeImageIndex,
+    activeImageIndex: safeActiveIndex,
     displayedImages,
     numColumns: gridColumns || 4,
     viewMode,
@@ -924,7 +1006,7 @@ export function LibraryCenter({
         >
           <LibraryGrid
             displayedImages={displayedImages}
-            activeImageIndex={activeImageIndex}
+            activeImageIndex={safeActiveIndex}
             selectedPaths={selectedPaths}
             onItemClick={handleItemClick}
             onOpenLoupe={(idx) => {
@@ -942,16 +1024,18 @@ export function LibraryCenter({
         {/* LoupeViewer: mounted on-demand when viewMode === 'loupe' */}
         {viewMode === 'loupe' && (
           <div className="absolute inset-0 z-10 flex flex-col">
-            <LoupeViewer
-              activeImage={activeImage}
-              activeImageIndex={activeImageIndex}
-              displayedImages={displayedImages}
-              selectedPaths={selectedPaths}
-              setActiveImageIndex={setActiveImageIndex}
-              setSelectedPaths={setSelectedPaths}
-              onItemClick={handleItemClick}
-              onContextMenu={handleContextMenu}
-            />
+            <AppErrorBoundary fallbackTitle="Fehler in der Lupenansicht">
+              <LoupeViewer
+                activeImage={activeImage}
+                activeImageIndex={safeActiveIndex}
+                displayedImages={displayedImages}
+                selectedPaths={selectedPaths}
+                setActiveImageIndex={setActiveImageIndex}
+                setSelectedPaths={setSelectedPaths}
+                onItemClick={handleItemClick}
+                onContextMenu={handleContextMenu}
+              />
+            </AppErrorBoundary>
           </div>
         )}
 
@@ -960,7 +1044,7 @@ export function LibraryCenter({
           <div className="absolute inset-0 z-20 flex flex-col bg-black">
             <FullscreenViewer
               activeImage={activeImage}
-              activeImageIndex={activeImageIndex}
+              activeImageIndex={safeActiveIndex}
               displayedImages={displayedImages}
               selectedPaths={selectedPaths}
               setActiveImageIndex={setActiveImageIndex}

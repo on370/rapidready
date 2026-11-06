@@ -111,6 +111,10 @@ pub fn start_watching_dir_internal(
 
                 for p in paths {
                     let file_name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                    // Ignore hidden system files like .DS_Store or AppleDouble ._ files
+                    if file_name == ".DS_Store" || file_name.starts_with("._") {
+                        continue;
+                    }
                     // Ignore transient / temporary write files (e.g. atomic sidecar files .*.tmp.* or *.tmp/*.temp)
                     if file_name.starts_with('.') && file_name.contains(".tmp.") {
                         continue;
@@ -121,14 +125,23 @@ pub fn start_watching_dir_internal(
 
                     let path_str = p.to_string_lossy();
                     if path_str.ends_with(".rrdata") {
+                        if !p.exists() {
+                            continue;
+                        }
                         let img_path_str = path_str.strip_suffix(".rrdata").unwrap_or(&path_str).to_string();
                         let img_path = PathBuf::from(&img_path_str);
+                        if !img_path.exists() {
+                            continue;
+                        }
                         let culling = rapidready_core::culling::read_sidecar(&img_path);
                         let _ = app_handle.emit("sidecar-updated", serde_json::json!({
                             "path": img_path_str,
                             "culling": culling
                         }));
                     } else if path_str.to_lowercase().ends_with(".xmp") {
+                        if !p.exists() {
+                            continue;
+                        }
                         let without_xmp = &path_str[..path_str.len() - 4];
                         let candidate = PathBuf::from(without_xmp);
                         let mut target_paths = Vec::new();
@@ -148,6 +161,9 @@ pub fn start_watching_dir_internal(
                             }
                         }
                         for img_path in target_paths {
+                            if !img_path.exists() {
+                                continue;
+                            }
                             let culling = rapidready_core::culling::read_sidecar(&img_path);
                             let _ = app_handle.emit("sidecar-updated", serde_json::json!({
                                 "path": img_path.to_string_lossy(),
@@ -167,8 +183,10 @@ pub fn start_watching_dir_internal(
                             removed_files.push(norm);
                         }
                     } else if !p.exists() {
-                        let norm = p.to_string_lossy().replace('\\', "/");
-                        removed_dirs.push(norm);
+                        if !file_name.starts_with('.') && p.extension().is_none() {
+                            let norm = p.to_string_lossy().replace('\\', "/");
+                            removed_dirs.push(norm);
+                        }
                     }
                 }
 

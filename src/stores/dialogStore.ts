@@ -30,13 +30,13 @@ export const useDialogStore = create<DialogState>((set, get) => ({
   },
   close: (confirmed) => {
     const { resolve } = get();
-    if (resolve) {
-      resolve(confirmed);
-    }
     set({
       isOpen: false,
       options: null,
       resolve: null,
     });
+    if (resolve) {
+      resolve(confirmed);
+    }
   },
 }));

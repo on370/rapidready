@@ -125,6 +125,19 @@ pub fn is_strictly_inside_root(path: &Path, root: &Path) -> bool {
     true
 }
 
+#[cfg(target_os = "macos")]
+fn move_to_trash(path: &Path) -> Result<(), String> {
+    use trash::macos::{DeleteMethod, TrashContextExtMacos};
+    let mut ctx = trash::TrashContext::default();
+    ctx.set_delete_method(DeleteMethod::NsFileManager);
+    ctx.delete(path).map_err(|e| format!("Failed to move to trash: {}", e))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn move_to_trash(path: &Path) -> Result<(), String> {
+    trash::delete(path).map_err(|e| format!("Failed to move to trash: {}", e))
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeleteFilesResult {
     pub deleted: Vec<String>,
@@ -142,6 +155,20 @@ pub async fn delete_files(
 }
 
 pub async fn delete_files_impl(
+    app: Option<&AppHandle>,
+    paths: Vec<String>,
+    to_trash: bool,
+    archive_root: Option<String>,
+) -> Result<DeleteFilesResult, String> {
+    let app_clone = app.cloned();
+    tauri::async_runtime::spawn_blocking(move || {
+        delete_files_blocking(app_clone.as_ref(), paths, to_trash, archive_root)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+}
+
+fn delete_files_blocking(
     app: Option<&AppHandle>,
     paths: Vec<String>,
     to_trash: bool,
@@ -182,7 +209,7 @@ pub async fn delete_files_impl(
         let should_use_trash = to_trash || !is_nas;
 
         let delete_res = if should_use_trash {
-            trash::delete(&path).map_err(|e| format!("Failed to move to trash: {}", e))
+            move_to_trash(&path)
         } else {
             std::fs::remove_file(&path).map_err(|e| format!("Failed to permanently delete file: {}", e))
         };
@@ -191,13 +218,24 @@ pub async fn delete_files_impl(
             Ok(_) => {
                 deleted.push(p.clone());
 
-                // Also delete sidecar file if present
-                let sidecar = rapidready_core::culling::get_sidecar_path(&path);
-                if sidecar.exists() {
+                // Also delete .rrdata sidecar file if present
+                let rr_sidecar = rapidready_core::culling::get_sidecar_path(&path);
+                if rr_sidecar.exists() {
                     if should_use_trash {
-                        let _ = trash::delete(&sidecar);
+                        let _ = move_to_trash(&rr_sidecar);
                     } else {
-                        let _ = std::fs::remove_file(&sidecar);
+                        let _ = std::fs::remove_file(&rr_sidecar);
+                    }
+                }
+
+                // Also delete .xmp sidecar file if present
+                if let Some(xmp_sidecar) = rapidready_core::culling::find_existing_xmp_path(&path) {
+                    if xmp_sidecar.exists() {
+                        if should_use_trash {
+                            let _ = move_to_trash(&xmp_sidecar);
+                        } else {
+                            let _ = std::fs::remove_file(&xmp_sidecar);
+                        }
                     }
                 }
             }
@@ -242,6 +280,20 @@ pub async fn delete_folder_impl(
     to_trash: bool,
     archive_root: String,
 ) -> Result<(), String> {
+    let app_clone = app.cloned();
+    tauri::async_runtime::spawn_blocking(move || {
+        delete_folder_blocking(app_clone.as_ref(), path, to_trash, archive_root)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+}
+
+fn delete_folder_blocking(
+    app: Option<&AppHandle>,
+    path: String,
+    to_trash: bool,
+    archive_root: String,
+) -> Result<(), String> {
     let folder_path = PathBuf::from(&path);
     let root_path = PathBuf::from(&archive_root);
 
@@ -266,12 +318,12 @@ pub async fn delete_folder_impl(
     let is_nas = is_network_or_remote_path(&folder_path);
 
     if to_trash {
-        trash::delete(&folder_path).map_err(|e| format!("Failed to move folder to trash: {}", e))?;
+        move_to_trash(&folder_path)?;
     } else {
         // SAFETY OVERRIDE: If to_trash is false but path is NOT a network share,
         // force move to trash instead of permanent removal!
         if !is_nas {
-            trash::delete(&folder_path).map_err(|e| format!("Safety override: Failed to move local folder to trash: {}", e))?;
+            move_to_trash(&folder_path).map_err(|e| format!("Safety override: Failed to move local folder to trash: {}", e))?;
         } else {
             std::fs::remove_dir_all(&folder_path).map_err(|e| format!("Failed to permanently delete folder: {}", e))?;
         }
@@ -301,6 +353,19 @@ pub async fn delete_folders(
     to_trash: bool,
     archive_root: String,
 ) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        delete_folders_blocking(Some(&app), paths, to_trash, archive_root)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+}
+
+fn delete_folders_blocking(
+    app: Option<&AppHandle>,
+    paths: Vec<String>,
+    to_trash: bool,
+    archive_root: String,
+) -> Result<Vec<String>, String> {
     let root_path = PathBuf::from(&archive_root);
     let mut deleted = Vec::new();
 
@@ -322,10 +387,10 @@ pub async fn delete_folders(
 
         let is_nas = is_network_or_remote_path(&folder_path);
         if to_trash {
-            trash::delete(&folder_path).map_err(|e| format!("Failed to move folder to trash: {}", e))?;
+            move_to_trash(&folder_path)?;
         } else {
             if !is_nas {
-                trash::delete(&folder_path).map_err(|e| format!("Safety override: Failed to move local folder to trash: {}", e))?;
+                move_to_trash(&folder_path).map_err(|e| format!("Safety override: Failed to move local folder to trash: {}", e))?;
             } else {
                 std::fs::remove_dir_all(&folder_path).map_err(|e| format!("Failed to permanently delete folder: {}", e))?;
             }
@@ -335,17 +400,22 @@ pub async fn delete_folders(
 
     // Prune deleted folders from all collections
     if !deleted.is_empty() {
-        if let Ok(app_dir) = app.path().app_data_dir() {
-            if let Ok(mut tree) = core_load_collections(&app_dir) {
-                let mut modified = false;
-                for p in &deleted {
-                    if core_prune_folder_from_all_collections(&mut tree, p) {
-                        modified = true;
+        if let Some(app) = app {
+            if let Ok(app_dir) = app.path().app_data_dir() {
+                if let Ok(mut tree) = core_load_collections(&app_dir) {
+                    let mut modified = false;
+                    for p in &deleted {
+                        if core_prune_folder_from_all_collections(&mut tree, p) {
+                            modified = true;
+                        }
+                    }
+                    if modified {
+                        let _ = core_save_collections(tree, &app_dir);
                     }
                 }
-                if modified {
-                    let _ = core_save_collections(tree, &app_dir);
-                }
+            }
+            if let Ok(catalog) = get_archive_catalog(app) {
+                let _ = catalog.delete_folders(&deleted);
             }
         }
     }

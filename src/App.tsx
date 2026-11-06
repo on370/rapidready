@@ -209,7 +209,7 @@ function App() {
       if (filesToFlush.length > 0 || dirsToFlush.length > 0) {
         store.appendImageChunk(filesToFlush, dirsToFlush);
       }
-      if (store.scanState === 'connecting' || store.scanState === 'idle') {
+      if (store.scanState === 'connecting') {
         store.setScanState('scanning');
       }
     };

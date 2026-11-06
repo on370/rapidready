@@ -8,6 +8,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useImportStore } from '../../../stores/importStore';
 import { useLibraryStore, LibraryImage } from '../../../stores/libraryStore';
+import { useLibraryUIStore } from '../../../stores/libraryUIStore';
 import { useNavigationStore } from '../../../stores/navigationStore';
 import { useSettingsStore, getRawDeveloperDisplayName, openInConfiguredRawDeveloper } from '../../../stores/settingsStore';
 import { useCollectionsStore, findAlbumById } from '../../../stores/collectionsStore';
@@ -41,7 +42,6 @@ export function ImportExecuteStep({ onReset }: ImportExecuteStepProps) {
   const hasStarted = useRef(false);
   
   const { scannedFiles, destinationDirectory, directoryTemplate, setScannedFiles, setSourceDirectory } = useImportStore();
-  const { setRootPath, setImages, setLastImportPaths, setIsViewingLastImport } = useLibraryStore();
   const { setActiveView } = useNavigationStore();
   
   const throughput = useThroughput(progress?.bytes_processed ?? 0, !isComplete && progress !== null);
@@ -90,7 +90,7 @@ export function ImportExecuteStep({ onReset }: ImportExecuteStepProps) {
         const imported = resultPaths || [];
         setImportedPaths(imported);
         if (imported.length > 0) {
-          setLastImportPaths(imported);
+          useLibraryStore.getState().setLastImportPaths(imported);
         }
 
         // Optional Collection Assignment
@@ -155,18 +155,27 @@ export function ImportExecuteStep({ onReset }: ImportExecuteStepProps) {
 
   const handleGoToLibrary = async () => {
     if (destinationDirectory) {
-      setRootPath(destinationDirectory);
-      setLastImportPaths(importedPaths);
-      setIsViewingLastImport(true);
+      const libStore = useLibraryStore.getState();
+      libStore.setRootPath(destinationDirectory);
+      libStore.setLastImportPaths(importedPaths);
+      useLibraryUIStore.getState().setViewMode('grid');
       try {
         const scanResult = await invoke<{ files: LibraryImage[]; directories: string[] }>('scan_archive_directory', { path: destinationDirectory });
         const loadedImages: LibraryImage[] = scanResult.files || [];
         if (scanResult.directories) {
-          useLibraryStore.getState().addDiscoveredFolders(scanResult.directories);
+          libStore.addDiscoveredFolders(scanResult.directories);
         }
-        setImages(loadedImages);
+        libStore.setImages(loadedImages);
+        libStore.setIsViewingLastImport(true);
+        if (importedPaths.length > 0) {
+          libStore.setActiveImageIndex(0);
+          libStore.setSelectedPaths(new Set([importedPaths[0]]));
+        }
       } catch (e) {
         console.error("Failed to scan library after import:", e);
+      } finally {
+        libStore.setScanState('idle');
+        libStore.setIsLoading(false);
       }
       setActiveView('library');
     }
@@ -174,17 +183,26 @@ export function ImportExecuteStep({ onReset }: ImportExecuteStepProps) {
 
   const handleGoToCollection = async () => {
     if (destinationDirectory) {
-      setRootPath(destinationDirectory);
-      setLastImportPaths(importedPaths);
+      const libStore = useLibraryStore.getState();
+      libStore.setRootPath(destinationDirectory);
+      libStore.setLastImportPaths(importedPaths);
+      useLibraryUIStore.getState().setViewMode('grid');
       try {
         const scanResult = await invoke<{ files: LibraryImage[]; directories: string[] }>('scan_archive_directory', { path: destinationDirectory });
         const loadedImages: LibraryImage[] = scanResult.files || [];
         if (scanResult.directories) {
-          useLibraryStore.getState().addDiscoveredFolders(scanResult.directories);
+          libStore.addDiscoveredFolders(scanResult.directories);
         }
-        setImages(loadedImages);
+        libStore.setImages(loadedImages);
+        if (loadedImages.length > 0) {
+          libStore.setActiveImageIndex(0);
+          libStore.setSelectedPaths(new Set([loadedImages[0].path]));
+        }
       } catch (e) {
         console.error("Failed to scan library after import:", e);
+      } finally {
+        libStore.setScanState('idle');
+        libStore.setIsLoading(false);
       }
     }
     if (assignedAlbum) {

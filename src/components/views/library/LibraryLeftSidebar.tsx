@@ -1011,9 +1011,7 @@ export function LibraryLeftSidebar() {
         });
 
         if (result.deleted.length > 0) {
-          const delSet = new Set(result.deleted);
-          const remaining = allImages.filter(i => !delSet.has(i.path));
-          useLibraryStore.getState().setImages(remaining);
+          useLibraryStore.getState().removeImages(result.deleted);
           useCollectionsStore.getState().pruneDeletedPaths(result.deleted);
         }
 

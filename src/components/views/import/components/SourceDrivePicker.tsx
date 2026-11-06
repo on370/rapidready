@@ -203,7 +203,7 @@ export const SourceDrivePicker = React.memo(function SourceDrivePicker() {
   }, [newFiles]);
 
   const isRemovableSource = sourceDirectory ? (
-    drives.some((d) => sourceDirectory.startsWith(d.path)) || sourceDirectory.startsWith('/Volumes/')
+    drives.some((d) => d.path.replace(/[\\/]+$/, '') === sourceDirectory.replace(/[\\/]+$/, ''))
   ) : false;
 
   return (

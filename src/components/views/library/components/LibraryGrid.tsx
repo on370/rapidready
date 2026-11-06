@@ -341,7 +341,7 @@ export const LibraryGrid = React.memo(function LibraryGrid({
       }
     }
 
-    if ((wasScanning && isNowDone) || imagesChangedWhileDone) {
+    if (viewMode === 'grid' && ((wasScanning && isNowDone) || imagesChangedWhileDone)) {
       rowVirtualizer.measure();
     }
     prevScanStateRef.current = scanState;

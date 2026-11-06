@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useLibraryStore, LibraryImage } from '../../../../stores/libraryStore';
 import { useCollectionsStore } from '../../../../stores/collectionsStore';
+import { useDialogStore } from '../../../../stores/dialogStore';
 import { useLibraryUIStore } from '../../../../stores/libraryUIStore';
 import { useSettingsStore, openInConfiguredRawDeveloper } from '../../../../stores/settingsStore';
 
@@ -40,6 +41,7 @@ export function useLibraryShortcuts({
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
 
       // Don't trigger shortcuts if a modal dialog is currently open
+      if (useDialogStore.getState().isOpen) return;
       if (useCollectionsStore.getState().isExportModalOpen) return;
       if (document.querySelector('.fixed.inset-0, [data-context-menu]')) return;
 
@@ -166,18 +168,21 @@ export function useLibraryShortcuts({
       }
 
       if (e.key === 'ArrowRight' || e.key === 'j') {
+        if (displayedImages.length === 0) return;
         const next = Math.min(displayedImages.length - 1, activeImageIndex + 1);
         setActiveImageIndex(next);
         if (!e.shiftKey && displayedImages[next]) {
           setSelectedPaths(new Set([displayedImages[next].path]));
         }
       } else if (e.key === 'ArrowLeft' || e.key === 'k') {
+        if (displayedImages.length === 0) return;
         const prev = Math.max(0, activeImageIndex - 1);
         setActiveImageIndex(prev);
         if (!e.shiftKey && displayedImages[prev]) {
           setSelectedPaths(new Set([displayedImages[prev].path]));
         }
       } else if (e.key === 'ArrowDown') {
+        if (displayedImages.length === 0) return;
         const step = viewMode === 'grid' ? numColumns : 1;
         const next = Math.min(displayedImages.length - 1, activeImageIndex + step);
         setActiveImageIndex(next);
@@ -185,6 +190,7 @@ export function useLibraryShortcuts({
           setSelectedPaths(new Set([displayedImages[next].path]));
         }
       } else if (e.key === 'ArrowUp') {
+        if (displayedImages.length === 0) return;
         const step = viewMode === 'grid' ? numColumns : 1;
         const prev = Math.max(0, activeImageIndex - step);
         setActiveImageIndex(prev);

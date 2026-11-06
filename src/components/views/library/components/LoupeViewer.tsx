@@ -97,6 +97,9 @@ export const LoupeViewer = React.memo(function LoupeViewer({
     // Absoluter Schutz: Niemals spekulatives Warmup während eines aktiven Scans!
     if (debouncedActiveIndex !== activeImageIndex || displayedImages.length === 0 || scanState === 'scanning' || scanState === 'connecting') return;
 
+    const idx0 = Math.min(activeImageIndex, displayedImages.length - 1);
+    if (idx0 < 0) return;
+
     const token = Date.now();
     warmupTokenRef.current = token;
 
@@ -107,26 +110,30 @@ export const LoupeViewer = React.memo(function LoupeViewer({
     if (isNext) {
       // Look ahead +1 to +5 in forward direction
       for (let offset = 1; offset <= 5; offset++) {
-        const idx = activeImageIndex + offset;
+        const idx = idx0 + offset;
         if (idx < displayedImages.length) {
-          rightPaths.push(displayedImages[idx].path);
+          const item = displayedImages[idx];
+          if (item) rightPaths.push(item.path);
         }
       }
       // Backward buffer of 1 image
-      if (activeImageIndex > 0) {
-        leftPaths.push(displayedImages[activeImageIndex - 1].path);
+      if (idx0 > 0) {
+        const left = displayedImages[idx0 - 1];
+        if (left) leftPaths.push(left.path);
       }
     } else {
       // Look ahead -1 to -5 in backward direction
       for (let offset = 1; offset <= 5; offset++) {
-        const idx = activeImageIndex - offset;
+        const idx = idx0 - offset;
         if (idx >= 0) {
-          leftPaths.push(displayedImages[idx].path);
+          const item = displayedImages[idx];
+          if (item) leftPaths.push(item.path);
         }
       }
       // Forward buffer of 1 image
-      if (activeImageIndex < displayedImages.length - 1) {
-        rightPaths.push(displayedImages[activeImageIndex + 1].path);
+      if (idx0 < displayedImages.length - 1) {
+        const right = displayedImages[idx0 + 1];
+        if (right) rightPaths.push(right.path);
       }
     }
 
@@ -158,7 +165,11 @@ export const LoupeViewer = React.memo(function LoupeViewer({
   }, [debouncedActiveIndex, activeImageIndex, displayedImages, scanState]);
 
   // Debounced image for the heavy main Loupe viewport to avoid intermediate thrashing during rapid navigation
-  const loupeActiveImage = displayedImages[debouncedActiveIndex] || activeImage;
+  const safeDebouncedIndex = displayedImages.length > 0 
+    ? Math.min(debouncedActiveIndex, displayedImages.length - 1) 
+    : 0;
+  const safeLoupeIndex = displayedImages.length === 0 ? 0 : Math.min(Math.max(activeImageIndex, 0), displayedImages.length - 1);
+  const loupeActiveImage = displayedImages[safeDebouncedIndex] || activeImage || displayedImages[0];
   const isLoupeVideo = loupeActiveImage ? (loupeActiveImage.is_video ?? isVideoFilename(loupeActiveImage.name)) : false;
 
   // Lazy-load metadata for debounced active image if needed
@@ -249,7 +260,7 @@ export const LoupeViewer = React.memo(function LoupeViewer({
         className="flex-1 flex items-center justify-center bg-app-deepest p-6 min-h-0 relative"
         onContextMenu={(e) => {
           if (loupeActiveImage) {
-            onContextMenu(e, loupeActiveImage.path, debouncedActiveIndex);
+            onContextMenu(e, loupeActiveImage.path, safeDebouncedIndex);
           }
         }}
       >
@@ -260,7 +271,7 @@ export const LoupeViewer = React.memo(function LoupeViewer({
               previewSrc={getRrImageUrl(loupeActiveImage.path, false, loupeActiveImage.culling?.orientation, 2, loupeActiveImage.size, loupeActiveImage.mtime)}
               alt={loupeActiveImage.name} 
               onContextMenu={(e) => {
-                onContextMenu(e, loupeActiveImage.path, debouncedActiveIndex);
+                onContextMenu(e, loupeActiveImage.path, safeDebouncedIndex);
               }}
             />
 
@@ -326,14 +337,14 @@ export const LoupeViewer = React.memo(function LoupeViewer({
         <div className="flex items-center gap-2">
           <button 
             className="p-1.5 rounded-lg hover:bg-app-hover transition-colors text-txt-secondary hover:text-txt-primary cursor-pointer" 
-            onClick={() => setActiveImageIndex(Math.max(0, activeImageIndex - 1))}
+            onClick={() => setActiveImageIndex(Math.max(0, safeLoupeIndex - 1))}
             title={t('filmstrip.prevTooltip')}
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
           <button 
             className="p-1.5 rounded-lg hover:bg-app-hover transition-colors text-txt-secondary hover:text-txt-primary cursor-pointer" 
-            onClick={() => setActiveImageIndex(Math.min(displayedImages.length - 1, activeImageIndex + 1))}
+            onClick={() => setActiveImageIndex(Math.min(displayedImages.length - 1, safeLoupeIndex + 1))}
             title={t('filmstrip.nextTooltip')}
           >
             <ChevronRight className="w-4 h-4" />
@@ -387,7 +398,7 @@ export const LoupeViewer = React.memo(function LoupeViewer({
           )}
 
           <span className="text-txt-tertiary">·</span>
-          <span>{displayedImages.length > 0 ? activeImageIndex + 1 : 0} / {displayedImages.length}</span>
+          <span>{displayedImages.length > 0 ? safeLoupeIndex + 1 : 0} / {displayedImages.length}</span>
         </div>
 
         <div className="flex items-center gap-2">
