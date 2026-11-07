@@ -100,6 +100,20 @@
     "tagFilter": "Tag",
     "noTagsInFolder": "No tags in folder"
   },
+  "sort": {
+    "label": "Sort by",
+    "filename": "Filename",
+    "date": "Capture Date",
+    "rating": "Rating",
+    "size": "File Size",
+    "asc": "Ascending",
+    "desc": "Descending",
+    "ascTooltip": "Ascending (A→Z / Oldest first) – Click to reverse",
+    "descTooltip": "Descending (Z→A / Newest first) – Click to reverse",
+    "groupByFolder": "Group by Subfolder",
+    "groupByFolderHintOn": "First group by folder, sort within",
+    "groupByFolderHintOff": "Sort flat across all subfolders"
+  },
   "filmstrip": {
     "title": "Filmstrip",
     "toggleTooltip": "Toggle Filmstrip",

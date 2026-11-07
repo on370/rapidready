@@ -185,6 +185,16 @@ export function useLibraryShortcuts({
         }
       } else if (e.key === 'ArrowDown') {
         e.preventDefault();
+        if (
+          viewMode === 'loupe' &&
+          !useCollectionsStore.getState().activeCollectionId &&
+          !useLibraryStore.getState().isViewingLastImport
+        ) {
+          window.dispatchEvent(
+            new CustomEvent('rapidready:step-folder', { detail: { delta: 1 } })
+          );
+          return;
+        }
         if (displayedImages.length === 0) return;
         const step = viewMode === 'grid' ? numColumns : 1;
         const next = Math.min(displayedImages.length - 1, activeImageIndex + step);
@@ -194,6 +204,16 @@ export function useLibraryShortcuts({
         }
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
+        if (
+          viewMode === 'loupe' &&
+          !useCollectionsStore.getState().activeCollectionId &&
+          !useLibraryStore.getState().isViewingLastImport
+        ) {
+          window.dispatchEvent(
+            new CustomEvent('rapidready:step-folder', { detail: { delta: -1 } })
+          );
+          return;
+        }
         if (displayedImages.length === 0) return;
         const step = viewMode === 'grid' ? numColumns : 1;
         const prev = Math.max(0, activeImageIndex - step);

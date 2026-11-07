@@ -76,8 +76,16 @@ interface LibraryUIStore {
   inspectorHistogramMode: InspectorHistogramMode;
   setInspectorHistogramMode: (mode: InspectorHistogramMode) => void;
   cycleInspectorHistogramMode: () => void;
+
+  sortBy: LibrarySortBy;
+  setSortBy: (sortBy: LibrarySortBy) => void;
+  sortDirection: LibrarySortDirection;
+  setSortDirection: (dir: LibrarySortDirection) => void;
+  toggleSortDirection: () => void;
 }
 
+export type LibrarySortBy = 'filename' | 'date' | 'rating' | 'size';
+export type LibrarySortDirection = 'asc' | 'desc';
 export type FocusPeakingColor = 'green' | 'red' | 'cyan' | 'yellow';
 export type InspectorHistogramMode = 'off' | 'overlay' | 'full';
 
@@ -170,6 +178,26 @@ const getSavedSlideshowCrossfade = (): boolean => {
     if (val !== null) return val !== 'false';
   } catch (_) {}
   return true;
+};
+
+const getSavedSortBy = (): LibrarySortBy => {
+  try {
+    const val = localStorage.getItem('rapidready_sort_by_v2');
+    if (val === 'filename' || val === 'date' || val === 'rating' || val === 'size') {
+      return val;
+    }
+  } catch (_) {}
+  return 'date';
+};
+
+const getSavedSortDirection = (): LibrarySortDirection => {
+  try {
+    const val = localStorage.getItem('rapidready_sort_direction_v2');
+    if (val === 'asc' || val === 'desc') {
+      return val;
+    }
+  } catch (_) {}
+  return 'asc';
 };
 
 export const useLibraryUIStore = create<LibraryUIStore>((set) => ({
@@ -339,5 +367,28 @@ export const useLibraryUIStore = create<LibraryUIStore>((set) => ({
       localStorage.setItem('rapidready_inspector_histogram_mode', next);
     } catch (_) {}
     return { inspectorHistogramMode: next };
+  }),
+
+  sortBy: getSavedSortBy(),
+  setSortBy: (sortBy) => {
+    try {
+      localStorage.setItem('rapidready_sort_by_v2', sortBy);
+    } catch (_) {}
+    set({ sortBy });
+  },
+
+  sortDirection: getSavedSortDirection(),
+  setSortDirection: (dir) => {
+    try {
+      localStorage.setItem('rapidready_sort_direction_v2', dir);
+    } catch (_) {}
+    set({ sortDirection: dir });
+  },
+  toggleSortDirection: () => set((state) => {
+    const next: LibrarySortDirection = state.sortDirection === 'asc' ? 'desc' : 'asc';
+    try {
+      localStorage.setItem('rapidready_sort_direction_v2', next);
+    } catch (_) {}
+    return { sortDirection: next };
   }),
 }));

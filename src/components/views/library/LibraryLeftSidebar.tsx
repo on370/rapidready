@@ -241,6 +241,7 @@ function TreeView({
   return (
     <div className="space-y-0.5">
       <div 
+        data-folder-path={normNodePath}
         className={`flex items-center gap-1.5 py-1 px-2 rounded-lg transition-colors cursor-pointer text-left ${containerStyle}`}
         style={{ paddingLeft: `${depth * 12 + 4}px` }}
         onClick={(e) => {
@@ -378,6 +379,7 @@ export function LibraryLeftSidebar() {
   const isLoading = useLibraryStore((s) => s.isLoading);
   const isFullyIndexed = useLibraryStore((s) => s.isFullyIndexed);
   const loadArchive = useLibraryStore((s) => s.loadArchive);
+  const activeImageFolder = useLibraryStore((s) => s.activeImageFolder);
 
   const activeCollectionId = useCollectionsStore((s) => s.activeCollectionId);
   const selectCollection = useCollectionsStore((s) => s.selectCollection);
@@ -778,6 +780,76 @@ export function LibraryLeftSidebar() {
   };
 
   const lastClickedFolderRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const handleStepFolder = (e: Event) => {
+      const customEvent = e as CustomEvent<{ delta: -1 | 1 }>;
+      const delta = customEvent.detail?.delta;
+      if (!delta || !tree) return;
+
+      const libState = useLibraryStore.getState();
+      const colState = useCollectionsStore.getState();
+      if (colState.activeCollectionId || libState.isViewingLastImport) return;
+
+      // Nur sichtbare Ordner mit mindestens 1 Bild berücksichtigen, damit die Loupe-Ansicht
+      // nicht durch einen leeren Ordner (displayedImages.length === 0) automatisch beendet wird!
+      const visibleNodes = getVisibleTreeNodes(tree, expandedMap).filter(n => n.fileCount > 0);
+      if (visibleNodes.length === 0) return;
+
+      // Aktuell primär gewählten Ordner bestimmen
+      const topSelected = getTopLevelSelectedPaths(libState.selectedFolderPaths);
+      const currentNorm =
+        (lastClickedFolderRef.current && libState.selectedFolderPaths.has(lastClickedFolderRef.current)
+          ? lastClickedFolderRef.current
+          : topSelected[0]) ||
+        (libState.activeFolderPath ? normalizePath(libState.activeFolderPath) : null) ||
+        (libState.activeImageFolder ? normalizePath(libState.activeImageFolder) : null);
+
+      const currentIdx = currentNorm
+        ? visibleNodes.findIndex(n => normalizePath(n.path) === currentNorm)
+        : -1;
+
+      let targetIdx: number;
+      if (currentIdx === -1) {
+        targetIdx = delta > 0 ? 0 : visibleNodes.length - 1;
+      } else {
+        targetIdx = Math.max(0, Math.min(visibleNodes.length - 1, currentIdx + delta));
+        if (targetIdx === currentIdx) return; // Bereits am oberen/unteren Ende
+      }
+
+      const targetNode = visibleNodes[targetIdx];
+      const normTarget = normalizePath(targetNode.path);
+      const subtreePaths = collectAllFolderPaths(targetNode);
+
+      libState.setSelectedFolderPaths(new Set(subtreePaths));
+      lastClickedFolderRef.current = normTarget;
+
+      // Ordner im Sidebar-Tree sanft ins Sichtfeld scrollen
+      requestAnimationFrame(() => {
+        const escaped = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(normTarget) : normTarget.replace(/"/g, '\\"');
+        const el = document.querySelector(`[data-folder-path="${escaped}"]`);
+        el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      });
+    };
+
+    window.addEventListener('rapidready:step-folder', handleStepFolder);
+    return () => window.removeEventListener('rapidready:step-folder', handleStepFolder);
+  }, [tree, expandedMap]);
+
+  useEffect(() => {
+    if (!activeImageFolder || activeCollectionId || isViewingLastImport) return;
+    const normTarget = normalizePath(activeImageFolder);
+    // Kurz warten (60ms), damit TreeView evtl. eingeklappte Elternordner zuerst aufklappen kann
+    const timer = setTimeout(() => {
+      const escaped =
+        typeof CSS !== 'undefined' && CSS.escape
+          ? CSS.escape(normTarget)
+          : normTarget.replace(/"/g, '\\"');
+      const el = document.querySelector(`[data-folder-path="${escaped}"]`);
+      el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [activeImageFolder, activeCollectionId, isViewingLastImport]);
 
   const handleFolderClick = (e: React.MouseEvent, node: TreeNode) => {
     selectCollection(null);

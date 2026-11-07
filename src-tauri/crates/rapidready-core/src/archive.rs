@@ -2,8 +2,18 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use anyhow::Result;
 use walkdir::WalkDir;
-use chrono::NaiveDateTime;
+use chrono::{Datelike, NaiveDateTime};
 use crate::culling::{read_sidecar, CullingState};
+use regex::Regex;
+use std::sync::LazyLock;
+
+static RE_FOLDER_YMD: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?:^|[^\d])(19\d\d|20\d\d)-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])(?:$|[^\d])").unwrap()
+});
+
+static RE_FOLDER_YM: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?:^|[^\d])(19\d\d|20\d\d)-(0[1-9]|1[0-2])(?:$|[^\d])").unwrap()
+});
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArchiveFile {
@@ -150,16 +160,71 @@ pub struct ArchiveScanResult {
     pub is_fully_indexed: bool,
 }
 
-fn get_streaming_discovery_date(name: &str, meta: Option<&std::fs::Metadata>) -> Option<NaiveDateTime> {
+pub(crate) fn extract_folder_date_from_path(path: &Path) -> Option<NaiveDateTime> {
+    for ancestor in path.ancestors().skip(1) {
+        if let Some(folder_name) = ancestor.file_name().and_then(|s| s.to_str()) {
+            if let Some(caps) = RE_FOLDER_YMD.captures(folder_name) {
+                if let (Ok(y), Ok(m), Ok(d)) = (
+                    caps[1].parse::<i32>(),
+                    caps[2].parse::<u32>(),
+                    caps[3].parse::<u32>(),
+                ) {
+                    if let Some(nd) = chrono::NaiveDate::from_ymd_opt(y, m, d) {
+                        if let Some(ndt) = nd.and_hms_opt(0, 0, 0) {
+                            return Some(ndt);
+                        }
+                    }
+                }
+            } else if let Some(caps) = RE_FOLDER_YM.captures(folder_name) {
+                if let (Ok(y), Ok(m)) = (
+                    caps[1].parse::<i32>(),
+                    caps[2].parse::<u32>(),
+                ) {
+                    if let Some(nd) = chrono::NaiveDate::from_ymd_opt(y, m, 1) {
+                        if let Some(ndt) = nd.and_hms_opt(0, 0, 0) {
+                            return Some(ndt);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+fn get_streaming_discovery_date(
+    path: &Path,
+    name: &str,
+    meta: Option<&std::fs::Metadata>,
+) -> Option<NaiveDateTime> {
+    // 1. Priority: Parse date from filename
     if let Some(dt) = crate::date_resolver::parse_date_from_filename(name) {
         return Some(dt);
     }
-    if let Some(m) = meta {
-        if let Ok(sys_time) = m.modified().or_else(|_| m.created()) {
+
+    // Prepare mtime datetime if available
+    let mtime_dt = meta.and_then(|m| {
+        m.modified().or_else(|_| m.created()).ok().map(|sys_time| {
             let dt: chrono::DateTime<chrono::Local> = sys_time.into();
-            return Some(dt.naive_local());
+            dt.naive_local()
+        })
+    });
+
+    // 2. Priority: Folder path date inspection backwards along parent folder names
+    if let Some(folder_dt) = extract_folder_date_from_path(path) {
+        if let Some(dt) = mtime_dt {
+            if dt.year() == folder_dt.year() && dt.month() == folder_dt.month() {
+                return Some(dt);
+            }
         }
+        return Some(folder_dt);
     }
+
+    // 3. Priority: Filesystem timestamp
+    if let Some(dt) = mtime_dt {
+        return Some(dt);
+    }
+
     None
 }
 
@@ -404,7 +469,7 @@ where
                         .unwrap_or(0);
                     total_bytes += size;
                     let name = entry.file_name().to_string_lossy().into_owned();
-                    let date = get_streaming_discovery_date(&name, metadata.as_ref());
+                    let date = get_streaming_discovery_date(path, &name, metadata.as_ref());
                     let is_raw = crate::metadata_resolver::is_raw_path(path);
                     let is_video = crate::metadata_resolver::is_video_path(path);
                     let culling = resolve_culling_in_memory(&path_norm, &known_rrdata, &known_exact_xmp, &known_stem_xmp);

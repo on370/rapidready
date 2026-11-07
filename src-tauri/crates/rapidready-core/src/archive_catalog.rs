@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use chrono::NaiveDateTime;
+use chrono::{Datelike, NaiveDateTime};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -297,12 +297,31 @@ impl ArchiveCatalog {
                 let sidecar_json: Option<String> = row.get(11)?;
                 let mtime: i64 = row.get(12)?;
 
-                let date = exif_date.and_then(|s| {
+                let mut date = exif_date.and_then(|s| {
                     NaiveDateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M:%S")
                         .or_else(|_| NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S"))
                         .or_else(|_| chrono::DateTime::parse_from_rfc3339(&s).map(|dt| dt.naive_utc()))
                         .ok()
                 });
+
+                if let Some(folder_dt) = crate::archive::extract_folder_date_from_path(Path::new(&canonical_path)) {
+                    match date {
+                        None => {
+                            date = crate::date_resolver::parse_date_from_filename(&filename).or(Some(folder_dt));
+                        }
+                        Some(dt) => {
+                            if (dt.year(), dt.month()) != (folder_dt.year(), folder_dt.month()) {
+                                if mtime > 0 {
+                                    if let Some(mtime_local) = chrono::DateTime::from_timestamp(mtime, 0).map(|u| u.with_timezone(&chrono::Local).naive_local()) {
+                                        if (dt - mtime_local).num_seconds().abs() < 86400 {
+                                            date = Some(crate::date_resolver::parse_date_from_filename(&filename).unwrap_or(folder_dt));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
 
                 let culling: CullingState = sidecar_json
                     .and_then(|s| serde_json::from_str(&s).ok())
@@ -491,7 +510,10 @@ impl ArchiveCatalog {
                     filename = excluded.filename,
                     file_size = excluded.file_size,
                     mtime = excluded.mtime,
-                    exif_date = excluded.exif_date,
+                    exif_date = CASE 
+                        WHEN archive_files.mtime == excluded.mtime AND archive_files.exif_date IS NOT NULL THEN archive_files.exif_date
+                        ELSE COALESCE(excluded.exif_date, archive_files.exif_date)
+                    END,
                     camera = excluded.camera,
                     lens = excluded.lens,
                     iso = excluded.iso,
@@ -577,6 +599,23 @@ impl ArchiveCatalog {
              SET sidecar_culling_json = ?1, sidecar_mtime = ?2
              WHERE canonical_path = ?3",
             (&sidecar_json, sidecar_mtime, &norm_path),
+        )?;
+        Ok(())
+    }
+
+    /// Updates the EXIF date in database when Inspector loads EXIF data.
+    pub fn update_exif_date(&self, path: &str, exif_date: &str) -> Result<()> {
+        let norm = normalize_canonical_path(path);
+        // Normiere "YYYY:MM:DD HH:MM:SS" zu "YYYY-MM-DDTHH:MM:SS"
+        let normalized_date = if exif_date.len() >= 19 && &exif_date[4..5] == ":" && &exif_date[7..8] == ":" {
+            format!("{}-{}-{}T{}", &exif_date[0..4], &exif_date[5..7], &exif_date[8..10], &exif_date[11..19])
+        } else {
+            exif_date.replace(' ', "T")
+        };
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE archive_files SET exif_date = ?1 WHERE canonical_path = ?2",
+            (&normalized_date, &norm),
         )?;
         Ok(())
     }

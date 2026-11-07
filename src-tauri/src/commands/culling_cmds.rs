@@ -466,9 +466,17 @@ pub async fn rotate_images(paths: Vec<String>, direction: String) -> Result<Vec<
 }
 
 #[tauri::command]
-pub async fn get_image_metadata(path: String) -> Result<rapidready_core::metadata_resolver::ImageMetadata, String> {
+pub async fn get_image_metadata(
+    path: String,
+    catalog_state: tauri::State<'_, ArchiveCatalogState>,
+) -> Result<rapidready_core::metadata_resolver::ImageMetadata, String> {
+    let catalog = catalog_state.catalog.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        Ok(rapidready_core::metadata_resolver::get_image_metadata(std::path::Path::new(&path)))
+        let meta = rapidready_core::metadata_resolver::get_image_metadata(std::path::Path::new(&path));
+        if let Some(ref d) = meta.date {
+            let _ = catalog.update_exif_date(&path, &d.format("%Y-%m-%dT%H:%M:%S").to_string());
+        }
+        Ok(meta)
     })
     .await
     .map_err(|e| e.to_string())?

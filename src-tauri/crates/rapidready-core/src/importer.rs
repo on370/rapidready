@@ -77,6 +77,18 @@ where
             fs::remove_file(&target_path).await?;
             return Err(anyhow::anyhow!("Hash mismatch after copy: {}", file.name));
         }
+
+        // Set modification time (mtime) on destination file to capture date
+        if let Some(naive_dt) = file.date {
+            let timestamp_secs = naive_dt.and_utc().timestamp();
+            if timestamp_secs > 0 {
+                let sys_time = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(timestamp_secs as u64);
+                let times = std::fs::FileTimes::new().set_modified(sys_time);
+                if let Ok(f) = std::fs::OpenOptions::new().write(true).open(&target_path) {
+                    let _ = f.set_times(times);
+                }
+            }
+        }
         
         // Mark as imported
         let _ = import_index.mark_imported(

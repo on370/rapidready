@@ -100,6 +100,20 @@
     "tagFilter": "Schlagwort",
     "noTagsInFolder": "Keine Schlagwörter im Ordner"
   },
+  "sort": {
+    "label": "Sortieren nach",
+    "filename": "Dateiname",
+    "date": "Aufnahmedatum",
+    "rating": "Bewertung",
+    "size": "Dateigröße",
+    "asc": "Aufsteigend",
+    "desc": "Absteigend",
+    "ascTooltip": "Aufsteigend (A→Z / Älteste zuerst) – Klicken zum Umkehren",
+    "descTooltip": "Absteigend (Z→A / Neueste zuerst) – Klicken zum Umkehren",
+    "groupByFolder": "Nach Unterordnern gruppieren",
+    "groupByFolderHintOn": "Erst nach Ordner, darin sortieren",
+    "groupByFolderHintOff": "Alle Unterordner durchgehend sortieren"
+  },
   "filmstrip": {
     "title": "Filmstreifen",
     "toggleTooltip": "Filmstreifen ein-/ausblenden",

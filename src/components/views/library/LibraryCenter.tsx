@@ -22,6 +22,8 @@ import { useCollectionsStore, findAlbumById } from "../../../stores/collectionsS
 import { openInConfiguredRawDeveloper } from "../../../stores/settingsStore";
 import { FolderHeart, Download, ArrowDownAZ, X } from "lucide-react";
 
+const numericCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+
 interface LibraryCenterProps {
   viewMode?: 'grid' | 'loupe' | 'fullscreen';
   setViewMode?: (mode: 'grid' | 'loupe' | 'fullscreen') => void;
@@ -41,6 +43,8 @@ export function LibraryCenter({
   const setLoupeScale = useLibraryUIStore((s) => s.setLoupeScale);
   const gridColumns = useLibraryUIStore((s) => s.gridColumns);
   const setGridScrollTop = useLibraryUIStore((s) => s.setGridScrollTop);
+  const sortBy = useLibraryUIStore((s) => s.sortBy);
+  const sortDirection = useLibraryUIStore((s) => s.sortDirection);
 
   const viewMode = propViewMode || storeViewMode;
   const setViewMode = propSetViewMode || storeSetViewMode;
@@ -85,7 +89,22 @@ export function LibraryCenter({
     return rootPath ? normalizePath(rootPath) : null;
   }, [rootPath]);
 
-  const scopedImages = React.useMemo(() => {
+  const imageByPathMap = React.useMemo(() => {
+    const m = new Map<string, LibraryImage>();
+    for (const img of images) {
+      m.set(normalizePath(img.path), img);
+    }
+    return m;
+  }, [images]);
+
+  const imagesStructureKey = React.useMemo(() => {
+    if (images.length === 0) return '0';
+    const first = images[0]?.path || '';
+    const last = images[images.length - 1]?.path || '';
+    return `${images.length}:${first}:${last}`;
+  }, [images]);
+
+  const sortedScopedPaths = React.useMemo(() => {
     // When viewing an active collection, display collection images in their exact manual order!
     if (activeCollectionId) {
       if (!activeCollection) {
@@ -93,47 +112,117 @@ export function LibraryCenter({
         // NEVER fall through to showing all library images! Return empty array while loading.
         return [];
       }
-      const imgMap = new Map<string, LibraryImage>();
-      for (const img of images) {
-        imgMap.set(normalizePath(img.path), img);
-      }
-      const list: LibraryImage[] = [];
-      for (const path of activeCollection.images) {
-        const norm = normalizePath(path);
-        const existing = imgMap.get(norm);
-        if (existing) {
-          list.push(existing);
-        }
-      }
-      return list;
+      const allImgs = useLibraryStore.getState().images;
+      const knownPaths = new Set(allImgs.map(img => normalizePath(img.path)));
+      return activeCollection.images.filter(p => knownPaths.has(normalizePath(p)));
     }
 
+    const currentImages = useLibraryStore.getState().images;
     let list: LibraryImage[];
     if (isViewingLastImport) {
-      list = images.filter(img => normLastImport.has(normalizePath(img.path)));
+      list = currentImages.filter(img => normLastImport.has(normalizePath(img.path)));
     } else if (
       selectedFolderPaths && 
       selectedFolderPaths.size > 0 && 
       !(selectedFolderPaths.size === 1 && normRoot && selectedFolderPaths.has(normRoot))
     ) {
-      list = images.filter((img) => {
+      list = currentImages.filter((img) => {
         const p = normalizePath(img.path);
         const lastSlash = p.lastIndexOf('/');
         const dir = lastSlash > 0 ? p.substring(0, lastSlash) : p;
         return selectedFolderPaths.has(dir);
       });
     } else if (normActiveFolder && normActiveFolder !== normRoot) {
-      list = images.filter((img) => {
+      list = currentImages.filter((img) => {
         const p = normalizePath(img.path);
         return p.startsWith(normActiveFolder + '/') || p === normActiveFolder;
       });
     } else {
-      list = images;
+      list = currentImages;
     }
 
-    // Always guarantee alphabetical sorting by path so order is 100% deterministic!
-    return list.slice().sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
-  }, [activeCollectionId, activeCollection, images, isViewingLastImport, normLastImport, selectedFolderPaths, normActiveFolder, normRoot]);
+    // Helper to extract a normalized comparable date string
+    const getDateKey = (img: LibraryImage): string => {
+      let d = img.date || img.date_modified || '';
+      if (d) {
+        if (d.length >= 10 && d[4] === ':' && d[7] === ':') {
+          d = d.substring(0, 4) + '-' + d.substring(5, 7) + '-' + d.substring(8);
+        }
+        if (img.subsec_time) {
+          d += '.' + img.subsec_time;
+        }
+        return d;
+      }
+      if (img.mtime) {
+        return new Date(img.mtime * 1000).toISOString();
+      }
+      return '';
+    };
+
+    // Pre-cache date mappings for O(N) lookup instead of O(N log N) during sort
+    let dateMap: Map<string, string> | null = null;
+    if (sortBy === 'date') {
+      dateMap = new Map<string, string>();
+      for (const img of list) {
+        dateMap.set(img.path, getDateKey(img));
+      }
+    }
+
+    const dirMul = sortDirection === 'asc' ? 1 : -1;
+
+    const sorted = list.slice().sort((a, b) => {
+      // Primary sort criterion
+      if (sortBy === 'filename') {
+        const cmp = numericCollator.compare(a.name, b.name);
+        if (cmp !== 0) return cmp * dirMul;
+      } else if (sortBy === 'date') {
+        const dateKeyA = dateMap ? (dateMap.get(a.path) || '') : getDateKey(a);
+        const dateKeyB = dateMap ? (dateMap.get(b.path) || '') : getDateKey(b);
+        if (!dateKeyA && dateKeyB) return 1;
+        if (dateKeyA && !dateKeyB) return -1;
+        if (dateKeyA !== dateKeyB) {
+          return (dateKeyA < dateKeyB ? -1 : 1) * dirMul;
+        }
+      } else if (sortBy === 'rating') {
+        const ratingA = a.culling.rating || 0;
+        const ratingB = b.culling.rating || 0;
+        if (ratingA !== ratingB) {
+          return (ratingA - ratingB) * dirMul;
+        }
+        const flagA = a.culling.flag || 0;
+        const flagB = b.culling.flag || 0;
+        if (flagA !== flagB) {
+          return (flagA - flagB) * dirMul;
+        }
+      } else if (sortBy === 'size') {
+        const sizeA = a.size || 0;
+        const sizeB = b.size || 0;
+        if (sizeA !== sizeB) {
+          return (sizeA - sizeB) * dirMul;
+        }
+      }
+
+      // Deterministic tie-breaker
+      const nameCmp = numericCollator.compare(a.name, b.name);
+      if (nameCmp !== 0) return nameCmp;
+      return a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
+    });
+
+    return sorted.map(img => img.path);
+  }, [
+    activeCollectionId, activeCollection, imagesStructureKey, isViewingLastImport, 
+    normLastImport, selectedFolderPaths, normActiveFolder, normRoot, 
+    sortBy, sortDirection
+  ]);
+
+  const scopedImages = React.useMemo(() => {
+    const result: LibraryImage[] = [];
+    for (const p of sortedScopedPaths) {
+      const img = imageByPathMap.get(normalizePath(p));
+      if (img) result.push(img);
+    }
+    return result;
+  }, [sortedScopedPaths, imageByPathMap]);
 
   const displayedImages = React.useMemo(() => {
     return scopedImages.filter(img => {

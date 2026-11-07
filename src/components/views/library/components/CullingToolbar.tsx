@@ -4,12 +4,14 @@ import {
   Rocket, FolderOpen, ZoomIn, ZoomOut, RotateCw, RotateCcw,
   SquareArrowOutUpRight, CircleSlash, Tag, ChevronDown, X, ScanEye,
   Maximize2,
-  GalleryThumbnails
+  GalleryThumbnails,
+  ArrowDownAZ, Calendar, HardDrive, ArrowUpNarrowWide, ArrowDownWideNarrow
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { LibraryImage, useLibraryStore } from '../../../../stores/libraryStore';
 import { useLibraryUIStore } from '../../../../stores/libraryUIStore';
+import { useCollectionsStore } from '../../../../stores/collectionsStore';
 import { useSettingsStore, getRawDeveloperDisplayName, openInConfiguredRawDeveloper } from '../../../../stores/settingsStore';
 import { HelpPopover } from '../../../ui/HelpPopover';
 import { COLOR_PALETTE, getColorConfig } from '../../../../constants/culling';
@@ -80,7 +82,14 @@ export const CullingToolbar = React.memo(function CullingToolbar({
     setFocusPeakingColor,
     focusPeakingThreshold,
     setFocusPeakingThreshold,
+    sortBy,
+    setSortBy,
+    sortDirection,
+    setSortDirection,
+    toggleSortDirection,
   } = useLibraryUIStore();
+
+  const activeCollectionId = useCollectionsStore((s) => s.activeCollectionId);
 
   const toolbarRef = useRef<HTMLDivElement>(null);
   const shareMenuRef = useRef<HTMLDivElement>(null);
@@ -89,6 +98,7 @@ export const CullingToolbar = React.memo(function CullingToolbar({
   const colorFilterRef = useRef<HTMLDivElement>(null);
   const tagFilterRef = useRef<HTMLDivElement>(null);
   const focusMenuRef = useRef<HTMLDivElement>(null);
+  const sortMenuRef = useRef<HTMLDivElement>(null);
 
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [isColorPaletteOpen, setIsColorPaletteOpen] = useState(false);
@@ -96,6 +106,7 @@ export const CullingToolbar = React.memo(function CullingToolbar({
   const [isColorFilterOpen, setIsColorFilterOpen] = useState(false);
   const [isTagFilterOpen, setIsTagFilterOpen] = useState(false);
   const [isFocusSettingsOpen, setIsFocusSettingsOpen] = useState(false);
+  const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
 
   // Close menus when clicking outside
   useEffect(() => {
@@ -117,6 +128,9 @@ export const CullingToolbar = React.memo(function CullingToolbar({
       }
       if (focusMenuRef.current && !focusMenuRef.current.contains(e.target as Node)) {
         setIsFocusSettingsOpen(false);
+      }
+      if (sortMenuRef.current && !sortMenuRef.current.contains(e.target as Node)) {
+        setIsSortMenuOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -699,6 +713,148 @@ export const CullingToolbar = React.memo(function CullingToolbar({
             </div>
           )}
         </div>
+
+        {/* Sort Controls (hidden in collections) */}
+        {!activeCollectionId && (
+          <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
+            {/* Sort Dropdown */}
+            <div ref={sortMenuRef} className="relative">
+              <button
+                onClick={() => setIsSortMenuOpen(prev => !prev)}
+                className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer ${
+                  isSortMenuOpen ? 'bg-app-hover text-txt-primary' : 'text-txt-tertiary hover:bg-app-hover hover:text-txt-secondary'
+                }`}
+                title={t('sort.label', 'Sortieren nach')}
+              >
+                {sortBy === 'filename' && <ArrowDownAZ className="w-3.5 h-3.5 text-accent" />}
+                {sortBy === 'date' && <Calendar className="w-3.5 h-3.5 text-accent" />}
+                {sortBy === 'rating' && <Star className="w-3.5 h-3.5 text-accent fill-accent" />}
+                {sortBy === 'size' && <HardDrive className="w-3.5 h-3.5 text-accent" />}
+                <span>
+                  {sortBy === 'filename' && t('sort.filename', 'Dateiname')}
+                  {sortBy === 'date' && t('sort.date', 'Aufnahmedatum')}
+                  {sortBy === 'rating' && t('sort.rating', 'Bewertung')}
+                  {sortBy === 'size' && t('sort.size', 'Dateigröße')}
+                </span>
+                <ChevronDown className="w-3 h-3 opacity-70" />
+              </button>
+
+              {/* Sort Dropdown Menu */}
+              {isSortMenuOpen && (
+                <div className="absolute top-full right-0 mt-1 w-60 rounded-lg bg-[#18181b] border border-app-border shadow-2xl py-1.5 z-50 animate-in fade-in zoom-in-95 duration-100">
+                  <div className="text-[10px] uppercase tracking-wider font-semibold text-txt-tertiary px-3 py-1">
+                    {t('sort.label', 'Sortieren nach')}
+                  </div>
+
+                  {/* 1. Dateiname */}
+                  <button
+                    onClick={() => {
+                      if (sortBy === 'filename') {
+                        toggleSortDirection();
+                      } else {
+                        setSortBy('filename');
+                        setSortDirection('asc');
+                      }
+                      setIsSortMenuOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-1.5 text-xs text-left transition-colors hover:bg-white/5 cursor-pointer ${
+                      sortBy === 'filename' ? 'text-accent font-medium bg-accent/10' : 'text-txt-secondary'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <ArrowDownAZ className="w-3.5 h-3.5 opacity-60" />
+                      <span>{t('sort.filename', 'Dateiname')}</span>
+                    </div>
+                    {sortBy === 'filename' && <Check className="w-3.5 h-3.5 text-accent" />}
+                  </button>
+
+                  {/* 2. Aufnahmedatum */}
+                  <button
+                    onClick={() => {
+                      if (sortBy === 'date') {
+                        toggleSortDirection();
+                      } else {
+                        setSortBy('date');
+                        setSortDirection('asc');
+                      }
+                      setIsSortMenuOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-1.5 text-xs text-left transition-colors hover:bg-white/5 cursor-pointer ${
+                      sortBy === 'date' ? 'text-accent font-medium bg-accent/10' : 'text-txt-secondary'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-3.5 h-3.5 opacity-60" />
+                      <span>{t('sort.date', 'Aufnahmedatum')}</span>
+                    </div>
+                    {sortBy === 'date' && <Check className="w-3.5 h-3.5 text-accent" />}
+                  </button>
+
+                  {/* 3. Bewertung */}
+                  <button
+                    onClick={() => {
+                      if (sortBy === 'rating') {
+                        toggleSortDirection();
+                      } else {
+                        setSortBy('rating');
+                        setSortDirection('desc');
+                      }
+                      setIsSortMenuOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-1.5 text-xs text-left transition-colors hover:bg-white/5 cursor-pointer ${
+                      sortBy === 'rating' ? 'text-accent font-medium bg-accent/10' : 'text-txt-secondary'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Star className="w-3.5 h-3.5 opacity-60 fill-current" />
+                      <span>{t('sort.rating', 'Bewertung')}</span>
+                    </div>
+                    {sortBy === 'rating' && <Check className="w-3.5 h-3.5 text-accent" />}
+                  </button>
+
+                  {/* 4. Dateigröße */}
+                  <button
+                    onClick={() => {
+                      if (sortBy === 'size') {
+                        toggleSortDirection();
+                      } else {
+                        setSortBy('size');
+                        setSortDirection('desc');
+                      }
+                      setIsSortMenuOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-1.5 text-xs text-left transition-colors hover:bg-white/5 cursor-pointer ${
+                      sortBy === 'size' ? 'text-accent font-medium bg-accent/10' : 'text-txt-secondary'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <HardDrive className="w-3.5 h-3.5 opacity-60" />
+                      <span>{t('sort.size', 'Dateigröße')}</span>
+                    </div>
+                    {sortBy === 'size' && <Check className="w-3.5 h-3.5 text-accent" />}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Direct Direction Toggle Button */}
+            <button
+              onClick={toggleSortDirection}
+              className="p-1 rounded-md text-txt-tertiary hover:bg-app-hover hover:text-txt-secondary transition-colors cursor-pointer"
+              title={
+                sortDirection === 'asc'
+                  ? t('sort.ascTooltip', 'Aufsteigend (A→Z / Älteste zuerst) – Klicken zum Umkehren')
+                  : t('sort.descTooltip', 'Absteigend (Z→A / Neueste zuerst) – Klicken zum Umkehren')
+              }
+            >
+              {sortDirection === 'asc' ? (
+                <ArrowUpNarrowWide className="w-3.5 h-3.5" />
+              ) : (
+                <ArrowDownWideNarrow className="w-3.5 h-3.5" />
+              )}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 3. Culling Toolbar: Flags P/U/X, Delete, Stars, Color, Rotation, Share */}

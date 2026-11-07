@@ -1059,6 +1059,21 @@
        - **Bildtitel / Headline (`title`):** Kurzer prägnanter Motivtitel.
        - **Beschreibung / Bildtext (`description` / `caption`):** Ausführliche Inhaltsbeschreibung für Agenturen/Presse.
        - **Aufnahmezeit-Korrektur (`timeShiftSeconds`):** Relativer Zeit-Offset in Sekunden zur Non-Destructive-Harmonisierung asynchroner Kamerauhren.
+       - **Absolutes Aufnahmedatum (`dateOverride` — „Non-Destructive vs. Datumsehrlich“ für Scans & fehlende EXIF-Daten):** Absoluter ISO-Zeitstempel (`YYYY-MM-DDTHH:MM:SS`) im Sidecar (`.rrdata` & `.xmp` `exif:DateTimeOriginal`), wenn Fotos kein oder ein unsinniges Erstellungsdatum besitzen (z. B. gescannte Papierfotos/Dias mit dem Scan-Tag als `mtime` oder WhatsApp-Bilder ohne EXIF).
+  - **Konzept „Non-Destructive vs. Datumsehrlich“ (4-Stufen-Modell für Scans & fehlende EXIF-Daten):**
+    1. **Stufe 1 – Absolutes `dateOverride` im Sidecar (Prioritäts-Kaskade & Inspector):**
+       - In `date_resolver.rs`, `metadata_resolver.rs`, Katalog-DB und Inspector gilt für das effektive Aufnahmedatum strikt folgende Prioritäts-Kaskade:  
+         **`1. Sidecar dateOverride (+ ggf. timeShiftSeconds)` $\rightarrow$ `2. Kamera-EXIF (DateTimeOriginal)` $\rightarrow$ `3. Dateiname-Parser` $\rightarrow$ `4. Datei-mtime`**.
+       - Im Inspector (analog zum GPS-Editor): Klick auf das Stift-Icon neben dem Datum erlaubt das Setzen eines exakten Datums/Uhrzeit (oder nur Jahr/Monat wie `1985-07-01`) für Einzelbilder oder als **Batch für alle markierten Scans**.
+       - Ein dezentes Badge *„Manuell (Sidecar)“* zeigt die Übersteuerung transparent an; ein 1-Klick-Reset (*„Auf Original zurücksetzen“*) stellt jederzeit den ursprünglichen Datei-Zustand wieder her.
+    2. **Stufe 2 – Direkt beim Import (damit Scans gar nicht erst im falschen Ordner landen):**
+       - Im Import-Dialog (Step 2) erhält die Optionsleiste eine optionale Einstellung: *☑ „Aufnahmedatum setzen / überschreiben“* (wahlweise für alle ausgewählten Dateien oder *„Nur für Dateien ohne EXIF-Aufnahmedatum“*).
+       - Effekt beim Kopieren: Der Importer berechnet den Zielordner (`1978/1978-05/...`) direkt anhand dieses Wunschdatums und legt beim Kopieren der (unveränderten!) Bilddatei im selben Atemzug das passende `.rrdata`- / `.xmp`-Sidecar mit `dateOverride` im Zielordner an.
+    3. **Stufe 3 – Nachträgliches Umziehen bereits importierter Scans im Archiv (*Re-File*):**
+       - Korrigiert man im Archiv nachträglich das Datum von 50 gescannten Fotos im Inspector von `2026` auf `1985`, liegen sie physisch noch im Ordner `2026/...`.
+       - Optionale Komfort-Aktion direkt nach der Datumsänderung (oder per Rechtsklick): *„Anhand Aufnahmedatum in Zielordner verschieben“* $\rightarrow$ verschiebt Bild + Sidecar atomar per `fs::rename` in den passenden Jahres-/Monatsordner (`1985/1985-07/`). **0 Bytes in der Originaldatei verändert**, aber 100 % ehrlicher Ordnerbaum, ehrlicher Inspector und ehrliche Sortierung.
+    4. **Stufe 4 – Beim Export (Photobook / Weitergabe):**
+       - Da beim Export ohnehin **neue Ziel-Kopien** erzeugt werden, wird das effektive Datum (`dateOverride` / `timeShiftSeconds`) direkt in den EXIF-Header der exportierten Kopie eingebrannt (Originale im Archiv bleiben unangetastet).
   - **Sprint 1: Globale Settings-Vorbelegung & Shoot-spezifische Import-Profile (Ingest-Ebene):**
     - *Globale Konfiguration in `SettingsView.tsx` (`settingsStore.ts`):*
       - **Dass & Wo:** Eigene, strukturierte Einstellungskarte *„Standard-Metadaten & Copyright“* (mit Icon `UserCheck` oder `Copyright`) in `SettingsView.tsx`, platziert zwischen den Workflow-Voreinstellungen und den GPS-Optionen.
@@ -1082,9 +1097,14 @@
       - **Wie die Speicherung erfolgt:**
         - Persistierung im `settingsStore` (`localStorage` / Tauri-Settings).
         - Abwärtskompatibel mit Fallbacks (`""` bzw. `false`), sodass bestehende Installationen sauber starten.
-    - *Import-Wizard Integration (`ImportPreviewStep.tsx` / `ImportExecuteStep.tsx`):*
+    - *Import-Wizard Integration & UX-Schutz gegen Fehl-Vorbelegung (`ImportPreviewStep.tsx` / `ImportExecuteStep.tsx`):*
       - Checkbox in den Import-Optionen: *☑ „Redaktionelle Metadaten & Copyright beim Import zuweisen“*.
       - Shoot-spezifische Übersteuerung: Werte werden aus den Settings vorinitialisiert, können jedoch pro Import-Auftrag überschrieben werden (z. B. für Gast-Fotografen oder spezielle Kunden-Shootings).
+      - **Schutz vor versehentlicher Alt-Vorbelegung bei Folge-Importen („Bequem vs. Gefährlich“):**
+        - *Stammdaten* (Fotograf, Copyright mit `{year}`) dürfen gemäß Settings aktiv bleiben; *flüchtige Shoot-/Scan-Overrides* (`dateOverride`, Titel/Beschreibung, GPS) schalten sich beim Wechsel der Import-Quelle standardmäßig wieder auf **AUS**.
+        - **1-Klick „Wie voriger Import“:** Für Serien-Scans (mehrere Ordner desselben Ereignisses nacheinander) bietet ein Button **`[ ↺ Werte vom letzten Import übernehmen ]`** die sofortige Wiederverwendung ohne Neutippen.
+        - **Unübersehbarer Amber-Warn-Chip:** Solange ein Datums- oder Shoot-Override für den aktuellen Import scharfgeschaltet ist, zeigt die Aktionsleiste neben dem *„Import starten“*-Button einen prominenten gelben Warn-Indikator (`⚠️ Aufnahmedatum wird auf 1985-07-01 gesetzt [✕]`).
+        - **1-Klick-Heilung via „Letzter Import“:** Selbst bei einem versehentlichen Fehl-Import lässt sich dieser in *Letzter Import* (`Cmd+A` $\rightarrow$ *Sidecar-Override zurücksetzen* + *Neu einsortieren*) dank 100 % Non-Destructive-Architektur jederzeit rückstandslos rückgängig machen.
       - Generiert während des Importvorgangs parallel zu den Bilddateien automatisch schlanke `.rrdata`-Sidecars (keine Modifikation der importierten Mediendateien).
   - **Sprint 2: Inspector Inline- & Batch-Editing UI (Library-Ebene):**
     - *UI-Komponente in `LibraryInspector.tsx`:*
@@ -1111,13 +1131,14 @@
             "title": "Alpenglühen am Matterhorn",
             "description": "Sonnenaufgang mit dramatischen Wolkenformationen"
           },
+          "dateOverride": "1985-07-01T12:00:00",
           "timeShiftSeconds": 3600
         }
         ```
-      - Rust Tauri Commands: `write_editorial_sidecar(paths, editorial_data)` und `clear_editorial_override(paths, field_key)`.
-    - *DateTimeOriginal Non-Destructive Time-Shift:*
-      - Speichert einen vorzeichenbehafteten Offset `timeShiftSeconds: i64` im Sidecar.
-      - `metadata_resolver.rs` und `date_resolver.rs` addieren den Offset dynamisch zur Anzeige und Sortierung (`effective_date = original_date + timeShiftSeconds`).
+      - Rust Tauri Commands: `write_editorial_sidecar(paths, editorial_data)`, `clear_editorial_override(paths, field_key)` und `refile_images_by_date(paths, archive_root, folder_template)`.
+    - *DateTimeOriginal Non-Destructive Time-Shift & Absolute Date Override:*
+      - Speichert optional ein absolutes `dateOverride: Option<String>` sowie einen vorzeichenbehafteten Offset `timeShiftSeconds: Option<i64>` im Sidecar.
+      - `metadata_resolver.rs` und `date_resolver.rs` berechnen das effektive Datum (`effective_date = (dateOverride ?? original_date) + timeShiftSeconds`).
       - Inspector UI: Kleiner Time-Shift-Button (`Clock` / `History`) neben dem Aufnahmedatum mit Dialog zur relativen Zeitverschiebung (`[ + / - ] [ HH : MM : SS ]`).
       - Export-Integration: Beim Sammlungs-Export (Photobook / Web Export) wird der korrigierte Zeitstempel in das neu erzeugte Ziel-Duplikat geschrieben; die Originaldatei bleibt unberührt.
     - *Adobe XMP Synchronisation (`.xmp`):*

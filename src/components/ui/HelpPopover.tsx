@@ -97,6 +97,10 @@ export function HelpPopover({ viewMode }: HelpPopoverProps) {
                   <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">← / K / ⇧Space</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
+                  <span className="text-txt-secondary">{t('shortcuts.actions.prevNextFolder', isEn ? 'Prev / Next Folder' : 'Vorheriger / Nächster Ordner')}</span>
+                  <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">↑ / ↓</span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
                   <span className="text-txt-secondary">{t('shortcuts.actions.histogram', 'Live-Histogramm')}</span>
                   <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">H</span>
                 </div>

@@ -23,6 +23,7 @@
     "actions": {
       "next": "Next Image",
       "prev": "Previous Image",
+      "prevNextFolder": "Prev / Next Folder",
       "loupe": "Loupe View",
       "grid": "Grid View",
       "fullscreen": "Toggle Full Window",

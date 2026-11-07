@@ -237,17 +237,39 @@ export function mergeFoldersDeduped(
   return { next, changed };
 }
 
+export function dedupeAndSortImages(files: LibraryImage[]): { sorted: LibraryImage[]; imageIndexMap: Map<string, number> } {
+  const mapByNorm = new Map<string, LibraryImage>();
+  for (const img of files) {
+    const norm = normalizePath(img.path);
+    const existing = mapByNorm.get(norm);
+    if (!existing) {
+      mapByNorm.set(norm, img);
+    } else {
+      const existingScore = (existing.camera ? 1 : 0) + (existing.date ? 1 : 0) + (existing.size ? 1 : 0);
+      const newScore = (img.camera ? 1 : 0) + (img.date ? 1 : 0) + (img.size ? 1 : 0);
+      if (newScore > existingScore) {
+        mapByNorm.set(norm, img);
+      }
+    }
+  }
+
+  const sorted = Array.from(mapByNorm.values()).sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  const imageIndexMap = new Map<string, number>();
+  for (let i = 0; i < sorted.length; i++) {
+    imageIndexMap.set(normalizePath(sorted[i].path), i);
+  }
+
+  return { sorted, imageIndexMap };
+}
+
 export const useLibraryStore = create<LibraryStore>((set, get) => ({
   images: [],
   imageIndexMap: new Map<string, number>(),
   rootPath: null,
   setRootPath: (path) => set({ rootPath: path }),
   setImages: (images) => {
-    const map = new Map<string, number>();
-    for (let i = 0; i < images.length; i++) {
-      map.set(normalizePath(images[i].path), i);
-    }
-    set({ images, imageIndexMap: map, activeImageIndex: 0, selectedPaths: new Set(), isLoading: false });
+    const { sorted, imageIndexMap } = dedupeAndSortImages(images);
+    set({ images: sorted, imageIndexMap, activeImageIndex: 0, selectedPaths: new Set(), isLoading: false });
   },
   
   isLoading: false,
@@ -785,11 +807,7 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
         }>('get_cached_archive_files', { path });
 
         if (cached && cached.files && cached.files.length > 0) {
-          const sorted = cached.files.slice().sort((a, b) => a.path.localeCompare(b.path));
-          const imageIndexMap = new Map<string, number>();
-          for (let i = 0; i < sorted.length; i++) {
-            imageIndexMap.set(normalizePath(sorted[i].path), i);
-          }
+          const { sorted, imageIndexMap } = dedupeAndSortImages(cached.files);
           const initialFolders = new Set<string>();
           initialFolders.add(normalizeSlash(path));
           const { next: nextFolders } = mergeFoldersDeduped(initialFolders, cached.directories || []);
@@ -933,14 +951,10 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
           };
         });
       } else {
-        const sorted = (loadedImages && loadedImages.length > 0 ? loadedImages : useLibraryStore.getState().images)
-          .slice()
-          .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+        const { sorted, imageIndexMap } = dedupeAndSortImages(
+          loadedImages && loadedImages.length > 0 ? loadedImages : useLibraryStore.getState().images
+        );
         finalImagesCount = sorted.length;
-        const imageIndexMap = new Map<string, number>();
-        for (let i = 0; i < sorted.length; i++) {
-          imageIndexMap.set(normalizePath(sorted[i].path), i);
-        }
         const initialFolders = new Set(useLibraryStore.getState().discoveredFolders);
         if (path) {
           initialFolders.add(normalizeSlash(path));
