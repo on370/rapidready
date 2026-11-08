@@ -546,7 +546,20 @@ export function LibraryLeftSidebar() {
   // Auto-load last library on mount if nothing is loaded
   useEffect(() => {
     if (!rootPath && lastLibraryPath) {
-      loadFolder(lastLibraryPath);
+      // Nur automatisch laden, wenn lastLibraryPath entweder in locations existiert
+      // oder locations noch komplett leer ist (Erstnutzung)
+      const normLast = normalizePath(lastLibraryPath);
+      const isKnownLocation = locations.some(l => {
+        const normLoc = normalizePath(l.path);
+        return normLast === normLoc || normLast.startsWith(normLoc + '/');
+      });
+      if (isKnownLocation) {
+        loadFolder(lastLibraryPath);
+      } else if (locations.length > 0) {
+        loadFolder(locations[0].path);
+      } else {
+        setLastLibraryPath(null);
+      }
     }
   }, []);
 

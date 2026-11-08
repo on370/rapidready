@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { invoke } from '@tauri-apps/api/core';
 import { normalizePath } from '../utils/image';
+import { useLibraryStore } from './libraryStore';
 
 export type RawDeveloperId = 'rapidraw' | 'darktable' | 'lightroom' | 'system' | 'custom';
 
@@ -112,7 +113,7 @@ interface SettingsState {
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       autoDetect: true,
       verifyCopy: true,
       deleteSource: false,
@@ -184,7 +185,39 @@ export const useSettingsStore = create<SettingsState>()(
         }
         return { locations: [...state.locations, location] };
       }),
-      removeLocation: (id) => set((state) => ({ locations: state.locations.filter(l => l.id !== id) })),
+      removeLocation: (id) => {
+        const state = get();
+        const target = state.locations.find((l) => l.id === id);
+        const nextLocations = state.locations.filter((l) => l.id !== id);
+
+        if (!target) {
+          set({ locations: nextLocations });
+          return;
+        }
+
+        const normTarget = normalizePath(target.path);
+
+        const nextRecent = state.recentPaths.filter((p) => {
+          const normP = normalizePath(p);
+          return normP !== normTarget && !normP.startsWith(normTarget + '/');
+        });
+
+        let nextLastLibraryPath = state.lastLibraryPath;
+        if (nextLastLibraryPath) {
+          const normLast = normalizePath(nextLastLibraryPath);
+          if (normLast === normTarget || normLast.startsWith(normTarget + '/')) {
+            nextLastLibraryPath = nextLocations[0]?.path ?? null;
+          }
+        }
+
+        set({
+          locations: nextLocations,
+          recentPaths: nextRecent,
+          lastLibraryPath: nextLastLibraryPath,
+        });
+
+        useLibraryStore.getState().closeArchiveRoot(target.path, nextLocations[0]?.path ?? null);
+      },
       updateLocation: (id, name, path) => set((state) => ({
         locations: state.locations.map(l => l.id === id ? { ...l, name, ...(path ? { path } : {}) } : l)
       })),

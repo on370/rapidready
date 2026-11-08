@@ -8,6 +8,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
 import { useImportStore } from '../../../../stores/importStore';
 import { useSettingsStore, ArchiveLocation } from '../../../../stores/settingsStore';
+import { useDialogStore } from '../../../../stores/dialogStore';
 import { normalizePath } from '../../../../utils/image';
 
 export const DestinationSelector = React.memo(function DestinationSelector() {
@@ -32,6 +33,21 @@ export const DestinationSelector = React.memo(function DestinationSelector() {
   const [editingLocationId, setEditingLocationId] = useState<string | null>(null);
   const [editLocName, setEditLocName] = useState('');
   const destDropdownRef = useRef<HTMLDivElement>(null);
+
+  const handleRemoveLocation = async (loc: ArchiveLocation) => {
+    const confirmed = await useDialogStore.getState().confirmDestructive({
+      title: t('destination.deleteConfirmTitle', { defaultValue: 'Archiv-Standort entfernen?' }),
+      message: t('destination.deleteConfirmMessage', {
+        name: loc.name,
+        defaultValue: `Möchtest du den Archiv-Standort „${loc.name}“ wirklich aus RapidReady entfernen?\n\n(Die physischen Dateien auf der Festplatte bleiben unverändert erhalten).`,
+      }),
+      confirmLabel: t('destination.deleteConfirmButton', { defaultValue: 'Standort entfernen' }),
+      cancelLabel: t('destination.deleteCancelButton', { defaultValue: 'Abbrechen' }),
+    });
+    if (confirmed) {
+      removeLocation(loc.id);
+    }
+  };
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -267,7 +283,7 @@ export const DestinationSelector = React.memo(function DestinationSelector() {
                         <Edit2 className="w-3 h-3" />
                       </button>
                       <button 
-                        onClick={() => removeLocation(loc.id)}
+                        onClick={() => handleRemoveLocation(loc)}
                         className="p-1 rounded text-txt-tertiary hover:text-danger hover:bg-danger/10 transition-colors cursor-pointer"
                         title={t('destination.deleteLocation')}
                       >

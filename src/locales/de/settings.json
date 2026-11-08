@@ -77,7 +77,11 @@
     "title": "Archive Locations",
     "subtitle": "Verwalte deine Haupt-Speicherorte (z.B. SSDs, NAS)",
     "add": "Location hinzufügen",
-    "noLocations": "Noch keine Locations hinzugefügt."
+    "noLocations": "Noch keine Locations hinzugefügt.",
+    "deleteConfirmTitle": "Archiv-Standort entfernen?",
+    "deleteConfirmMessage": "Möchtest du den Archiv-Standort „{{name}}“ wirklich aus RapidReady entfernen?\n\n(Die physischen Dateien auf der Festplatte bleiben unverändert erhalten).",
+    "deleteConfirmButton": "Standort entfernen",
+    "deleteCancelButton": "Abbrechen"
   },
   "presets": {
     "title": "Import Presets",

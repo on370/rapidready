@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useSettingsStore } from "../../stores/settingsStore";
+import { useDialogStore } from "../../stores/dialogStore";
 import { useLibraryUIStore } from "../../stores/libraryUIStore";
 import { useUpdateStore } from "../../stores/updateStore";
 import { useOnboardingStore } from "../../stores/onboardingStore";
@@ -107,6 +108,21 @@ export function SettingsView() {
   } = useSettingsStore();
   const { isChecking, lastCheckResult, checkNow } = useUpdateStore();
 
+  const handleRemoveLocation = async (loc: { id: string; name: string }) => {
+    const confirmed = await useDialogStore.getState().confirmDestructive({
+      title: t('locations.deleteConfirmTitle', { defaultValue: 'Archiv-Standort entfernen?' }),
+      message: t('locations.deleteConfirmMessage', {
+        name: loc.name,
+        defaultValue: `Möchtest du den Archiv-Standort „${loc.name}“ wirklich aus RapidReady entfernen?\n\n(Die physischen Dateien auf der Festplatte bleiben unverändert erhalten).`,
+      }),
+      confirmLabel: t('locations.deleteConfirmButton', { defaultValue: 'Standort entfernen' }),
+      cancelLabel: t('locations.deleteCancelButton', { defaultValue: 'Abbrechen' }),
+    });
+    if (confirmed) {
+      removeLocation(loc.id);
+    }
+  };
+
   return (
     <div className="flex-1 overflow-auto">
       <div className="max-w-2xl mx-auto p-8 space-y-6">
@@ -153,7 +169,7 @@ export function SettingsView() {
                   name={loc.name}
                   subtitle={loc.path}
                   onSave={(newName) => updateLocation(loc.id, newName)}
-                  onRemove={() => removeLocation(loc.id)}
+                  onRemove={() => handleRemoveLocation(loc)}
                 />
               ))
             )}

@@ -77,7 +77,11 @@
     "title": "Archive Locations",
     "subtitle": "Manage your root storage paths (e.g., SSDs, NAS)",
     "add": "Add Location",
-    "noLocations": "No locations added yet."
+    "noLocations": "No locations added yet.",
+    "deleteConfirmTitle": "Remove Archive Location?",
+    "deleteConfirmMessage": "Are you sure you want to remove the archive location \"{{name}}\" from RapidReady?\n\n(Physical files on disk will not be deleted).",
+    "deleteConfirmButton": "Remove Location",
+    "deleteCancelButton": "Cancel"
   },
   "presets": {
     "title": "Import Presets",

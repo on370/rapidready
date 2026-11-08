@@ -143,6 +143,7 @@ interface LibraryStore {
   reconcileActiveFolder: () => Promise<void>;
   reconcileArchiveDelta: (targetPath?: string, isBackground?: boolean) => Promise<void>;
   rebuildArchiveCatalog: (targetPath?: string) => Promise<void>;
+  closeArchiveRoot: (removedPath: string, fallbackPath?: string | null) => Promise<void>;
   setScanState: (state: 'idle' | 'connecting' | 'scanning' | 'paused' | 'stopped' | 'completed') => void;
   setScanProgress: (progress: ArchiveScanProgress | null) => void;
   pauseScan: () => void;
@@ -790,6 +791,47 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
       await get().loadArchive(root, false);
     } catch (err) {
       console.error('Error rebuilding archive catalog:', err);
+    }
+  },
+  closeArchiveRoot: async (removedPath: string, fallbackPath?: string | null) => {
+    const normRemoved = normalizePath(removedPath);
+    const currentRoot = get().rootPath;
+    const normCurrent = currentRoot ? normalizePath(currentRoot) : null;
+    const isCurrentAffected =
+      !currentRoot ||
+      (!!normCurrent && (normCurrent === normRemoved || normCurrent.startsWith(normRemoved + '/')));
+
+    // Always clear the catalog entries for this archive root from SQLite database
+    await invoke('rebuild_archive_catalog', { path: removedPath }).catch(console.error);
+
+    if (isCurrentAffected) {
+      // Cancel active scan/thumbnailing
+      await invoke('cancel_archive_scan').catch(console.error);
+      nextScanCounter++;
+
+      set({
+        activeScanId: null,
+        rootPath: null,
+        activeFolderPath: null,
+        selectedFolderPaths: new Set(),
+        stagedDeleteFolderPaths: new Set(),
+        discoveredFolders: new Set(),
+        images: [],
+        imageIndexMap: new Map(),
+        selectedPaths: new Set(),
+        activeImageIndex: 0,
+        activeImageFolder: null,
+        isViewingLastImport: false,
+        isLoading: false,
+        scanState: 'idle',
+        scanProgress: null,
+        isInitialScan: false,
+        isFullyIndexed: false,
+      });
+
+      if (fallbackPath) {
+        await get().loadArchive(fallbackPath, false);
+      }
     }
   },
   loadArchive: async (path: string, preserveExisting = false) => {
