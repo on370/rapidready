@@ -35,7 +35,6 @@ where
     let mut bytes_processed = 0;
     let mut imported_paths = Vec::with_capacity(files.len());
 
-    println!("Executing import with {} files to {}", total_files, destination_base);
     let dest_base = Path::new(destination_base);
 
     let override_dt = date_override
