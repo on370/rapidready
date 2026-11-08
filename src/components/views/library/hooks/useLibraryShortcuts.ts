@@ -167,6 +167,24 @@ export function useLibraryShortcuts({
         return;
       }
 
+      // Shortcut: Alt + S -> Toggle RAW+JPEG Stacking
+      if (e.altKey && !e.metaKey && !e.ctrlKey && (e.code === 'KeyS' || e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        useLibraryUIStore.getState().toggleStackRawJpeg();
+        return;
+      }
+
+      // Loupe stack variant switching: J / j in Loupe view when active image is a stack
+      if (!e.metaKey && !e.ctrlKey && !e.altKey && (e.key === 'j' || e.key === 'J')) {
+        if (viewMode === 'loupe' && activeImage?.stackMembers && activeImage.stackMembers.length > 1) {
+          e.preventDefault();
+          const store = useLibraryUIStore.getState();
+          const nextIdx = (store.activeStackVariantIndex + 1) % activeImage.stackMembers.length;
+          store.setActiveStackVariantIndex(nextIdx);
+          return;
+        }
+      }
+
       if (e.key === 'ArrowRight' || e.key === 'j') {
         e.preventDefault();
         if (displayedImages.length === 0) return;

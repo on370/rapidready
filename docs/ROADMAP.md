@@ -1206,6 +1206,17 @@
     - **Tree Viewport Auto-Scroll:** Scroll the newly selected folder node (`isDirectlySelected`) into view (`scrollIntoView({ block: 'nearest' })`) without re-introducing unwanted tree scrolling during Grid navigation.
     - **Docs & i18n:** Update shortcut help popover (`HelpPopover.tsx`), help docs, and DE/EN locale strings.
 
+---
+
+### Milestone: Official Online Documentation & User Manual (`rapidready.de/docs`)
+- [ ] **Comprehensive Web-Based User Manual & Technical Reference:**
+  - **Context & Goal:** Provide an in-depth, structured online documentation portal on `rapidready.de/docs` matching the clean, responsive desktop utility aesthetic of RapidReady.
+  - **Core Architecture & Scope:**
+    - Two-column layout with collapsible category sidebar, sticky navigation, release verification badges, and instant client-side search.
+    - 8 thematic sections: Getting Started, Interface & Views, Ingest Pipeline, Culling & Triage, Sidecars & RAW Integrations, Virtual Collections, Technical Reference (Difference-of-Gradients & Caching Pipeline), and Platform Troubleshooting.
+    - Standardized high-resolution annotated screenshot assets (1800×1131) covering all key workflows.
+  - **Concept Blueprint:** Detailed specifications, structure, and screenshot catalog defined in [`docs/ONLINE_DOCUMENTATION_CONCEPT.md`](../../docs/ONLINE_DOCUMENTATION_CONCEPT.md).
+
 
 
 

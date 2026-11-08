@@ -19,7 +19,7 @@ interface LibraryInspectorProps {
 export function LibraryInspector({ close }: LibraryInspectorProps) {
   const { t } = useTranslation('library');
   const { 
-    images, activeImageIndex, 
+    images, activeImageIndex, activeDisplayedImage,
     selectedPaths, updateImageMetadata, updateImageCullingByPath, activeFolderPath, selectedFolderPaths,
     lastImportPaths, isViewingLastImport, rootPath 
   } = useLibraryStore();
@@ -111,6 +111,17 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
 
   const activeImage = useMemo(() => {
     if (selectedPaths.size === 0) return undefined;
+    if (activeDisplayedImage) {
+      const normDisplayed = normalizePath(activeDisplayedImage.path);
+      const isSelected = selectedPaths.has(activeDisplayedImage.path) || selectedPaths.has(normDisplayed);
+      const isMemberOfSelected = activeDisplayedImage.stackMembers?.some(m => {
+        const normM = normalizePath(m.path);
+        return selectedPaths.has(m.path) || selectedPaths.has(normM);
+      });
+      if (isSelected || isMemberOfSelected) {
+        return activeDisplayedImage;
+      }
+    }
     const candidate = scopedImages[activeImageIndex];
     if (candidate && selectedPaths.has(candidate.path)) {
       return candidate;
@@ -118,7 +129,7 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
     const found = scopedImages.find(img => selectedPaths.has(img.path));
     if (found) return found;
     return images.find(img => selectedPaths.has(img.path));
-  }, [selectedPaths, scopedImages, activeImageIndex, images]);
+  }, [selectedPaths, activeDisplayedImage, scopedImages, activeImageIndex, images]);
 
   // Lazy-load detailed EXIF metadata when an image is selected
   useEffect(() => {

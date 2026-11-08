@@ -82,6 +82,13 @@ interface LibraryUIStore {
   sortDirection: LibrarySortDirection;
   setSortDirection: (dir: LibrarySortDirection) => void;
   toggleSortDirection: () => void;
+
+  stackRawJpeg: boolean;
+  setStackRawJpeg: (val: boolean) => void;
+  toggleStackRawJpeg: () => void;
+
+  activeStackVariantIndex: number;
+  setActiveStackVariantIndex: (idx: number) => void;
 }
 
 export type LibrarySortBy = 'filename' | 'date' | 'rating' | 'size';
@@ -198,6 +205,14 @@ const getSavedSortDirection = (): LibrarySortDirection => {
     }
   } catch (_) {}
   return 'asc';
+};
+
+const getSavedStackRawJpeg = (): boolean => {
+  try {
+    const val = localStorage.getItem('rapidready_stack_raw_jpeg');
+    if (val !== null) return val !== 'false';
+  } catch (_) {}
+  return true;
 };
 
 export const useLibraryUIStore = create<LibraryUIStore>((set) => ({
@@ -391,4 +406,22 @@ export const useLibraryUIStore = create<LibraryUIStore>((set) => ({
     } catch (_) {}
     return { sortDirection: next };
   }),
+
+  stackRawJpeg: getSavedStackRawJpeg(),
+  setStackRawJpeg: (val) => {
+    try {
+      localStorage.setItem('rapidready_stack_raw_jpeg', val ? 'true' : 'false');
+    } catch (_) {}
+    set({ stackRawJpeg: val });
+  },
+  toggleStackRawJpeg: () => set((state) => {
+    const next = !state.stackRawJpeg;
+    try {
+      localStorage.setItem('rapidready_stack_raw_jpeg', next ? 'true' : 'false');
+    } catch (_) {}
+    return { stackRawJpeg: next };
+  }),
+
+  activeStackVariantIndex: 0,
+  setActiveStackVariantIndex: (idx) => set({ activeStackVariantIndex: Math.max(0, idx) }),
 }));

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, X } from 'lucide-react';
 import { useDialogStore } from '../../stores/dialogStore';
@@ -6,6 +6,15 @@ import { useDialogStore } from '../../stores/dialogStore';
 export const DestructiveConfirmModal: React.FC = () => {
   const { isOpen, options, close } = useDialogStore();
   const cancelBtnRef = useRef<HTMLButtonElement>(null);
+  const [selectedChoice, setSelectedChoice] = useState<string>(
+    options?.defaultChoiceId || options?.choices?.[0]?.id || ''
+  );
+
+  useEffect(() => {
+    if (options?.choices && options.choices.length > 0) {
+      setSelectedChoice(options.defaultChoiceId || options.choices[0].id);
+    }
+  }, [options]);
 
   useEffect(() => {
     if (isOpen) {
@@ -67,12 +76,44 @@ export const DestructiveConfirmModal: React.FC = () => {
           {options.message}
         </div>
 
+        {/* Optional Choices (Radio Pills) */}
+        {options.choices && options.choices.length > 0 && (
+          <div className="flex flex-col gap-2 pt-1">
+            {options.choices.map((choice) => {
+              const isSelected = selectedChoice === choice.id;
+              return (
+                <div
+                  key={choice.id}
+                  onClick={() => setSelectedChoice(choice.id)}
+                  className={`flex items-start gap-3 p-3 rounded-xl border text-xs cursor-pointer transition-all ${
+                    isSelected
+                      ? 'bg-accent/15 border-accent text-white shadow-sm ring-1 ring-accent/30'
+                      : 'bg-white/5 border-white/10 text-txt-secondary hover:bg-white/10 hover:text-white'
+                  }`}
+                >
+                  <div className={`w-4 h-4 rounded-full border flex items-center justify-center mt-0.5 flex-shrink-0 transition-colors ${
+                    isSelected ? 'border-accent bg-accent' : 'border-white/30 bg-transparent'
+                  }`}>
+                    {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-[#18181b]" />}
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-semibold text-txt-primary">{choice.label}</span>
+                    {choice.description && (
+                      <span className="text-[11px] text-txt-tertiary leading-tight">{choice.description}</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         {/* Action Buttons: Cancel is the DEFAULT button */}
         <div className="flex items-center justify-end gap-2.5 pt-2">
           {/* Destructive Action button (Requires deliberate click or Tab navigation) */}
           <button
             type="button"
-            onClick={() => close(true)}
+            onClick={() => close(true, selectedChoice)}
             className="px-4 py-2 rounded-xl text-xs font-semibold text-danger hover:text-white bg-danger/10 hover:bg-danger border border-danger/30 hover:border-danger transition-all cursor-pointer mr-auto"
           >
             {options.confirmLabel || 'Unwiderruflich löschen'}

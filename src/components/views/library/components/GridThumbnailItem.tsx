@@ -1,6 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import { Check, Star, Film } from 'lucide-react';
 import { LibraryImage } from '../../../../stores/libraryStore';
+import { useLibraryUIStore } from '../../../../stores/libraryUIStore';
 import { getRrImageUrl, isRawFilename, isVideoFilename } from '../../../../utils/image';
 import { getColorConfig } from '../../../../constants/culling';
 import { loadedThumbnailCache } from '../utils/thumbnailCache';
@@ -42,6 +43,54 @@ export const GridThumbnailItem = React.memo(function GridThumbnailItem({
 }: GridThumbnailItemProps) {
   const isVideo = img.is_video ?? isVideoFilename(img.name);
   const isRaw = !isVideo && (img.is_raw ?? isRawFilename(img.name));
+  const isStacked = Boolean(img.stackMembers && img.stackMembers.length > 1);
+
+  const gridThumbnailSize = useLibraryUIStore((s) => s.gridThumbnailSize);
+  const effectiveWidth = gridThumbnailSize || 240;
+  // Dynamic maximum width for the pill:
+  // Leaves room for pick/reject indicator (effectiveWidth - 44px)
+  // and keeps the pill proportionally balanced across different tile sizes (up to 75% of tile width)
+  const maxPillWidth = Math.max(90, Math.min(effectiveWidth - 44, Math.round(effectiveWidth * 0.75)));
+
+  let stackBadgeText = '';
+  let stackTooltip = '';
+  if (isStacked && img.stackMembers) {
+    const numJpegs = img.stackMembers.length - 1;
+    const labels = img.stackSubfolderLabels || [];
+    if (numJpegs === 1) {
+      const label = labels[0] || 'JPG';
+      let displayLabel = label;
+      const lastSlashIdx = label.lastIndexOf('/');
+      if (lastSlashIdx !== -1) {
+        const sub = label.slice(0, lastSlashIdx);
+        const ext = label.slice(lastSlashIdx + 1);
+
+        // Approximate char width in text-[9px] font-mono tracking-wide is ~5.8px
+        // Base badge elements: 'RAW + ' (6 chars) + '/' + ext + padding/borders (~10px)
+        const fixedWidth = (6 + 1 + ext.length) * 5.8 + 10;
+        const availableForSub = Math.max(0, maxPillWidth - fixedWidth);
+        const maxSubChars = Math.max(3, Math.floor(availableForSub / 5.8));
+
+        if (sub.length > maxSubChars) {
+          displayLabel = `${sub.slice(0, maxSubChars - 1)}…/${ext}`;
+        } else {
+          displayLabel = label;
+        }
+      }
+      stackBadgeText = `RAW + ${displayLabel}`;
+    } else {
+      stackBadgeText = `RAW +${numJpegs} JPG`;
+    }
+    stackTooltip = img.stackMembers.map((m, idx) => {
+      if (idx === 0) return m.name;
+      const lbl = labels[idx - 1];
+      if (lbl && lbl !== 'JPG') {
+        const prefix = lbl.includes('/JPG') ? lbl.replace('/JPG', '/') : `${lbl}/`;
+        return `${prefix}${m.name}`;
+      }
+      return m.name;
+    }).join(' + ');
+  }
   const scale = 1;
   const cacheKey = `${img.path}:${img.culling?.orientation || 1}:${scale}`;
   const isCached = loadedThumbnailCache.has(cacheKey);
@@ -122,19 +171,27 @@ export const GridThumbnailItem = React.memo(function GridThumbnailItem({
       >
         <div className="w-6 h-6 rounded-md bg-white/[0.03]" />
       </div>
-      {/* Format Badge: Video vs RAW vs JPG */}
-      <div className="absolute top-1.5 left-1.5 z-20 pointer-events-none">
+      {/* Format Badge: Video vs Stack vs RAW vs JPG */}
+      <div className="absolute top-1.5 left-1.5 z-20 max-w-[calc(100%-2.25rem)]">
         {isVideo ? (
-          <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold tracking-wide bg-black/80 text-accent border border-accent/40 shadow-sm backdrop-blur-xs flex items-center gap-1">
+          <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold tracking-wide bg-black/80 text-accent border border-accent/40 shadow-sm backdrop-blur-xs flex items-center gap-1 pointer-events-none">
             <Film className="w-2.5 h-2.5 text-accent" />
             {img.name.split('.').pop()?.toUpperCase() || 'VID'}
           </span>
+        ) : isStacked ? (
+          <span 
+            title={stackTooltip}
+            style={isStacked ? { maxWidth: `${maxPillWidth}px` } : undefined}
+            className="px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold tracking-wide bg-black/85 text-white border border-accent/50 shadow-sm backdrop-blur-xs pointer-events-auto cursor-help inline-block max-w-full truncate whitespace-nowrap align-bottom"
+          >
+            {stackBadgeText}
+          </span>
         ) : isRaw ? (
-          <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold tracking-wide bg-black/80 text-white/95 border border-white/20 shadow-sm backdrop-blur-xs">
+          <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold tracking-wide bg-black/80 text-white/95 border border-white/20 shadow-sm backdrop-blur-xs pointer-events-none">
             RAW
           </span>
         ) : (
-          <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold tracking-wide bg-black/80 text-white/95 border border-white/20 shadow-sm backdrop-blur-xs">
+          <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold tracking-wide bg-black/80 text-white/95 border border-white/20 shadow-sm backdrop-blur-xs pointer-events-none">
             {img.name.split('.').pop()?.toUpperCase() || 'JPG'}
           </span>
         )}

@@ -5,7 +5,7 @@ import { ContextMenu } from "./ContextMenu";
 import { ArchiveConnectingOverlay } from "./components/ArchiveConnectingOverlay";
 import { ArchiveScanBanner } from "./components/ArchiveScanBanner";
 import { invoke } from "@tauri-apps/api/core";
-import { normalizePath, normalizeSlash } from "../../../utils/image";
+import { normalizePath, normalizeSlash, isRawFilename, isVideoFilename } from "../../../utils/image";
 import { getTopLevelSelectedPaths } from "./LibraryLeftSidebar";
 
 import { CullingToolbar } from "./components/CullingToolbar";
@@ -23,6 +23,26 @@ import { openInConfiguredRawDeveloper } from "../../../stores/settingsStore";
 import { FolderHeart, Download, ArrowDownAZ, X } from "lucide-react";
 
 const numericCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+
+const DERIVATIVE_SUFFIX_REGEX = /(?:[-_](?:edit|bearbeitet|lr|dxo|c1|pano|hdr|v\d+|\d{1,2}))$/i;
+
+function getBaseStem(filename: string): string {
+  const lastDot = filename.lastIndexOf('.');
+  return lastDot > 0 ? filename.substring(0, lastDot) : filename;
+}
+
+function getCleanDerivativeStem(stem: string): string {
+  return stem.replace(DERIVATIVE_SUFFIX_REGEX, '');
+}
+
+function getDirAndParent(normPath: string): { dir: string; parentDir: string; folderName: string } {
+  const lastSlash = normPath.lastIndexOf('/');
+  const dir = lastSlash > 0 ? normPath.substring(0, lastSlash) : '';
+  const secondLastSlash = dir.lastIndexOf('/');
+  const parentDir = secondLastSlash > 0 ? dir.substring(0, secondLastSlash) : '';
+  const folderName = secondLastSlash >= 0 ? dir.substring(secondLastSlash + 1) : dir;
+  return { dir, parentDir, folderName };
+}
 
 interface LibraryCenterProps {
   viewMode?: 'grid' | 'loupe' | 'fullscreen';
@@ -45,6 +65,7 @@ export function LibraryCenter({
   const setGridScrollTop = useLibraryUIStore((s) => s.setGridScrollTop);
   const sortBy = useLibraryUIStore((s) => s.sortBy);
   const sortDirection = useLibraryUIStore((s) => s.sortDirection);
+  const stackRawJpeg = useLibraryUIStore((s) => s.stackRawJpeg);
 
   const viewMode = propViewMode || storeViewMode;
   const setViewMode = propSetViewMode || storeSetViewMode;
@@ -224,8 +245,168 @@ export function LibraryCenter({
     return result;
   }, [sortedScopedPaths, imageByPathMap]);
 
+  const stackedScopedImages = React.useMemo(() => {
+    if (!stackRawJpeg || activeCollectionId || scopedImages.length === 0) {
+      return scopedImages;
+    }
+
+    interface RawStackEntry {
+      rawImg: LibraryImage;
+      depth0Jpegs: LibraryImage[];
+      depth1Jpegs: { img: LibraryImage; folderName: string }[];
+    }
+
+    // Pass 1: Index all RAW files in current scopedImages
+    const rawByDirAndStem = new Map<string, RawStackEntry>();
+    const allRawEntries: RawStackEntry[] = [];
+
+    for (const img of scopedImages) {
+      const isVideo = img.is_video ?? isVideoFilename(img.name);
+      if (isVideo) continue;
+      const isRaw = img.is_raw ?? isRawFilename(img.name);
+      if (isRaw) {
+        const norm = normalizePath(img.path);
+        const { dir } = getDirAndParent(norm);
+        const stemLower = getBaseStem(img.name).toLowerCase();
+        const entry: RawStackEntry = {
+          rawImg: img,
+          depth0Jpegs: [],
+          depth1Jpegs: [],
+        };
+        rawByDirAndStem.set(`${dir}/${stemLower}`, entry);
+        allRawEntries.push(entry);
+      }
+    }
+
+    if (rawByDirAndStem.size === 0) {
+      return scopedImages;
+    }
+
+    // Pass 2: Pair JPEGs/derivatives in current scope to RAWs in current scope
+    const matchedJpegPaths = new Set<string>();
+
+    for (const img of scopedImages) {
+      const isVideo = img.is_video ?? isVideoFilename(img.name);
+      if (isVideo) continue;
+      const isRaw = img.is_raw ?? isRawFilename(img.name);
+      if (isRaw) continue;
+
+      const norm = normalizePath(img.path);
+      const { dir, parentDir, folderName } = getDirAndParent(norm);
+      const stemLower = getBaseStem(img.name).toLowerCase();
+      const cleanStemLower = getCleanDerivativeStem(stemLower).toLowerCase();
+
+      // a) Depth 0 (same folder)
+      let target = rawByDirAndStem.get(`${dir}/${stemLower}`);
+      if (!target && cleanStemLower !== stemLower) {
+        target = rawByDirAndStem.get(`${dir}/${cleanStemLower}`);
+      }
+
+      if (target) {
+        target.depth0Jpegs.push(img);
+        matchedJpegPaths.add(norm);
+        continue;
+      }
+
+      // b) Depth +1 (direct subfolder)
+      if (parentDir) {
+        target = rawByDirAndStem.get(`${parentDir}/${stemLower}`);
+        if (!target && cleanStemLower !== stemLower) {
+          target = rawByDirAndStem.get(`${parentDir}/${cleanStemLower}`);
+        }
+
+        if (target) {
+          target.depth1Jpegs.push({ img, folderName });
+          matchedJpegPaths.add(norm);
+        }
+      }
+    }
+
+    if (matchedJpegPaths.size === 0) {
+      return scopedImages;
+    }
+
+    const stackedRawByPath = new Map<string, LibraryImage>();
+
+    for (const entry of allRawEntries) {
+      if (entry.depth0Jpegs.length === 0 && entry.depth1Jpegs.length === 0) {
+        continue;
+      }
+
+      entry.depth0Jpegs.sort((a, b) => numericCollator.compare(a.name, b.name));
+      entry.depth1Jpegs.sort((a, b) => {
+        const fCmp = numericCollator.compare(a.folderName, b.folderName);
+        if (fCmp !== 0) return fCmp;
+        return numericCollator.compare(a.img.name, b.img.name);
+      });
+
+      const matchedJpegs = [
+        ...entry.depth0Jpegs,
+        ...entry.depth1Jpegs.map(d => d.img),
+      ];
+
+      const stackMembers: LibraryImage[] = [entry.rawImg, ...matchedJpegs];
+
+      const stackSubfolderLabels: string[] = [
+        ...entry.depth0Jpegs.map(() => 'JPG'),
+        ...entry.depth1Jpegs.map(d => `${d.folderName.toUpperCase()}/JPG`),
+      ];
+
+      const rawCulling = entry.rawImg.culling;
+      let maxRating = rawCulling.rating || 0;
+      let mergedFlag = rawCulling.flag;
+      let mergedColor = rawCulling.color;
+      const mergedTagsSet = new Set(rawCulling.tags || []);
+
+      for (const jpeg of matchedJpegs) {
+        const jCull = jpeg.culling;
+        if ((jCull.rating || 0) > maxRating) {
+          maxRating = jCull.rating;
+        }
+        if ((mergedFlag === null || mergedFlag === 0) && jCull.flag !== null && jCull.flag !== 0) {
+          mergedFlag = jCull.flag;
+        }
+        if (!mergedColor && jCull.color) {
+          mergedColor = jCull.color;
+        }
+        if (jCull.tags) {
+          for (const t of jCull.tags) mergedTagsSet.add(t);
+        }
+      }
+
+      const mergedCulling: CullingState = {
+        ...rawCulling,
+        rating: maxRating,
+        flag: mergedFlag,
+        color: mergedColor,
+        tags: Array.from(mergedTagsSet),
+      };
+
+      const stackedImg: LibraryImage = {
+        ...entry.rawImg,
+        culling: mergedCulling,
+        stackMembers,
+        stackSubfolderLabels,
+      };
+
+      stackedRawByPath.set(normalizePath(entry.rawImg.path), stackedImg);
+    }
+
+    const result: LibraryImage[] = [];
+    for (const img of scopedImages) {
+      const norm = normalizePath(img.path);
+      if (matchedJpegPaths.has(norm)) {
+        continue;
+      }
+      const stacked = stackedRawByPath.get(norm);
+      result.push(stacked || img);
+    }
+
+    return result;
+  }, [scopedImages, stackRawJpeg, activeCollectionId]);
+
   const displayedImages = React.useMemo(() => {
-    return scopedImages.filter(img => {
+    return stackedScopedImages.filter(img => {
       if (selectedTagFilter && !img.culling.tags.includes(selectedTagFilter)) {
         return false;
       }
@@ -243,7 +424,7 @@ export function LibraryCenter({
       }
       return true; // 'all'
     });
-  }, [scopedImages, selectedTagFilter, selectedColorFilter, selectedRatingFilter, filterMode]);
+  }, [stackedScopedImages, selectedTagFilter, selectedColorFilter, selectedRatingFilter, filterMode]);
 
   const lastCountsRef = useRef<{ tags: { name: string; count: number }[]; colors: Map<string, number>; ratings: number[] }>({
     tags: [],
@@ -426,11 +607,41 @@ export function LibraryCenter({
     }
   }, [displayedImages, activeImageIndex, safeActiveIndex, setActiveImageIndex, setSelectedPaths, viewMode, setViewMode, selectedPaths]);
 
+  // In Grid or Fullscreen mode, keep activeDisplayedImage synced to activeImage
+  useEffect(() => {
+    if (viewMode !== 'loupe') {
+      useLibraryStore.getState().setActiveDisplayedImage(activeImage ?? null);
+    }
+  }, [viewMode, activeImage]);
+
+  const expandWithStackMembers = useCallback((paths: string[]): string[] => {
+    if (!stackRawJpeg) return paths;
+    const result = new Set<string>();
+    const displayedMap = new Map<string, LibraryImage[]>();
+    for (const img of displayedImages) {
+      if (img.stackMembers && img.stackMembers.length > 0) {
+        displayedMap.set(normalizePath(img.path), img.stackMembers);
+      }
+    }
+    for (const p of paths) {
+      result.add(p);
+      const members = displayedMap.get(normalizePath(p));
+      if (members) {
+        for (const m of members) {
+          result.add(m.path);
+        }
+      }
+    }
+    return Array.from(result);
+  }, [stackRawJpeg, displayedImages]);
+
   const handleRotate = useCallback(async (direction: 'cw' | 'ccw') => {
     if (!activeImage) return;
-    const targetPaths = selectedPaths.has(activeImage.path) && selectedPaths.size > 1
+    const initialPaths = selectedPaths.has(activeImage.path) && selectedPaths.size > 1
       ? Array.from(selectedPaths)
       : [activeImage.path];
+
+    const targetPaths = expandWithStackMembers(initialPaths);
 
     try {
       const res = await invoke<Array<{ path: string; culling: CullingState }>>('rotate_images', {
@@ -447,14 +658,16 @@ export function LibraryCenter({
         t('errors.cullingSaveFailed', { defaultValue: 'Fehler beim Speichern' })
       );
     }
-  }, [activeImage, selectedPaths, updateImageCullings, t]);
+  }, [activeImage, selectedPaths, updateImageCullings, expandWithStackMembers, t]);
 
   const handleCulling = useCallback((flag: number | null, rating: number) => {
     if (!activeImage) return;
     
-    const targetPaths = selectedPaths.has(activeImage.path) && selectedPaths.size > 1
+    const initialPaths = selectedPaths.has(activeImage.path) && selectedPaths.size > 1
       ? Array.from(selectedPaths)
       : [activeImage.path];
+
+    const targetPaths = expandWithStackMembers(initialPaths);
 
     if (targetPaths.length > 1) {
       updateBatchCullingState(targetPaths, { flag, rating });
@@ -494,24 +707,26 @@ export function LibraryCenter({
           t('errors.cullingSaveFailed', { defaultValue: 'Fehler beim Speichern' })
         );
       });
+    }
 
-      // Auto-advance only for single selection
-      if (autoAdvance && flag !== null && activeImageIndex < displayedImages.length - 1) {
-        const nextIdx = activeImageIndex + 1;
-        setActiveImageIndex(nextIdx);
-        if (displayedImages[nextIdx]) {
-          setSelectedPaths(new Set([displayedImages[nextIdx].path]));
-        }
+    // Auto-advance only for single selection (even when expanded to stack members)
+    if (autoAdvance && flag !== null && initialPaths.length === 1 && activeImageIndex < displayedImages.length - 1) {
+      const nextIdx = activeImageIndex + 1;
+      setActiveImageIndex(nextIdx);
+      if (displayedImages[nextIdx]) {
+        setSelectedPaths(new Set([displayedImages[nextIdx].path]));
       }
     }
-  }, [activeImage, selectedPaths, images, autoAdvance, activeImageIndex, displayedImages, updateBatchCullingState, updateCullingState, setActiveImageIndex, setSelectedPaths, t]);
+  }, [activeImage, selectedPaths, images, autoAdvance, activeImageIndex, displayedImages, updateBatchCullingState, updateCullingState, setActiveImageIndex, setSelectedPaths, expandWithStackMembers, t]);
 
   const handleSetColor = useCallback((newColor: string | null) => {
     if (!activeImage) return;
 
-    const targetPaths = selectedPaths.has(activeImage.path) && selectedPaths.size > 1
+    const initialPaths = selectedPaths.has(activeImage.path) && selectedPaths.size > 1
       ? Array.from(selectedPaths)
       : [activeImage.path];
+
+    const targetPaths = expandWithStackMembers(initialPaths);
 
     if (targetPaths.length > 1) {
       updateBatchCullingState(targetPaths, { color: newColor });
@@ -550,11 +765,35 @@ export function LibraryCenter({
         );
       });
     }
-  }, [activeImage, selectedPaths, images, updateBatchCullingState, updateCullingState, t]);
+  }, [activeImage, selectedPaths, images, updateBatchCullingState, updateCullingState, expandWithStackMembers, t]);
 
   const rejectedImages = React.useMemo(() => {
-    return scopedImages.filter(i => i.culling.flag === -1);
-  }, [scopedImages]);
+    if (!stackRawJpeg) {
+      return scopedImages.filter(i => i.culling.flag === -1);
+    }
+    const result: LibraryImage[] = [];
+    const seen = new Set<string>();
+    for (const img of displayedImages) {
+      if (img.culling.flag === -1) {
+        if (img.stackMembers && img.stackMembers.length > 0) {
+          for (const m of img.stackMembers) {
+            const norm = normalizePath(m.path);
+            if (!seen.has(norm)) {
+              seen.add(norm);
+              result.push(m);
+            }
+          }
+        } else {
+          const norm = normalizePath(img.path);
+          if (!seen.has(norm)) {
+            seen.add(norm);
+            result.push(img);
+          }
+        }
+      }
+    }
+    return result;
+  }, [scopedImages, displayedImages, stackRawJpeg]);
   const rejectedCount = rejectedImages.length;
   const stagedDeleteFolderPaths = useLibraryStore((s) => s.stagedDeleteFolderPaths);
   const totalRejectedCount = rejectedCount + stagedDeleteFolderPaths.size;
@@ -632,143 +871,213 @@ export function LibraryCenter({
           });
     }
 
-    const confirmed = await useDialogStore.getState().confirmDestructive({
+    let stackedRawFiles: LibraryImage[] = [];
+    let stackedJpegFiles: LibraryImage[] = [];
+    let standaloneRejectedFiles: LibraryImage[] = [];
+
+    if (stackRawJpeg) {
+      const stackedRawPaths = new Set<string>();
+      const stackedJpegPaths = new Set<string>();
+
+      for (const img of displayedImages) {
+        if (img.culling.flag === -1 && img.stackMembers && img.stackMembers.length > 1) {
+          const rawMember = img.stackMembers[0];
+          const jpegMembers = img.stackMembers.slice(1);
+          if (rawMember) {
+            stackedRawPaths.add(normalizePath(rawMember.path));
+            stackedRawFiles.push(rawMember);
+          }
+          for (const j of jpegMembers) {
+            stackedJpegPaths.add(normalizePath(j.path));
+            stackedJpegFiles.push(j);
+          }
+        }
+      }
+
+      standaloneRejectedFiles = rejectedImages.filter(img => {
+        const norm = normalizePath(img.path);
+        return !stackedRawPaths.has(norm) && !stackedJpegPaths.has(norm);
+      });
+    }
+
+    const hasStackedPairs = stackedRawFiles.length > 0 && stackedJpegFiles.length > 0;
+    const totalCount = rejectedImages.length;
+    const onlyRawCount = stackedRawFiles.length + standaloneRejectedFiles.filter(f => f.is_raw ?? isRawFilename(f.name)).length;
+    const onlyJpegCount = stackedJpegFiles.length + standaloneRejectedFiles.filter(f => !(f.is_raw ?? isRawFilename(f.name))).length;
+
+    const choices = hasStackedPairs ? [
+      {
+        id: 'all',
+        label: t('delete.choiceAll', { count: totalCount, defaultValue: `Alle Dateien im Stapel löschen (${totalCount})` }),
+        description: t('delete.choiceAllDesc', { defaultValue: 'Löscht RAW- und zugehörige JPEG-Dateien.' }),
+      },
+      {
+        id: 'only_raw',
+        label: t('delete.choiceOnlyRaw', { count: onlyRawCount, defaultValue: `Nur RAW-Dateien der Stapel löschen (${onlyRawCount})` }),
+        description: t('delete.choiceOnlyRawDesc', { defaultValue: 'Behält die JPEGs und hebt deren Verworfen-Status auf.' }),
+      },
+      {
+        id: 'only_jpeg',
+        label: t('delete.choiceOnlyJpeg', { count: onlyJpegCount, defaultValue: `Nur JPEG-Dateien der Stapel löschen (${onlyJpegCount})` }),
+        description: t('delete.choiceOnlyJpegDesc', { defaultValue: 'Behält die RAW-Dateien und hebt deren Verworfen-Status auf.' }),
+      },
+    ] : undefined;
+
+    const choice = await useDialogStore.getState().confirmWithChoice({
       title: confirmTitle,
       message: confirmMessage,
       confirmLabel: isNetwork
         ? t('delete.nasOkLabel', { defaultValue: 'Unwiderruflich löschen' })
         : t('delete.okLabel', { defaultValue: 'In den Papierkorb' }),
-      cancelLabel: t('delete.cancelLabel', { defaultValue: 'Abbrechen' })
+      cancelLabel: t('delete.cancelLabel', { defaultValue: 'Abbrechen' }),
+      choices,
+      defaultChoiceId: 'all',
     });
 
-    if (confirmed) {
-      try {
-        const normStagedTargets = topStagedFolders.map(p => normalizeSlash(p).toLowerCase());
-        const isUnderAnyStaged = (p: string) => {
-          const norm = normalizeSlash(p).toLowerCase();
-          return normStagedTargets.some(t => norm.startsWith(t + '/') || norm === t);
-        };
+    if (!choice) return;
 
-        // Determine successor in displayedImages before deleting
-        const toDeleteNormSet = new Set(rejectedImages.map(i => normalizePath(i.path)));
-        const isDeletingPath = (p: string) => {
-          const norm = normalizePath(p);
-          return toDeleteNormSet.has(norm) || isUnderAnyStaged(p);
-        };
+    let imagesToDelete = rejectedImages;
+    let imagesToUnreject: LibraryImage[] = [];
 
-        let nextCandidatePath: string | null = null;
-        for (let i = activeImageIndex; i < displayedImages.length; i++) {
+    if (choice === 'only_raw') {
+      imagesToDelete = [...stackedRawFiles, ...standaloneRejectedFiles.filter(f => f.is_raw ?? isRawFilename(f.name))];
+      imagesToUnreject = stackedJpegFiles;
+    } else if (choice === 'only_jpeg') {
+      imagesToDelete = [...stackedJpegFiles, ...standaloneRejectedFiles.filter(f => !(f.is_raw ?? isRawFilename(f.name)))];
+      imagesToUnreject = stackedRawFiles;
+    }
+
+    if (imagesToUnreject.length > 0) {
+      const unrejectPaths = imagesToUnreject.map(i => i.path);
+      updateBatchCullingState(unrejectPaths, { flag: null });
+      invoke('set_culling_state_batch', {
+        paths: unrejectPaths,
+        flag: 0,
+        rating: null,
+        color: null,
+      }).catch((err) => console.error('Failed to unreject kept stack members:', err));
+    }
+
+    try {
+      const normStagedTargets = topStagedFolders.map(p => normalizeSlash(p).toLowerCase());
+      const isUnderAnyStaged = (p: string) => {
+        const norm = normalizeSlash(p).toLowerCase();
+        return normStagedTargets.some(t => norm.startsWith(t + '/') || norm === t);
+      };
+
+      // Determine successor in displayedImages before deleting
+      const toDeleteNormSet = new Set(imagesToDelete.map(i => normalizePath(i.path)));
+      const isDeletingPath = (p: string) => {
+        const norm = normalizePath(p);
+        return toDeleteNormSet.has(norm) || isUnderAnyStaged(p);
+      };
+
+      let nextCandidatePath: string | null = null;
+      for (let i = activeImageIndex; i < displayedImages.length; i++) {
+        if (!isDeletingPath(displayedImages[i].path)) {
+          nextCandidatePath = displayedImages[i].path;
+          break;
+        }
+      }
+      if (!nextCandidatePath) {
+        for (let i = activeImageIndex - 1; i >= 0; i--) {
           if (!isDeletingPath(displayedImages[i].path)) {
             nextCandidatePath = displayedImages[i].path;
             break;
           }
         }
-        if (!nextCandidatePath) {
-          for (let i = activeImageIndex - 1; i >= 0; i--) {
-            if (!isDeletingPath(displayedImages[i].path)) {
-              nextCandidatePath = displayedImages[i].path;
-              break;
-            }
-          }
-        }
-
-        // 1. Delete staged folders if any
-        if (topStagedFolders.length > 0) {
-          await invoke('delete_folders', {
-            paths: topStagedFolders,
-            toTrash: !isNetwork,
-            archiveRoot: rootPath || null,
-          });
-          for (const fp of topStagedFolders) {
-            useLibraryStore.getState().removeFolder(fp);
-          }
-          useLibraryStore.getState().clearStagedDeleteFolders();
-
-          const currentImages = useLibraryStore.getState().images;
-          const stagedFolderImages = currentImages.filter(i => isUnderAnyStaged(i.path)).map(i => i.path);
-          if (stagedFolderImages.length > 0) {
-            useLibraryStore.getState().removeImages(stagedFolderImages);
-            useCollectionsStore.getState().pruneDeletedPaths(stagedFolderImages);
-          }
-        }
-
-        // 2. Delete remaining rejected images outside deleted folders
-        const remainingRejectedImages = rejectedImages.filter(img => !isUnderAnyStaged(img.path));
-        let deletedPhotosCount = 0;
-
-        if (remainingRejectedImages.length > 0) {
-          const result = await invoke<{ deleted: string[]; failed: [string, string][] }>('delete_files', {
-            paths: remainingRejectedImages.map(i => i.path),
-            toTrash: !isNetwork,
-            archiveRoot: rootPath || null,
-          });
-
-          deletedPhotosCount = result.deleted.length;
-          useLibraryStore.getState().removeImages(result.deleted);
-          useCollectionsStore.getState().pruneDeletedPaths(result.deleted);
-
-          if (result.failed.length > 0) {
-            const firstErr = result.failed[0][1];
-            useToastStore.getState().showWarning(
-              t('delete.partialFailed', {
-                failed: result.failed.length,
-                total: remainingRejectedImages.length,
-                defaultValue: `${result.failed.length} von ${remainingRejectedImages.length} Datei(en) konnten nicht gelöscht werden: ${firstErr}`
-              })
-            );
-          }
-        }
-
-        // Update selection to successor, or fallback to grid if no images remain
-        const remainingImagesCount = displayedImages.filter(img => !toDeleteNormSet.has(normalizePath(img.path)) && !isUnderAnyStaged(img.path)).length;
-        if (remainingImagesCount === 0) {
-          setViewMode('grid');
-          setSelectedPaths(new Set());
-          setActiveImageIndex(0);
-        } else if (nextCandidatePath) {
-          setSelectedPaths(new Set([nextCandidatePath]));
-        } else if (viewMode !== 'grid') {
-          setViewMode('grid');
-          setSelectedPaths(new Set());
-          setActiveImageIndex(0);
-        }
-
-        // 3. Feedback Toast
-        if (stagedCount > 0 && deletedPhotosCount > 0) {
-          useToastStore.getState().showSuccess(
-            isNetwork
-              ? t('delete.mixedNasSuccessToast', {
-                  folderCount: stagedCount,
-                  photoCount: deletedPhotosCount,
-                  defaultValue: `${stagedCount} Ordner und ${deletedPhotosCount} Bild(er) dauerhaft vom Netzwerklaufwerk gelöscht.`
-                })
-              : t('delete.mixedLocalSuccessToast', {
-                  folderCount: stagedCount,
-                  photoCount: deletedPhotosCount,
-                  defaultValue: `${stagedCount} Ordner und ${deletedPhotosCount} Bild(er) in den Papierkorb verschoben.`
-                })
-          );
-        } else if (stagedCount > 0) {
-          useToastStore.getState().showSuccess(
-            isNetwork
-              ? t('folderDelete.multiNasSuccess', { count: stagedCount, defaultValue: `${stagedCount} Ordner dauerhaft vom Netzwerklaufwerk gelöscht.` })
-              : t('folderDelete.multiLocalSuccess', { count: stagedCount, defaultValue: `${stagedCount} Ordner in den Papierkorb verschoben.` })
-          );
-        } else if (deletedPhotosCount > 0) {
-          useToastStore.getState().showSuccess(
-            isNetwork
-              ? t('delete.nasSuccessToast', { count: deletedPhotosCount, defaultValue: `${deletedPhotosCount} Bild(er) dauerhaft vom Netzwerklaufwerk gelöscht.` })
-              : t('delete.localSuccessToast', { count: deletedPhotosCount, defaultValue: `${deletedPhotosCount} Bild(er) in den Papierkorb verschoben.` })
-          );
-        }
-      } catch (err: any) {
-        console.error('Failed to delete rejected files/folders:', err);
-        useToastStore.getState().showError(
-          t('delete.failedError', { defaultValue: 'Löschen fehlgeschlagen: ' }) + (err?.message || err)
-        );
       }
+
+      // 1. Delete staged folders if any
+      if (topStagedFolders.length > 0) {
+        await invoke('delete_folders', {
+          paths: topStagedFolders,
+          toTrash: !isNetwork,
+          archiveRoot: rootPath || null,
+        });
+        for (const fp of topStagedFolders) {
+          useLibraryStore.getState().removeFolder(fp);
+        }
+        useLibraryStore.getState().clearStagedDeleteFolders();
+
+        const currentImages = useLibraryStore.getState().images;
+        const stagedFolderImages = currentImages.filter(i => isUnderAnyStaged(i.path)).map(i => i.path);
+        if (stagedFolderImages.length > 0) {
+          useLibraryStore.getState().removeImages(stagedFolderImages);
+          useCollectionsStore.getState().pruneDeletedPaths(stagedFolderImages);
+        }
+      }
+
+      // 2. Delete remaining rejected images outside deleted folders
+      const remainingRejectedImages = imagesToDelete.filter(img => !isUnderAnyStaged(img.path));
+      let deletedPhotosCount = 0;
+
+      if (remainingRejectedImages.length > 0) {
+        const result = await invoke<{ deleted: string[]; failed: [string, string][] }>('delete_files', {
+          paths: remainingRejectedImages.map(i => i.path),
+          toTrash: !isNetwork,
+          archiveRoot: rootPath || null,
+        });
+
+        deletedPhotosCount = result.deleted.length;
+        useLibraryStore.getState().removeImages(result.deleted);
+        useCollectionsStore.getState().pruneDeletedPaths(result.deleted);
+
+        if (result.failed.length > 0) {
+          const firstErr = result.failed[0][1];
+          useToastStore.getState().showWarning(
+            t('delete.partialFailed', {
+              failed: result.failed.length,
+              total: remainingRejectedImages.length,
+              defaultValue: `${result.failed.length} von ${remainingRejectedImages.length} Datei(en) konnten nicht gelöscht werden: ${firstErr}`
+            })
+          );
+        }
+      }
+
+      // Update selection to successor, or fallback to grid if no images remain
+      const remainingImagesCount = displayedImages.filter(img => !toDeleteNormSet.has(normalizePath(img.path)) && !isUnderAnyStaged(img.path)).length;
+      if (remainingImagesCount === 0) {
+        setViewMode('grid');
+        setSelectedPaths(new Set());
+        setActiveImageIndex(0);
+      } else if (nextCandidatePath) {
+        setSelectedPaths(new Set([nextCandidatePath]));
+      } else if (viewMode !== 'grid') {
+        setViewMode('grid');
+        setSelectedPaths(new Set());
+        setActiveImageIndex(0);
+      }
+
+      if (deletedPhotosCount > 0 || stagedCount > 0) {
+        if (stagedCount > 0 && deletedPhotosCount > 0) {
+          const toastMsg = isNetwork
+            ? t('delete.mixedNasSuccessToast', { folderCount: stagedCount, photoCount: deletedPhotosCount, defaultValue: `${stagedCount} Ordner und ${deletedPhotosCount} Bild(er) dauerhaft vom Netzwerklaufwerk gelöscht.` })
+            : t('delete.mixedLocalSuccessToast', { folderCount: stagedCount, photoCount: deletedPhotosCount, defaultValue: `${stagedCount} Ordner und ${deletedPhotosCount} Bild(er) in den Papierkorb verschoben.` });
+          useToastStore.getState().showSuccess(toastMsg);
+        } else if (stagedCount > 0) {
+          const toastMsg = isNetwork
+            ? t('folderDelete.nasSuccessToast', { count: stagedCount, defaultValue: `${stagedCount} Ordner dauerhaft vom Netzwerklaufwerk gelöscht.` })
+            : t('folderDelete.localSuccessToast', { count: stagedCount, defaultValue: `${stagedCount} Ordner in den Papierkorb verschoben.` });
+          useToastStore.getState().showSuccess(toastMsg);
+        } else {
+          const toastMsg = isNetwork
+            ? t('delete.nasSuccessToast', { count: deletedPhotosCount, defaultValue: `${deletedPhotosCount} Bild(er) dauerhaft vom Netzwerklaufwerk gelöscht.` })
+            : t('delete.localSuccessToast', { count: deletedPhotosCount, defaultValue: `${deletedPhotosCount} Bild(er) in den Papierkorb verschoben.` });
+          useToastStore.getState().showSuccess(toastMsg);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to delete rejected images:', err);
+      useToastStore.getState().showError(
+        t('delete.failedError', { defaultValue: 'Löschen fehlgeschlagen: ' }) + String(err)
+      );
     }
-  }, [rejectedCount, rejectedImages, stagedDeleteFolderPaths, images, rootPath, t]);
+  }, [
+    rejectedCount, stagedDeleteFolderPaths, rootPath, rejectedImages, t,
+    displayedImages, stackRawJpeg, activeImageIndex, viewMode, setViewMode,
+    setSelectedPaths, setActiveImageIndex, updateBatchCullingState
+  ]);
 
   const handleItemClick = useCallback((e: React.MouseEvent, clickedIndex: number, img: LibraryImage) => {
     const isMetaOrCtrl = e.metaKey || e.ctrlKey;

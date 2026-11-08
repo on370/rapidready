@@ -5,7 +5,8 @@ import {
   SquareArrowOutUpRight, CircleSlash, Tag, ChevronDown, X, ScanEye,
   Maximize2,
   GalleryThumbnails,
-  ArrowDownAZ, Calendar, HardDrive, ArrowUpNarrowWide, ArrowDownWideNarrow
+  ArrowDownAZ, Calendar, HardDrive, ArrowUpNarrowWide, ArrowDownWideNarrow,
+  Layers
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
@@ -87,6 +88,8 @@ export const CullingToolbar = React.memo(function CullingToolbar({
     sortDirection,
     setSortDirection,
     toggleSortDirection,
+    stackRawJpeg,
+    toggleStackRawJpeg,
   } = useLibraryUIStore();
 
   const activeCollectionId = useCollectionsStore((s) => s.activeCollectionId);
@@ -717,6 +720,20 @@ export const CullingToolbar = React.memo(function CullingToolbar({
         {/* Sort Controls (hidden in collections) */}
         {!activeCollectionId && (
           <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
+            {/* RAW+JPG Stacking Toggle */}
+            <button
+              onClick={toggleStackRawJpeg}
+              className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer border ${
+                stackRawJpeg
+                  ? 'bg-accent/15 text-accent border-accent/30'
+                  : 'text-txt-tertiary hover:bg-app-hover hover:text-txt-secondary border-transparent'
+              }`}
+              title={t('stack.toggleTooltip', 'RAW + JPEG zu einem Stapel zusammenfassen (Alt+S)')}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>{t('stack.toggle', 'RAW+JPG')}</span>
+            </button>
+
             {/* Sort Dropdown */}
             <div ref={sortMenuRef} className="relative">
               <button

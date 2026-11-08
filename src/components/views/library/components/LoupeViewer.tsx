@@ -35,6 +35,8 @@ export const LoupeViewer = React.memo(function LoupeViewer({
   const setShowFilmstrip = useLibraryUIStore((s) => s.setShowFilmstrip);
   const loupeScale = useLibraryUIStore((s) => s.loupeScale);
   const scanState = useLibraryStore((s) => s.scanState);
+  const activeStackVariantIndex = useLibraryUIStore((s) => s.activeStackVariantIndex);
+  const setActiveStackVariantIndex = useLibraryUIStore((s) => s.setActiveStackVariantIndex);
   const isZoomed = loupeScale > 0;
 
   const [leftCount, setLeftCount] = useState<number>(0);
@@ -81,6 +83,11 @@ export const LoupeViewer = React.memo(function LoupeViewer({
     setLeftCount(0);
     setRightCount(0);
   }, [activeImageIndex]);
+
+  // Reset active stack variant index to 0 when active image changes
+  useEffect(() => {
+    setActiveStackVariantIndex(0);
+  }, [activeImageIndex, activeImage?.path, setActiveStackVariantIndex]);
 
   // Debounce preloading and viewport image (100ms) so rapid key repeat skips intermediate frames,
   // while human culling rhythm (~300-800ms) displays immediately and preloads into RAM cache
@@ -170,12 +177,43 @@ export const LoupeViewer = React.memo(function LoupeViewer({
     : 0;
   const safeLoupeIndex = displayedImages.length === 0 ? 0 : Math.min(Math.max(activeImageIndex, 0), displayedImages.length - 1);
   const loupeActiveImage = displayedImages[safeDebouncedIndex] || activeImage || displayedImages[0];
-  const isLoupeVideo = loupeActiveImage ? (loupeActiveImage.is_video ?? isVideoFilename(loupeActiveImage.name)) : false;
 
-  // Lazy-load metadata for debounced active image if needed
+  const stackMembers = loupeActiveImage?.stackMembers;
+  const safeVariantIdx = stackMembers && stackMembers.length > 1 ? Math.min(activeStackVariantIndex, stackMembers.length - 1) : 0;
+  const displayedVariant = (stackMembers && stackMembers.length > 1) ? stackMembers[safeVariantIdx] : loupeActiveImage;
+
+  const isLoupeVideo = displayedVariant ? (displayedVariant.is_video ?? isVideoFilename(displayedVariant.name)) : false;
+  const isVideo = displayedVariant ? (displayedVariant.is_video ?? isVideoFilename(displayedVariant.name)) : false;
+  const isRaw = displayedVariant && !isVideo ? (displayedVariant.is_raw ?? isRawFilename(displayedVariant.name)) : false;
+
+  const getVariantPillLabel = (idx: number): string => {
+    if (idx === 0) return 'RAW';
+    const labels = loupeActiveImage?.stackSubfolderLabels || [];
+    const currentLabel = labels[idx - 1] || 'JPG';
+
+    let displayLabel = currentLabel;
+    if (currentLabel.includes('/')) {
+      const [sub, ext] = currentLabel.split('/');
+      if (ext && sub.length > 10) {
+        displayLabel = `${sub.slice(0, 9)}…/${ext}`;
+      }
+    }
+
+    const sameCount = labels.filter(l => l === currentLabel).length;
+    if (sameCount > 1) {
+      let num = 0;
+      for (let i = 0; i < idx; i++) {
+        if (labels[i] === currentLabel) num++;
+      }
+      return `${displayLabel} ${num}`;
+    }
+    return displayLabel;
+  };
+
+  // Lazy-load metadata for debounced active variant if needed
   useEffect(() => {
-    if (!loupeActiveImage) return;
-    if (loupeActiveImage.camera === undefined || loupeActiveImage.is_monochrome_preview === undefined || loupeActiveImage.exposure_bias === undefined) {
+    if (!displayedVariant) return;
+    if (displayedVariant.camera === undefined || displayedVariant.is_monochrome_preview === undefined || displayedVariant.exposure_bias === undefined) {
       let isMounted = true;
       invoke<{
         date: string | null;
@@ -207,10 +245,10 @@ export const LoupeViewer = React.memo(function LoupeViewer({
         body_serial?: string | null;
         lens_serial?: string | null;
         subsec_time?: string | null;
-      }>('get_image_metadata', { path: loupeActiveImage.path })
+      }>('get_image_metadata', { path: displayedVariant.path })
         .then((meta) => {
           if (isMounted && meta) {
-            useLibraryStore.getState().updateImageMetadata(loupeActiveImage.path, {
+            useLibraryStore.getState().updateImageMetadata(displayedVariant.path, {
               camera: meta.camera || null,
               lens: meta.lens || null,
               iso: meta.iso || null,
@@ -220,9 +258,9 @@ export const LoupeViewer = React.memo(function LoupeViewer({
               exposure_bias: meta.exposure_bias || null,
               width: meta.width ?? null,
               height: meta.height ?? null,
-              date: meta.date || loupeActiveImage.date,
+              date: meta.date || displayedVariant.date,
               date_modified: meta.date_modified ?? null,
-              is_raw: meta.is_raw ?? loupeActiveImage.is_raw,
+              is_raw: meta.is_raw ?? displayedVariant.is_raw,
               is_monochrome_sensor: meta.is_monochrome_sensor ?? false,
               is_monochrome_preview: meta.is_monochrome_preview ?? false,
               latitude: meta.latitude ?? null,
@@ -249,29 +287,80 @@ export const LoupeViewer = React.memo(function LoupeViewer({
         isMounted = false;
       };
     }
-  }, [loupeActiveImage?.path]);
+  }, [displayedVariant?.path]);
 
-  const isVideo = activeImage ? (activeImage.is_video ?? isVideoFilename(activeImage.name)) : false;
-  const isRaw = activeImage && !isVideo ? (activeImage.is_raw ?? isRawFilename(activeImage.name)) : false;
+  // Sync activeDisplayedImage to libraryStore for live Inspector updates
+  useEffect(() => {
+    if (!loupeActiveImage) {
+      useLibraryStore.getState().setActiveDisplayedImage(null);
+      return;
+    }
+    if (stackMembers && stackMembers.length > 1) {
+      const variantObj: LibraryImage = {
+        ...stackMembers[safeVariantIdx],
+        stackMembers: loupeActiveImage.stackMembers,
+        stackSubfolderLabels: loupeActiveImage.stackSubfolderLabels,
+        culling: loupeActiveImage.culling,
+      };
+      useLibraryStore.getState().setActiveDisplayedImage(variantObj);
+    } else {
+      useLibraryStore.getState().setActiveDisplayedImage(loupeActiveImage);
+    }
+  }, [loupeActiveImage, stackMembers, safeVariantIdx]);
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       <div 
         className="flex-1 flex items-center justify-center bg-app-deepest p-6 min-h-0 relative"
         onContextMenu={(e) => {
-          if (loupeActiveImage) {
-            onContextMenu(e, loupeActiveImage.path, safeDebouncedIndex);
+          if (displayedVariant) {
+            onContextMenu(e, displayedVariant.path, safeDebouncedIndex);
           }
         }}
       >
-        {loupeActiveImage ? (
+        {/* Loupe Variant Pill Bar for Stacks */}
+        {stackMembers && stackMembers.length > 1 && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/75 backdrop-blur-md border border-white/20 shadow-2xl animate-in fade-in zoom-in-95 duration-100">
+            <div className="flex items-center gap-1">
+              {stackMembers.map((member, idx) => {
+                const isCurrent = idx === safeVariantIdx;
+                const label = getVariantPillLabel(idx);
+                const labels = loupeActiveImage?.stackSubfolderLabels || [];
+                const currentLabel = idx > 0 ? (labels[idx - 1] || 'JPG') : 'JPG';
+                return (
+                  <button
+                    key={member.path}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveStackVariantIndex(idx);
+                    }}
+                    className={`px-2.5 py-0.5 rounded-full text-[11px] font-mono font-medium transition-all cursor-pointer ${
+                      isCurrent
+                        ? 'bg-accent text-app-deepest font-bold shadow-md'
+                        : 'bg-black/60 text-white/80 hover:text-white hover:bg-white/10'
+                    }`}
+                    title={`${ currentLabel !== 'JPG' ? currentLabel.replace('/JPG', '/') : '' }${member.name}`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            <span className="text-[10px] text-white/40 ml-0.5 font-mono border-l border-white/15 pl-2 flex items-center gap-1">
+              <kbd className="px-1 py-0.2 rounded bg-white/10 text-white/70 border border-white/20 text-[9px] font-mono leading-none">J</kbd>
+            </span>
+          </div>
+        )}
+
+        {displayedVariant ? (
           <>
             <ZoomableImage 
-              src={getRrImageUrl(loupeActiveImage.path, true, loupeActiveImage.culling?.orientation, undefined, loupeActiveImage.size, loupeActiveImage.mtime)} 
-              previewSrc={getRrImageUrl(loupeActiveImage.path, false, loupeActiveImage.culling?.orientation, 2, loupeActiveImage.size, loupeActiveImage.mtime)}
-              alt={loupeActiveImage.name} 
+              src={getRrImageUrl(displayedVariant.path, true, displayedVariant.culling?.orientation, undefined, displayedVariant.size, displayedVariant.mtime)} 
+              previewSrc={getRrImageUrl(displayedVariant.path, false, displayedVariant.culling?.orientation, 2, displayedVariant.size, displayedVariant.mtime)}
+              alt={displayedVariant.name}
+              resetZoomKey={loupeActiveImage?.path} 
               onContextMenu={(e) => {
-                onContextMenu(e, loupeActiveImage.path, safeDebouncedIndex);
+                onContextMenu(e, displayedVariant.path, safeDebouncedIndex);
               }}
             />
 
@@ -353,14 +442,14 @@ export const LoupeViewer = React.memo(function LoupeViewer({
 
         <div className="flex items-center gap-3 text-xs text-txt-secondary">
           <div className="flex items-center gap-2">
-            <span className="font-semibold text-txt-primary truncate max-w-[200px]" title={activeImage?.name}>
-              {activeImage?.name}
+            <span className="font-semibold text-txt-primary truncate max-w-[200px]" title={displayedVariant?.name}>
+              {displayedVariant?.name}
             </span>
-            {activeImage && (
+            {displayedVariant && (
               isVideo ? (
                 <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold tracking-wide bg-accent/15 text-accent border border-accent/30 flex items-center gap-1">
                   <Film className="w-2.5 h-2.5 text-accent" />
-                  {activeImage.name.split('.').pop()?.toUpperCase() || 'VID'}
+                  {displayedVariant.name.split('.').pop()?.toUpperCase() || 'VID'}
                 </span>
               ) : isRaw ? (
                 <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold tracking-wide bg-white/10 text-white/95 border border-white/20">
@@ -368,7 +457,7 @@ export const LoupeViewer = React.memo(function LoupeViewer({
                 </span>
               ) : (
                 <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold tracking-wide bg-white/10 text-white/95 border border-white/20">
-                  {activeImage.name.split('.').pop()?.toUpperCase() || 'JPG'}
+                  {displayedVariant.name.split('.').pop()?.toUpperCase() || 'JPG'}
                 </span>
               )
             )}
@@ -377,7 +466,7 @@ export const LoupeViewer = React.memo(function LoupeViewer({
           {/* Status Badges */}
           {isRaw && (
             <>
-              {activeImage?.is_monochrome_sensor ? (
+              {displayedVariant?.is_monochrome_sensor ? (
                 <span 
                   className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-white/10 border border-white/15 text-white/90 font-medium"
                   title={t('inspector.monoSensorTooltip', 'Hardware-Monochromsensor. Das RAW enthält native Schwarz-Weiß-Sensordaten ohne Farbfilter.')}
@@ -385,7 +474,7 @@ export const LoupeViewer = React.memo(function LoupeViewer({
                   <Camera className="w-3 h-3 text-white/80" />
                   <span>{t('inspector.monoSensor', 'Monochrom-Sensor')}</span>
                 </span>
-              ) : activeImage?.is_monochrome_preview ? (
+              ) : displayedVariant?.is_monochrome_preview ? (
                 <span 
                   className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] bg-amber-500/20 border border-amber-500/40 text-amber-300 font-semibold shadow-xs"
                   title={t('inspector.bwWarningTooltip', 'Die Kamera war auf einen Schwarz-Weiß-Bildstil eingestellt. Das Vorschaubild ist monochrom, die RAW-Datei enthält jedoch die vollen Farbinformationen des Sensors.')}

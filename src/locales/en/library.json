@@ -114,6 +114,10 @@
     "groupByFolderHintOn": "First group by folder, sort within",
     "groupByFolderHintOff": "Sort flat across all subfolders"
   },
+  "stack": {
+    "toggle": "RAW+JPG",
+    "toggleTooltip": "Group RAW + JPEG into a stack (Alt+S)"
+  },
   "filmstrip": {
     "title": "Filmstrip",
     "toggleTooltip": "Toggle Filmstrip",
@@ -141,6 +145,12 @@
     "mixedLocalConfirmMessage": "Do you really want to move {{folderCount}} staged folder(s) and {{photoCount}} rejected photo(s) to the Trash?",
     "mixedNasSuccessToast": "Permanently deleted {{folderCount}} folder(s) and {{photoCount}} image(s) from network share.",
     "mixedLocalSuccessToast": "Moved {{folderCount}} folder(s) and {{photoCount}} image(s) to Trash.",
+    "choiceAll": "Delete all files in stack ({{count}})",
+    "choiceAllDesc": "Deletes both RAW and companion JPEG files.",
+    "choiceOnlyRaw": "Delete only RAW files from stacks ({{count}})",
+    "choiceOnlyRawDesc": "Preserves JPEGs and resets their rejected status.",
+    "choiceOnlyJpeg": "Delete only JPEG files from stacks ({{count}})",
+    "choiceOnlyJpegDesc": "Preserves RAW files and resets their rejected status.",
     "failedError": "Failed to delete: "
   },
   "empty": "No images found",

@@ -26,6 +26,7 @@ export const FilmstripThumbnailItem = React.memo(function FilmstripThumbnailItem
 }: FilmstripThumbnailItemProps) {
   const isVideo = img.is_video ?? isVideoFilename(img.name);
   const isRaw = !isVideo && (img.is_raw ?? isRawFilename(img.name));
+  const isStacked = Boolean(img.stackMembers && img.stackMembers.length > 1);
   const cacheKey = `${img.path}:${img.culling?.orientation || 1}:1`;
   const [loaded, setLoaded] = useState(loadedThumbnailCache.has(cacheKey));
 
@@ -81,6 +82,10 @@ export const FilmstripThumbnailItem = React.memo(function FilmstripThumbnailItem
           <span className="px-1 py-0.2 rounded text-[8px] font-mono font-semibold tracking-wider bg-black/80 text-accent border border-accent/40 shadow-sm leading-tight inline-flex items-center gap-0.5">
             <Film className="w-2 h-2 text-accent" />
             {img.name.split('.').pop()?.toUpperCase() || 'VID'}
+          </span>
+        ) : isStacked ? (
+          <span className="px-1 py-0.2 rounded text-[8px] font-mono font-semibold tracking-wider bg-black/85 text-white border border-accent/50 shadow-sm leading-tight inline-block" title={img.stackMembers?.map(m => m.name).join(' + ')}>
+            +JPG
           </span>
         ) : isRaw ? (
           <span className="px-1 py-0.2 rounded text-[8px] font-mono font-semibold tracking-wider bg-black/80 text-white/95 border border-white/20 shadow-sm leading-tight inline-block">

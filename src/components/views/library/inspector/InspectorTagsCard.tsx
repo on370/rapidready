@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronRight, Tag, X } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { LibraryImage, useLibraryStore } from "../../../../stores/libraryStore";
+import { useLibraryUIStore } from "../../../../stores/libraryUIStore";
 import { useToastStore } from "../../../../stores/toastStore";
 
 interface InspectorTagsCardProps {
@@ -64,6 +65,23 @@ export function InspectorTagsCard({
     });
   }, [allFolderTags, activeImage.culling.tags, tagInput]);
 
+  const expandWithStackMembers = (paths: string[]): string[] => {
+    const stackRawJpeg = useLibraryUIStore.getState().stackRawJpeg;
+    if (!stackRawJpeg) return paths;
+
+    const set = new Set(paths);
+    if (activeImage.stackMembers) {
+      for (const m of activeImage.stackMembers) set.add(m.path);
+    }
+    for (const p of paths) {
+      const found = scopedImages.find(i => i.path === p);
+      if (found?.stackMembers) {
+        for (const m of found.stackMembers) set.add(m.path);
+      }
+    }
+    return Array.from(set);
+  };
+
   const handleAddSpecificTag = (tagToAdd: string) => {
     const trimmed = tagToAdd.trim();
     if (!trimmed) return;
@@ -73,10 +91,13 @@ export function InspectorTagsCard({
       return;
     }
     const newTags = [...activeImage.culling.tags, trimmed];
+    activeImage.culling.tags = newTags;
 
-    const pathsToUpdate = selectedPaths.has(activeImage.path) && selectedPaths.size > 1
+    const initialPaths = selectedPaths.has(activeImage.path) && selectedPaths.size > 1
       ? Array.from(selectedPaths)
       : [activeImage.path];
+
+    const pathsToUpdate = expandWithStackMembers(initialPaths);
 
     if (pathsToUpdate.length > 1) {
       for (const p of pathsToUpdate) {
@@ -158,10 +179,13 @@ export function InspectorTagsCard({
 
   const handleRemoveTag = (tagToRemove: string) => {
     const newTags = activeImage.culling.tags.filter(t => t !== tagToRemove);
+    activeImage.culling.tags = newTags;
 
-    const pathsToUpdate = selectedPaths.has(activeImage.path) && selectedPaths.size > 1
+    const initialPaths = selectedPaths.has(activeImage.path) && selectedPaths.size > 1
       ? Array.from(selectedPaths)
       : [activeImage.path];
+
+    const pathsToUpdate = expandWithStackMembers(initialPaths);
 
     if (pathsToUpdate.length > 1) {
       for (const p of pathsToUpdate) {

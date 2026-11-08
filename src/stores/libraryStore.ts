@@ -48,6 +48,8 @@ export interface LibraryImage {
   body_serial?: string | null;
   lens_serial?: string | null;
   subsec_time?: string | null;
+  stackMembers?: LibraryImage[]; // Alle Bilder des Stapels (Index 0 = RAW/Primärbild, danach JPEGs)
+  stackSubfolderLabels?: string[]; // z. B. ['JPG'] oder ['JPG', 'LR/JPG'] für das Kachel-Badge
 }
 
 export interface ArchiveScanProgress {
@@ -76,6 +78,8 @@ interface LibraryStore {
   setImages: (images: LibraryImage[]) => void;
   
   activeImageIndex: number;
+  activeDisplayedImage: LibraryImage | null;
+  setActiveDisplayedImage: (img: LibraryImage | null) => void;
   activeFolderPath: string | null;
   selectedFolderPaths: Set<string>;
   discoveredFolders: Set<string>;
@@ -1048,6 +1052,8 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
   }),
   
   activeImageIndex: 0,
+  activeDisplayedImage: null,
+  setActiveDisplayedImage: (img) => set({ activeDisplayedImage: img }),
   activeFolderPath: null,
   selectedFolderPaths: new Set<string>(),
   pendingSelectAll: false,

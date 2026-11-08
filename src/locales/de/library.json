@@ -114,6 +114,10 @@
     "groupByFolderHintOn": "Erst nach Ordner, darin sortieren",
     "groupByFolderHintOff": "Alle Unterordner durchgehend sortieren"
   },
+  "stack": {
+    "toggle": "RAW+JPG",
+    "toggleTooltip": "RAW + JPEG zu einem Stapel zusammenfassen (Alt+S)"
+  },
   "filmstrip": {
     "title": "Filmstreifen",
     "toggleTooltip": "Filmstreifen ein-/ausblenden",
@@ -141,6 +145,12 @@
     "mixedLocalConfirmMessage": "Möchtest du {{folderCount}} vorgemerkte(n) Ordner und {{photoCount}} verworfene(s) Foto(s) wirklich in den Papierkorb verschieben?",
     "mixedNasSuccessToast": "{{folderCount}} Ordner und {{photoCount}} Bild(er) dauerhaft vom Netzwerklaufwerk gelöscht.",
     "mixedLocalSuccessToast": "{{folderCount}} Ordner und {{photoCount}} Bild(er) in den Papierkorb verschoben.",
+    "choiceAll": "Alle Dateien im Stapel löschen ({{count}})",
+    "choiceAllDesc": "Löscht RAW- und zugehörige JPEG-Dateien.",
+    "choiceOnlyRaw": "Nur RAW-Dateien der Stapel löschen ({{count}})",
+    "choiceOnlyRawDesc": "Behält die JPEGs und hebt deren Verworfen-Status auf.",
+    "choiceOnlyJpeg": "Nur JPEG-Dateien der Stapel löschen ({{count}})",
+    "choiceOnlyJpegDesc": "Behält die RAW-Dateien und hebt deren Verworfen-Status auf.",
     "failedError": "Löschen fehlgeschlagen: "
   },
   "empty": "Keine Bilder gefunden",

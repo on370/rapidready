@@ -10,9 +10,10 @@ interface ZoomableImageProps {
   previewSrc?: string;
   alt: string;
   onContextMenu?: (e: ReactMouseEvent) => void;
+  resetZoomKey?: string;
 }
 
-export function ZoomableImage({ src, previewSrc, alt, onContextMenu }: ZoomableImageProps) {
+export function ZoomableImage({ src, previewSrc, alt, onContextMenu, resetZoomKey }: ZoomableImageProps) {
   const { t } = useTranslation('library');
   const { invertScrollZoom, loupeScale, setLoupeScale } = useLibraryUIStore();
   const [currentSrc, setCurrentSrc] = useState(previewSrc || src);
@@ -22,6 +23,7 @@ export function ZoomableImage({ src, previewSrc, alt, onContextMenu }: ZoomableI
   const [isMinimapDragging, setIsMinimapDragging] = useState(false);
   const [isZoomTransitioning, setIsZoomTransitioning] = useState(false);
   const zoomTransitionTimeoutRef = useRef<number | null>(null);
+  const prevResetKeyRef = useRef<string | undefined>(resetZoomKey ?? src);
 
   const isVideo = isVideoFilename(alt) || ['wmv', 'flv'].includes(alt.split('.').pop()?.toLowerCase() || '');
   const extension = (alt.split('.').pop() || 'VIDEO').toUpperCase();
@@ -47,8 +49,13 @@ export function ZoomableImage({ src, previewSrc, alt, onContextMenu }: ZoomableI
   useEffect(() => {
     let canceled = false;
     setLoadFailed(false);
-    setLoupeScale(0);
-    setPosition({ x: 0, y: 0 });
+
+    const currentKey = resetZoomKey ?? src;
+    if (currentKey !== prevResetKeyRef.current) {
+      prevResetKeyRef.current = currentKey;
+      setLoupeScale(0);
+      setPosition({ x: 0, y: 0 });
+    }
 
     const img = new Image();
     img.src = src;
@@ -79,7 +86,7 @@ export function ZoomableImage({ src, previewSrc, alt, onContextMenu }: ZoomableI
       img.onerror = null;
       img.src = '';
     };
-  }, [src, previewSrc, setLoupeScale]);
+  }, [src, previewSrc, resetZoomKey, setLoupeScale]);
 
   // Check if current visible image failed on mount / src change
   useEffect(() => {
