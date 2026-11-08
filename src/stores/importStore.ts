@@ -39,6 +39,17 @@ export interface ScanProgress {
   current_file: string;
 }
 
+export interface SessionImportOverride {
+  dateOverrideEnabled: boolean;
+  dateOverride: string;
+  editorialEnabled: boolean;
+  title: string;
+  description: string;
+  artist: string;
+  copyright: string;
+  usageTerms: string;
+}
+
 interface ImportState {
   sourceDirectory: string | null;
   isSourceDisconnected: boolean;
@@ -57,6 +68,29 @@ interface ImportState {
   hideImported: boolean;
   targetCollectionId: string | null;
   newCollectionName: string;
+
+  // Session-specific import overrides (non-persistent)
+  importDateOverrideEnabled: boolean;
+  importDateOverride: string;
+  importEditorialEnabled: boolean;
+  importTitle: string;
+  importDescription: string;
+  importArtistOverride: string;
+  importCopyrightOverride: string;
+  importUsageTermsOverride: string;
+  lastSessionImportOverride: SessionImportOverride | null;
+
+  setImportDateOverrideEnabled: (enabled: boolean) => void;
+  setImportDateOverride: (date: string) => void;
+  setImportEditorialEnabled: (enabled: boolean) => void;
+  setImportTitle: (title: string) => void;
+  setImportDescription: (desc: string) => void;
+  setImportArtistOverride: (artist: string) => void;
+  setImportCopyrightOverride: (copyright: string) => void;
+  setImportUsageTermsOverride: (usageTerms: string) => void;
+  saveLastSessionOverride: () => void;
+  applyLastSessionOverride: () => void;
+  clearImportOverrides: () => void;
   
   setSourceDirectory: (path: string | null) => void;
   setIsSourceDisconnected: (disconnected: boolean) => void;
@@ -102,7 +136,81 @@ export const useImportStore = create<ImportState>()(
       targetCollectionId: null,
       newCollectionName: '',
 
-      setSourceDirectory: (path) => set({ sourceDirectory: path, isSourceDisconnected: false }),
+      importDateOverrideEnabled: false,
+      importDateOverride: '',
+      importEditorialEnabled: false,
+      importTitle: '',
+      importDescription: '',
+      importArtistOverride: '',
+      importCopyrightOverride: '',
+      importUsageTermsOverride: '',
+      lastSessionImportOverride: null,
+
+      setImportDateOverrideEnabled: (importDateOverrideEnabled) => set({ importDateOverrideEnabled }),
+      setImportDateOverride: (importDateOverride) => set({ importDateOverride }),
+      setImportEditorialEnabled: (importEditorialEnabled) => set({ importEditorialEnabled }),
+      setImportTitle: (importTitle) => set({ importTitle }),
+      setImportDescription: (importDescription) => set({ importDescription }),
+      setImportArtistOverride: (importArtistOverride) => set({ importArtistOverride }),
+      setImportCopyrightOverride: (importCopyrightOverride) => set({ importCopyrightOverride }),
+      setImportUsageTermsOverride: (importUsageTermsOverride) => set({ importUsageTermsOverride }),
+
+      saveLastSessionOverride: () => {
+        const s = get();
+        if (s.importDateOverrideEnabled || s.importEditorialEnabled) {
+          set({
+            lastSessionImportOverride: {
+              dateOverrideEnabled: s.importDateOverrideEnabled,
+              dateOverride: s.importDateOverride,
+              editorialEnabled: s.importEditorialEnabled,
+              title: s.importTitle,
+              description: s.importDescription,
+              artist: s.importArtistOverride,
+              copyright: s.importCopyrightOverride,
+              usageTerms: s.importUsageTermsOverride,
+            },
+          });
+        }
+      },
+
+      applyLastSessionOverride: () => {
+        const last = get().lastSessionImportOverride;
+        if (!last) return;
+        set({
+          importDateOverrideEnabled: last.dateOverrideEnabled,
+          importDateOverride: last.dateOverride,
+          importEditorialEnabled: last.editorialEnabled,
+          importTitle: last.title,
+          importDescription: last.description,
+          importArtistOverride: last.artist,
+          importCopyrightOverride: last.copyright,
+          importUsageTermsOverride: last.usageTerms,
+        });
+      },
+
+      clearImportOverrides: () => set({
+        importDateOverrideEnabled: false,
+        importEditorialEnabled: false,
+      }),
+
+      setSourceDirectory: (path) => {
+        const current = get().sourceDirectory;
+        const isNew = path !== current;
+        set({
+          sourceDirectory: path,
+          isSourceDisconnected: false,
+          ...(isNew ? {
+            importDateOverrideEnabled: false,
+            importDateOverride: '',
+            importEditorialEnabled: false,
+            importTitle: '',
+            importDescription: '',
+            importArtistOverride: '',
+            importCopyrightOverride: '',
+            importUsageTermsOverride: '',
+          } : {}),
+        });
+      },
       setIsSourceDisconnected: (disconnected) => set({ isSourceDisconnected: disconnected }),
       setTargetCollectionId: (id) => set({ targetCollectionId: id }),
       setNewCollectionName: (name) => set({ newCollectionName: name }),

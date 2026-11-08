@@ -82,7 +82,15 @@ interface SettingsState {
   xmpNaming: 'standard' | 'darktable';
   rawDeveloper: RawDeveloperId;
   customRawDeveloperPath: string | null;
+  defaultArtist: string;
+  defaultCopyright: string;
+  defaultUsageTerms: string;
+  autoApplyEditorialOnImport: boolean;
   
+  setDefaultArtist: (val: string) => void;
+  setDefaultCopyright: (val: string) => void;
+  setDefaultUsageTerms: (val: string) => void;
+  setAutoApplyEditorialOnImport: (val: boolean) => void;
   setSidecarMode: (mode: 'rrdata' | 'dual' | 'xmp') => void;
   setXmpNaming: (mode: 'standard' | 'darktable') => void;
   setRawDeveloper: (dev: RawDeveloperId) => void;
@@ -134,6 +142,10 @@ export const useSettingsStore = create<SettingsState>()(
       xmpNaming: 'standard',
       rawDeveloper: 'rapidraw',
       customRawDeveloperPath: null,
+      defaultArtist: '',
+      defaultCopyright: '',
+      defaultUsageTerms: '',
+      autoApplyEditorialOnImport: true,
       presets: [
         {
           id: 'default-std',
@@ -165,6 +177,10 @@ export const useSettingsStore = create<SettingsState>()(
       },
       setRawDeveloper: (rawDeveloper) => set({ rawDeveloper }),
       setCustomRawDeveloperPath: (customRawDeveloperPath) => set({ customRawDeveloperPath }),
+      setDefaultArtist: (defaultArtist) => set({ defaultArtist }),
+      setDefaultCopyright: (defaultCopyright) => set({ defaultCopyright }),
+      setDefaultUsageTerms: (defaultUsageTerms) => set({ defaultUsageTerms }),
+      setAutoApplyEditorialOnImport: (autoApplyEditorialOnImport) => set({ autoApplyEditorialOnImport }),
       setEnableFolderDeletion: (enableFolderDeletion) => set((state) => ({
         enableFolderDeletion,
         allowDirectFolderDeletion: enableFolderDeletion ? state.allowDirectFolderDeletion : false,

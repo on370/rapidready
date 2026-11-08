@@ -152,5 +152,19 @@
     "syncCancelledTitle": "Sync Cancelled",
     "syncCancelledDesc": "Synchronization cancelled. {{synced}} sidecars were updated prior to cancellation.",
     "syncErrorTitle": "Error During Sidecar Sync"
+  },
+  "editorial": {
+    "title": "Default Metadata & Copyright (Import Presets)",
+    "subtitle": "Automatic master metadata for new imports and sidecars",
+    "autoApplyLabel": "Automatically write to sidecars on import",
+    "autoApplyDesc": "Writes creator and license metadata directly to .rrdata / .xmp sidecars on every import",
+    "artistLabel": "Photographer / Creator",
+    "artistPlaceholder": "e.g. Jane Doe",
+    "copyrightLabel": "Copyright Notice",
+    "yearChipTooltip": "Inserts the dynamic {year} placeholder",
+    "previewPrefix": "Preview",
+    "usageTermsLabel": "Terms of Use / License",
+    "usageTermsPlaceholder": "e.g. CC-BY 4.0 or Editorial Use Only",
+    "guaranteeNote": "This metadata is automatically written to companion sidecars (.rrdata / .xmp) during import. Camera originals remain untouched."
   }
 }

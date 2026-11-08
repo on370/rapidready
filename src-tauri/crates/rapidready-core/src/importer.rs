@@ -23,6 +23,7 @@ pub async fn execute_import<F>(
     destination_base: &str,
     template: &str,
     import_index: &ImportIndex,
+    date_override: Option<String>,
     mut on_progress: F,
 ) -> Result<Vec<String>>
 where
@@ -37,8 +38,12 @@ where
     println!("Executing import with {} files to {}", total_files, destination_base);
     let dest_base = Path::new(destination_base);
 
+    let override_dt = date_override
+        .as_deref()
+        .and_then(crate::date_resolver::parse_flexible_datetime);
+
     for file in files {
-        let date = file.date.unwrap_or(DateTime::UNIX_EPOCH.naive_utc());
+        let date = override_dt.or(file.date).unwrap_or(DateTime::UNIX_EPOCH.naive_utc());
         
         let relative_dir = build_target_path(template, &date);
         // Strip leading slashes to prevent join from replacing the base path
@@ -79,7 +84,8 @@ where
         }
 
         // Set modification time (mtime) on destination file to capture date
-        if let Some(naive_dt) = file.date {
+        let effective_dt = override_dt.or(file.date);
+        if let Some(naive_dt) = effective_dt {
             let timestamp_secs = naive_dt.and_utc().timestamp();
             if timestamp_secs > 0 {
                 let sys_time = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(timestamp_secs as u64);

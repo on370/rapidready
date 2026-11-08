@@ -85,6 +85,7 @@ pub async fn execute_import(
     files: Vec<ScannedFile>,
     destination_base: String,
     template: String,
+    date_override: Option<String>,
 ) -> Result<Vec<String>, String> {
     let import_index = get_import_index(&app)?;
     
@@ -93,6 +94,7 @@ pub async fn execute_import(
         &destination_base,
         &template,
         &import_index,
+        date_override,
         move |progress: ImportProgress| {
             let _ = app.emit("import_progress", progress);
         },

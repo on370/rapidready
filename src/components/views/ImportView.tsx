@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { ImportSourceStep } from "./import/ImportSourceStep";
 import { ImportPreviewStep } from "./import/ImportPreviewStep";
 import { ImportExecuteStep } from "./import/ImportExecuteStep";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight, AlertTriangle, X } from "lucide-react";
 import { useImportStore } from "../../stores/importStore";
 
 export function ImportView() {
@@ -18,6 +18,11 @@ export function ImportView() {
     setSourceDirectory,
     setScannedFiles,
     setIsSourceDisconnected,
+    importDateOverrideEnabled,
+    importDateOverride,
+    importEditorialEnabled,
+    importTitle,
+    clearImportOverrides,
   } = useImportStore();
 
   const selectedCount = scannedFiles.filter(f => f.selected).length;
@@ -101,6 +106,42 @@ export function ImportView() {
         {currentStep === 2 && <ImportPreviewStep onBack={() => setCurrentStep(1)} />}
         {currentStep === 3 && <ImportExecuteStep onReset={() => setCurrentStep(1)} />}
       </div>
+
+      {/* Amber Warning Banner for Manual Overrides in Step 2 */}
+      {currentStep === 2 && ((importDateOverrideEnabled && importDateOverride.trim() !== '') || importEditorialEnabled) && (
+        <div className="bg-amber-500/15 border-t border-amber-500/40 text-amber-300 px-6 py-2 flex items-center justify-between text-xs font-medium z-10 flex-shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0 text-amber-400" />
+            <span className="font-semibold">
+              {t('preview.warningBannerTitle', 'Achtung: Für diesen Import sind manuelle Überschreibungen aktiv')}
+            </span>
+            <span className="text-amber-300/80 truncate">
+              {(() => {
+                const parts: string[] = [];
+                if (importDateOverrideEnabled && importDateOverride.trim()) {
+                  parts.push(`${t('preview.warningDate', 'Aufnahmedatum')} → ${importDateOverride.trim()}`);
+                }
+                if (importEditorialEnabled) {
+                  if (importTitle.trim()) {
+                    parts.push(`${t('preview.warningTitle', 'Titel')} → „${importTitle.trim()}“`);
+                  } else {
+                    parts.push(t('preview.warningEditorial', 'Shoot-Metadaten aktiv'));
+                  }
+                }
+                return `(${parts.join(' · ')})`;
+              })()}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={clearImportOverrides}
+            className="ml-4 px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/30 text-[11px] font-semibold transition-colors flex items-center gap-1 cursor-pointer flex-shrink-0"
+          >
+            <X className="w-3 h-3" />
+            <span>{t('preview.disableOverrides', 'Überschreibung abschalten')}</span>
+          </button>
+        </div>
+      )}
 
       {/* Step Action Bar */}
       {currentStep < 3 && (

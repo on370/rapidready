@@ -12,6 +12,7 @@ import {
   isRawFilename, isCompanionFilename 
 } from '../../../utils/image';
 import { DestinationInfoBar } from './components/DestinationInfoBar';
+import { ImportMetadataOverrideBar } from './components/ImportMetadataOverrideBar';
 import { ImportLightboxModal } from './components/ImportLightboxModal';
 
 
@@ -70,6 +71,8 @@ export function ImportPreviewStep({ onBack }: ImportPreviewStepProps = {}) {
     setIsSourceDisconnected,
     setSourceDirectory,
     setScannedFiles,
+    importDateOverrideEnabled,
+    importDateOverride,
   } = useImportStore();
 
   // Monitor source drive / media availability
@@ -124,8 +127,11 @@ export function ImportPreviewStep({ onBack }: ImportPreviewStepProps = {}) {
 
     // 1. Group by date
     const dateGroups: Record<string, typeof scannedFiles> = {};
+    const hasValidDateOverride = importDateOverrideEnabled && /^\d{4}(-\d{2}(-\d{2})?)?$/.test(importDateOverride.trim());
+    const overrideDateKey = hasValidDateOverride ? importDateOverride.trim() : null;
+
     for (const file of visibleFiles) {
-      const dateKey = file.formatted_date ? file.formatted_date.split(' ')[0] : 'Unknown Date';
+      const dateKey = overrideDateKey || (file.formatted_date ? file.formatted_date.split(' ')[0] : 'Unknown Date');
       if (!dateGroups[dateKey]) dateGroups[dateKey] = [];
       dateGroups[dateKey].push(file);
     }
@@ -244,7 +250,7 @@ export function ImportPreviewStep({ onBack }: ImportPreviewStepProps = {}) {
     }
 
     return result;
-  }, [scannedFiles, hideImported]);
+  }, [scannedFiles, hideImported, importDateOverrideEnabled, importDateOverride]);
 
   // Flatten all pairs for lookup
   const allPairs = useMemo(() => {
@@ -296,6 +302,9 @@ export function ImportPreviewStep({ onBack }: ImportPreviewStepProps = {}) {
     <div className="flex-1 min-h-0 overflow-hidden p-6 flex flex-col gap-4">
       {/* Destination Info Bar & Change/Warning Control */}
       <DestinationInfoBar />
+
+      {/* Metadata & Date Override for this Import */}
+      <ImportMetadataOverrideBar />
 
       {/* Main Content Area */}
       <div className="flex-1 min-h-0 overflow-hidden gap-6 flex">

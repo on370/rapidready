@@ -11,6 +11,7 @@ import { useOnboardingStore } from "../../stores/onboardingStore";
 import { isCurrentBeta } from "../../services/updateService";
 import buildInfo from "../../build-info.json";
 import { SidecarSettingsCard } from "./settings/SidecarSettingsCard";
+import { EditorialSettingsCard } from "./settings/EditorialSettingsCard";
 
 
 function EditableItem({ 
@@ -323,6 +324,9 @@ export function SettingsView() {
 
         {/* Sidecar Format & Coexistence (.rrdata / .xmp) */}
         <SidecarSettingsCard />
+
+        {/* Standard Metadata & Copyright (Editorial) */}
+        <EditorialSettingsCard />
 
         {/* Data Safety & File Operations */}
         <div className="bg-app-card border border-app-border rounded-xl overflow-hidden">

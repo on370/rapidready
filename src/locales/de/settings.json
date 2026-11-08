@@ -152,5 +152,19 @@
     "syncCancelledTitle": "Abgleich abgebrochen",
     "syncCancelledDesc": "Abgleich abgebrochen. {{synced}} Sidecars wurden bis zum Abbruch synchronisiert.",
     "syncErrorTitle": "Fehler beim Sidecar-Abgleich"
+  },
+  "editorial": {
+    "title": "Standard-Metadaten & Urheberrecht (Import-Vorbelegung)",
+    "subtitle": "Automatische Stammdaten für neue Importe und Sidecars",
+    "autoApplyLabel": "Beim Import automatisch in Sidecars eintragen",
+    "autoApplyDesc": "Schreibt Urheber- und Lizenzdaten bei jedem Import direkt in .rrdata / .xmp Sidecars",
+    "artistLabel": "Fotograf / Urheber",
+    "artistPlaceholder": "z. B. Max Mustermann",
+    "copyrightLabel": "Copyright-Vermerk",
+    "yearChipTooltip": "Fügt den dynamischen Platzhalter {year} ein",
+    "previewPrefix": "Vorschau",
+    "usageTermsLabel": "Nutzungsbedingungen / Lizenz",
+    "usageTermsPlaceholder": "z. B. CC-BY 4.0 oder Nicht-kommerzielle Nutzung",
+    "guaranteeNote": "Diese Stammdaten werden beim Import automatisch in die Sidecar-Dateien (.rrdata / .xmp) geschrieben. Kamera-Originale bleiben unangetastet."
   }
 }

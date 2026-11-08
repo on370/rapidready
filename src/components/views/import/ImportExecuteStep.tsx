@@ -81,16 +81,85 @@ export function ImportExecuteStep({ onReset }: ImportExecuteStepProps) {
       });
 
       try {
+        const { 
+          importDateOverrideEnabled, 
+          importDateOverride,
+          importEditorialEnabled,
+          importTitle,
+          importDescription,
+          importArtistOverride,
+          importCopyrightOverride,
+          importUsageTermsOverride,
+        } = useImportStore.getState();
+
+        const activeDateOverride = (importDateOverrideEnabled && importDateOverride.trim()) 
+          ? importDateOverride.trim() 
+          : null;
+
         const resultPaths = await invoke<string[]>('execute_import', {
           files: selectedFiles,
           destinationBase: destinationDirectory,
-          template: directoryTemplate
+          template: directoryTemplate,
+          dateOverride: activeDateOverride,
         });
         
         const imported = resultPaths || [];
         setImportedPaths(imported);
         if (imported.length > 0) {
           useLibraryStore.getState().setLastImportPaths(imported);
+        }
+
+        // 1. Write Date Override sidecars if active
+        if (activeDateOverride && imported.length > 0) {
+          try {
+            await invoke('set_date_override_batch', {
+              paths: imported,
+              dateOverride: activeDateOverride,
+              timeShiftSeconds: null,
+              resetOverride: false,
+            });
+          } catch (err) {
+            console.error("Failed to write date override sidecars on import:", err);
+          }
+        }
+
+        // 2. Write Editorial sidecars from Import Override or Settings Defaults
+        const { defaultArtist, defaultCopyright, defaultUsageTerms, autoApplyEditorialOnImport } = useSettingsStore.getState();
+
+        const artist = importEditorialEnabled && importArtistOverride.trim()
+          ? importArtistOverride.trim()
+          : (autoApplyEditorialOnImport ? defaultArtist.trim() : '');
+
+        const copyright = importEditorialEnabled && importCopyrightOverride.trim()
+          ? importCopyrightOverride.trim()
+          : (autoApplyEditorialOnImport ? defaultCopyright.trim() : '');
+
+        const usageTerms = importEditorialEnabled && importUsageTermsOverride.trim()
+          ? importUsageTermsOverride.trim()
+          : (autoApplyEditorialOnImport ? defaultUsageTerms.trim() : '');
+
+        const title = importEditorialEnabled ? importTitle.trim() : '';
+        const description = importEditorialEnabled ? importDescription.trim() : '';
+
+        if (imported.length > 0 && (artist || copyright || usageTerms || title || description)) {
+          try {
+            await invoke('set_editorial_batch', {
+              paths: imported,
+              artist: artist || null,
+              copyright: copyright || null,
+              usageTerms: usageTerms || null,
+              title: title || null,
+              description: description || null,
+            });
+          } catch (err) {
+            console.error("Failed to write editorial metadata sidecars on import:", err);
+          }
+        }
+
+        // 3. Save last session override and clear active overrides for subsequent imports
+        if (importDateOverrideEnabled || importEditorialEnabled) {
+          useImportStore.getState().saveLastSessionOverride();
+          useImportStore.getState().clearImportOverrides();
         }
 
         // Optional Collection Assignment

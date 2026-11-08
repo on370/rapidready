@@ -163,4 +163,50 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }
+
+    #[test]
+    fn test_execute_import_with_date_override() {
+        tauri::async_runtime::block_on(async {
+            let temp_dir = std::env::temp_dir().join(format!("rapidready_importer_test_{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&temp_dir);
+            let src_dir = temp_dir.join("source");
+            let dest_dir = temp_dir.join("dest");
+            std::fs::create_dir_all(&src_dir).unwrap();
+            std::fs::create_dir_all(&dest_dir).unwrap();
+
+            let src_file = src_dir.join("scan01.jpg");
+            std::fs::write(&src_file, b"test content").unwrap();
+
+            let index = rapidready_core::import_index::ImportIndex::new(&temp_dir).unwrap();
+
+            let scanned = vec![rapidready_core::scanner::ScannedFile {
+                path: src_file.to_string_lossy().to_string(),
+                name: "scan01.jpg".to_string(),
+                size: 12,
+                date: None,
+                formatted_date: None,
+                hash: "".to_string(),
+                already_imported: false,
+            }];
+
+            let imported = rapidready_core::importer::execute_import(
+                scanned,
+                &dest_dir.to_string_lossy(),
+                "{year}/{year}-{month}",
+                &index,
+                Some("1985-07".to_string()),
+                |_| {},
+            )
+            .await
+            .unwrap();
+
+            assert_eq!(imported.len(), 1);
+            let target_path = Path::new(&imported[0]);
+            assert!(target_path.exists());
+            let norm = target_path.to_string_lossy().replace('\\', "/");
+            assert!(norm.contains("1985/1985-07/scan01.jpg"));
+
+            let _ = std::fs::remove_dir_all(&temp_dir);
+        });
+    }
 }

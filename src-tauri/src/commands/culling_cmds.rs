@@ -516,10 +516,21 @@ pub async fn set_editorial_batch(
 
         for path_str in paths {
             let p = PathBuf::from(&path_str);
+
+            let effective_copyright_patch = match &copyright_patch {
+                Some(Some(cp)) if cp.contains("{year}") => {
+                    let year_str = rapidready_core::date_resolver::get_fast_creation_date(&p, None)
+                        .map(|dt| dt.format("%Y").to_string())
+                        .unwrap_or_else(|| rapidready_core::chrono::Utc::now().format("%Y").to_string());
+                    Some(Some(cp.replace("{year}", &year_str)))
+                }
+                other => other.clone(),
+            };
+
             match rapidready_core::culling::write_editorial_sidecar(
                 &p,
                 artist_patch.clone(),
-                copyright_patch.clone(),
+                effective_copyright_patch,
                 usage_terms_patch.clone(),
                 title_patch.clone(),
                 description_patch.clone(),
