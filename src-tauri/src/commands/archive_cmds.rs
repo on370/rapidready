@@ -778,3 +778,276 @@ pub fn cancel_warmup_cache() -> Result<(), String> {
     rapidready_core::thumbnail::cancel_warmup_cache();
     Ok(())
 }
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct RelocateResult {
+    pub moved: Vec<(String, String)>,
+    pub new_dirs: Vec<String>,
+    pub failed: Vec<(String, String)>,
+}
+
+pub fn is_yyyy_mm_dd(s: &str) -> bool {
+    let bytes = s.as_bytes();
+    bytes.len() == 10
+        && bytes[0..4].iter().all(|b| b.is_ascii_digit())
+        && bytes[4] == b'-'
+        && bytes[5..7].iter().all(|b| b.is_ascii_digit())
+        && bytes[7] == b'-'
+        && bytes[8..10].iter().all(|b| b.is_ascii_digit())
+}
+
+pub fn is_yyyy_mm(s: &str) -> bool {
+    let bytes = s.as_bytes();
+    bytes.len() == 7
+        && bytes[0..4].iter().all(|b| b.is_ascii_digit())
+        && bytes[4] == b'-'
+        && bytes[5..7].iter().all(|b| b.is_ascii_digit())
+}
+
+pub fn detect_archive_date_structure(archive_root: &Path) -> bool {
+    // Returns true for YYYY-MM-DD, false for YYYY-MM (default: true)
+    let mut has_month = false;
+    if let Ok(entries) = std::fs::read_dir(archive_root) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if is_yyyy_mm_dd(&name) {
+                    return true;
+                }
+                if is_yyyy_mm(&name) {
+                    has_month = true;
+                }
+                if let Ok(sub_entries) = std::fs::read_dir(&path) {
+                    for sub in sub_entries.flatten() {
+                        let sub_path = sub.path();
+                        if sub_path.is_dir() {
+                            let sub_name = sub.file_name().to_string_lossy().to_string();
+                            if is_yyyy_mm_dd(&sub_name) {
+                                return true;
+                            }
+                            if is_yyyy_mm(&sub_name) {
+                                has_month = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if has_month {
+        false
+    } else {
+        true
+    }
+}
+
+fn move_file_robust(src: &Path, dst: &Path) -> std::io::Result<()> {
+    if std::fs::rename(src, dst).is_err() {
+        std::fs::copy(src, dst)?;
+        let _ = std::fs::remove_file(src);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn relocate_images_by_date(
+    app: AppHandle,
+    paths: Vec<String>,
+    archive_root: String,
+    catalog_state: tauri::State<'_, ArchiveCatalogState>,
+) -> Result<RelocateResult, String> {
+    let catalog = catalog_state.catalog.clone();
+    let app_handle = app.clone();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let root = Path::new(&archive_root);
+        let is_day_based = detect_archive_date_structure(root);
+
+        let mut moved = Vec::new();
+        let mut new_dirs = Vec::new();
+        let mut failed = Vec::new();
+        let mut upsert_files = Vec::new();
+
+        for p in paths {
+            let old_path = PathBuf::from(&p);
+            if !crate::commands::system_cmds::is_strictly_inside_root(&old_path, root) {
+                failed.push((p, "File is not strictly inside archive root".to_string()));
+                continue;
+            }
+
+            if !old_path.exists() {
+                failed.push((p, "File does not exist on disk".to_string()));
+                continue;
+            }
+
+            // Get effective capture date via metadata_resolver
+            let meta = rapidready_core::metadata_resolver::get_image_metadata(&old_path);
+            let dt = meta.date.or(meta.date_modified);
+            let dt = match dt {
+                Some(d) => d,
+                None => {
+                    if let Ok(fs_meta) = std::fs::metadata(&old_path) {
+                        if let Ok(mtime) = fs_meta.modified() {
+                            let secs = mtime.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as i64;
+                            rapidready_core::chrono::DateTime::from_timestamp(secs, 0).map(|d| d.naive_utc()).unwrap_or_default()
+                        } else {
+                            rapidready_core::chrono::NaiveDateTime::default()
+                        }
+                    } else {
+                        failed.push((p, "Could not determine date for file".to_string()));
+                        continue;
+                    }
+                }
+            };
+
+            let yyyy = dt.format("%Y").to_string();
+            let sub_folder = if is_day_based {
+                dt.format("%Y-%m-%d").to_string()
+            } else {
+                dt.format("%Y-%m").to_string()
+            };
+
+            let target_dir = root.join(&yyyy).join(&sub_folder);
+
+            // If already in target_dir, skip
+            if let Some(parent) = old_path.parent() {
+                if parent == target_dir {
+                    continue;
+                }
+            }
+
+            // Ensure target directory exists
+            let year_dir = root.join(&yyyy);
+            if !year_dir.exists() {
+                let _ = std::fs::create_dir_all(&year_dir);
+                let dir_str = year_dir.to_string_lossy().to_string();
+                if !new_dirs.contains(&dir_str) {
+                    new_dirs.push(dir_str);
+                }
+            }
+            if !target_dir.exists() {
+                let _ = std::fs::create_dir_all(&target_dir);
+                let dir_str = target_dir.to_string_lossy().to_string();
+                if !new_dirs.contains(&dir_str) {
+                    new_dirs.push(dir_str);
+                }
+            }
+
+            // Compute target path with collision prevention
+            let file_stem = old_path.file_stem().unwrap_or_default().to_string_lossy().to_string();
+            let ext_opt = old_path.extension().map(|e| e.to_string_lossy().to_string());
+            let original_filename = old_path.file_name().unwrap_or_default().to_string_lossy().to_string();
+            let mut target_file_path = target_dir.join(&original_filename);
+            let mut collision_index = 1;
+            while target_file_path.exists() {
+                let new_filename = match &ext_opt {
+                    Some(ext) => format!("{}_{}.{}", file_stem, collision_index, ext),
+                    None => format!("{}_{}", file_stem, collision_index),
+                };
+                target_file_path = target_dir.join(new_filename);
+                collision_index += 1;
+            }
+
+            let new_path_str = target_file_path.to_string_lossy().to_string();
+
+            // Move the primary image file
+            if let Err(e) = move_file_robust(&old_path, &target_file_path) {
+                failed.push((p, format!("Failed to move file: {}", e)));
+                continue;
+            }
+
+            // Move companion sidecars (.rrdata and .xmp)
+            // 1. <old_path>.rrdata -> <new_path>.rrdata
+            let old_rrdata = PathBuf::from(format!("{}.rrdata", p));
+            if old_rrdata.exists() {
+                let new_rrdata = PathBuf::from(format!("{}.rrdata", new_path_str));
+                let _ = move_file_robust(&old_rrdata, &new_rrdata);
+            }
+            // 1b. <old_stem>.rrdata -> <new_stem>.rrdata
+            let old_stem_rrdata = old_path.with_extension("rrdata");
+            if old_stem_rrdata.exists() && old_stem_rrdata != old_rrdata {
+                let new_stem_rrdata = target_file_path.with_extension("rrdata");
+                let _ = move_file_robust(&old_stem_rrdata, &new_stem_rrdata);
+            }
+
+            // 2. <old_path>.xmp / .XMP -> <new_path>.xmp / .XMP
+            let old_xmp = PathBuf::from(format!("{}.xmp", p));
+            if old_xmp.exists() {
+                let new_xmp = PathBuf::from(format!("{}.xmp", new_path_str));
+                let _ = move_file_robust(&old_xmp, &new_xmp);
+            }
+            let old_xmp_upper = PathBuf::from(format!("{}.XMP", p));
+            if old_xmp_upper.exists() {
+                let new_xmp_upper = PathBuf::from(format!("{}.XMP", new_path_str));
+                let _ = move_file_robust(&old_xmp_upper, &new_xmp_upper);
+            }
+            // 2b. <old_stem>.xmp / .XMP -> <new_stem>.xmp / .XMP
+            let old_stem_xmp = old_path.with_extension("xmp");
+            if old_stem_xmp.exists() && old_stem_xmp != old_xmp {
+                let new_stem_xmp = target_file_path.with_extension("xmp");
+                let _ = move_file_robust(&old_stem_xmp, &new_stem_xmp);
+            }
+            let old_stem_xmp_upper = old_path.with_extension("XMP");
+            if old_stem_xmp_upper.exists() && old_stem_xmp_upper != old_xmp_upper {
+                let new_stem_xmp_upper = target_file_path.with_extension("XMP");
+                let _ = move_file_robust(&old_stem_xmp_upper, &new_stem_xmp_upper);
+            }
+
+            // Construct ArchiveFile for catalog upsert
+            let new_meta = rapidready_core::metadata_resolver::get_image_metadata(&target_file_path);
+            let fs_meta = std::fs::metadata(&target_file_path).ok();
+            let size = fs_meta.as_ref().map(|m| m.len()).unwrap_or(0);
+            let mtime = fs_meta.and_then(|m| m.modified().ok())
+                .map(|t| t.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as i64)
+                .unwrap_or(0);
+            let culling = rapidready_core::culling::read_sidecar(&target_file_path);
+            let is_video = rapidready_core::metadata_resolver::is_video_path(&target_file_path);
+            let is_raw = new_meta.is_raw;
+
+            let new_archive_file = rapidready_core::archive::ArchiveFile {
+                path: new_path_str.clone(),
+                name: target_file_path.file_name().unwrap_or_default().to_string_lossy().to_string(),
+                size,
+                date: new_meta.date,
+                camera: new_meta.camera,
+                lens: new_meta.lens,
+                iso: new_meta.iso,
+                aperture: new_meta.aperture,
+                shutter: new_meta.shutter,
+                culling,
+                is_raw,
+                is_video,
+                mtime,
+            };
+
+            upsert_files.push(new_archive_file);
+            moved.push((p, new_path_str));
+        }
+
+        // Update archive_catalog.db
+        if !moved.is_empty() {
+            let old_paths: Vec<String> = moved.iter().map(|(o, _)| o.clone()).collect();
+            let _ = catalog.delete_files(&old_paths);
+            let _ = catalog.upsert_archive_files(&archive_root, &upsert_files, &new_dirs);
+
+            // Relocate references in collections
+            if let Ok(app_dir) = app_handle.path().app_data_dir() {
+                if let Ok(mut tree) = rapidready_core::collections::load_collections(&app_dir) {
+                    let replacements: std::collections::HashMap<String, String> = moved.iter().cloned().collect();
+                    if rapidready_core::collections::relocate_paths_in_all_collections(&mut tree, &replacements) {
+                        let _ = rapidready_core::collections::save_collections(tree, &app_dir);
+                    }
+                }
+            }
+        }
+
+        Ok(RelocateResult {
+            moved,
+            new_dirs,
+            failed,
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}

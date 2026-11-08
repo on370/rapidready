@@ -51,6 +51,20 @@ pub struct CullingState {
     pub orientation: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sidecar_source: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date_override: Option<String>, // ISO "YYYY-MM-DDTHH:MM:SS"
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time_shift_seconds: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub artist: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub copyright: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage_terms: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
 }
 
 pub fn get_sidecar_path(original_path: &Path) -> PathBuf {
@@ -211,6 +225,35 @@ pub fn parse_sidecar_json(contents: &str) -> CullingState {
             }
         }
 
+        // 5. Date override & Time shift
+        if let Some(d) = val.get("date_override").or_else(|| val.get("dateOverride")).and_then(|v| v.as_str()) {
+            let trimmed = d.trim();
+            if !trimmed.is_empty() {
+                state.date_override = Some(trimmed.to_string());
+            }
+        }
+        if let Some(s) = val.get("time_shift_seconds").or_else(|| val.get("timeShiftSeconds")).and_then(|v| v.as_i64()) {
+            state.time_shift_seconds = Some(s);
+        }
+
+        // 6. Editorial metadata (flat root or nested in "editorial" object)
+        let editorial_obj = val.get("editorial").and_then(|v| v.as_object());
+        let extract_str = |k1: &str, k2: Option<&str>| -> Option<String> {
+            val.get(k1)
+                .or_else(|| k2.and_then(|k| val.get(k)))
+                .or_else(|| editorial_obj.and_then(|obj| obj.get(k1)))
+                .or_else(|| k2.and_then(|k| editorial_obj.and_then(|obj| obj.get(k))))
+                .and_then(|v| v.as_str())
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+        };
+
+        state.artist = extract_str("artist", None);
+        state.copyright = extract_str("copyright", None);
+        state.usage_terms = extract_str("usage_terms", Some("usageTerms"));
+        state.title = extract_str("title", None);
+        state.description = extract_str("description", None);
+
         return state;
     }
     CullingState::default()
@@ -313,7 +356,51 @@ pub fn write_sidecar_rrdata(original_path: &Path, state: &CullingState) -> anyho
         obj.remove("orientation");
     }
 
-    // 7. Write back formatted JSON atomically (write to unique temp file in same directory + rename)
+    // 7. Update date override & time shift
+    if let Some(ref d) = state.date_override {
+        obj.insert("date_override".to_string(), serde_json::json!(d));
+    } else if obj.contains_key("date_override") {
+        obj.remove("date_override");
+    }
+    if let Some(s) = state.time_shift_seconds {
+        obj.insert("time_shift_seconds".to_string(), serde_json::json!(s));
+    } else if obj.contains_key("time_shift_seconds") {
+        obj.remove("time_shift_seconds");
+    }
+
+    // 8. Update editorial metadata
+    if let Some(ref a) = state.artist {
+        obj.insert("artist".to_string(), serde_json::json!(a));
+    } else if obj.contains_key("artist") {
+        obj.remove("artist");
+    }
+    if let Some(ref c) = state.copyright {
+        obj.insert("copyright".to_string(), serde_json::json!(c));
+    } else if obj.contains_key("copyright") {
+        obj.remove("copyright");
+    }
+    if let Some(ref u) = state.usage_terms {
+        obj.insert("usage_terms".to_string(), serde_json::json!(u));
+    } else if obj.contains_key("usage_terms") {
+        obj.remove("usage_terms");
+    }
+    if let Some(ref t) = state.title {
+        obj.insert("title".to_string(), serde_json::json!(t));
+    } else if obj.contains_key("title") {
+        obj.remove("title");
+    }
+    if let Some(ref d) = state.description {
+        obj.insert("description".to_string(), serde_json::json!(d));
+    } else if obj.contains_key("description") {
+        obj.remove("description");
+    }
+
+    // If an existing "editorial" object was present, clean it up or remove to avoid stale data
+    if obj.contains_key("editorial") {
+        obj.remove("editorial");
+    }
+
+    // 9. Write back formatted JSON atomically (write to unique temp file in same directory + rename)
     let json = serde_json::to_string_pretty(&root)?;
     let parent = sidecar_path.parent().unwrap_or_else(|| Path::new("."));
     let pid = std::process::id();
@@ -470,6 +557,62 @@ pub fn write_gps_sidecar(
     Ok(())
 }
 
+pub fn write_editorial_sidecar(
+    original_path: &Path,
+    artist: Option<Option<String>>,
+    copyright: Option<Option<String>>,
+    usage_terms: Option<Option<String>>,
+    title: Option<Option<String>>,
+    description: Option<Option<String>>,
+) -> anyhow::Result<CullingState> {
+    let mut state = read_sidecar(original_path);
+
+    let apply_patch = |current: &mut Option<String>, patch: Option<Option<String>>| {
+        if let Some(val_opt) = patch {
+            match val_opt {
+                Some(text) if !text.trim().is_empty() => *current = Some(text.trim().to_string()),
+                _ => *current = None,
+            }
+        }
+    };
+
+    apply_patch(&mut state.artist, artist);
+    apply_patch(&mut state.copyright, copyright);
+    apply_patch(&mut state.usage_terms, usage_terms);
+    apply_patch(&mut state.title, title);
+    apply_patch(&mut state.description, description);
+
+    write_sidecar(original_path, &state)?;
+    Ok(read_sidecar(original_path))
+}
+
+pub fn write_date_override_sidecar(
+    original_path: &Path,
+    date_override: Option<Option<String>>,
+    time_shift_seconds: Option<Option<i64>>,
+) -> anyhow::Result<CullingState> {
+    let mut state = read_sidecar(original_path);
+
+    if let Some(date_opt) = date_override {
+        match date_opt {
+            Some(text) if !text.trim().is_empty() => {
+                state.date_override = Some(text.trim().to_string());
+            }
+            _ => state.date_override = None,
+        }
+    }
+
+    if let Some(shift_opt) = time_shift_seconds {
+        match shift_opt {
+            Some(val) if val != 0 => state.time_shift_seconds = Some(val),
+            _ => state.time_shift_seconds = None,
+        }
+    }
+
+    write_sidecar(original_path, &state)?;
+    Ok(read_sidecar(original_path))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -550,6 +693,7 @@ mod tests {
             tags: vec![],
             orientation: None,
             sidecar_source: None,
+            ..Default::default()
         };
         write_sidecar(&img_path, &state).unwrap();
 
@@ -590,6 +734,7 @@ mod tests {
             tags: vec!["vacation".to_string()],
             orientation: None,
             sidecar_source: None,
+            ..Default::default()
         };
         write_sidecar(&img_path, &state).unwrap();
 
@@ -677,6 +822,7 @@ mod tests {
             tags: vec!["Portrait".to_string(), "Studio".to_string()],
             orientation: None,
             sidecar_source: None,
+            ..Default::default()
         };
         write_sidecar(&img_path, &state).unwrap();
 
@@ -720,6 +866,7 @@ mod tests {
             tags: vec!["atomic".to_string()],
             orientation: None,
             sidecar_source: None,
+            ..Default::default()
         };
 
         write_sidecar(&img_path, &state).unwrap();
@@ -743,6 +890,7 @@ mod tests {
 
     #[test]
     fn test_write_gps_sidecar_and_override() {
+        set_sidecar_mode(SidecarMode::Rrdata);
         let temp_dir = std::env::temp_dir().join(format!("rr_gps_write_test_{}", std::process::id()));
         let _ = fs::create_dir_all(&temp_dir);
         let img_path = temp_dir.join("test_gps.cr2");
@@ -765,6 +913,7 @@ mod tests {
 
     #[test]
     fn test_clear_gps_sidecar() {
+        set_sidecar_mode(SidecarMode::Rrdata);
         let temp_dir = std::env::temp_dir().join(format!("rr_gps_clear_test_{}", std::process::id()));
         let _ = fs::create_dir_all(&temp_dir);
         let img_path = temp_dir.join("test_clear.cr2");
@@ -797,6 +946,7 @@ mod tests {
             tags: vec!["Vacation".to_string(), "Munich".to_string()],
             orientation: Some(6),
             sidecar_source: None,
+            ..Default::default()
         };
         write_sidecar(&img_path, &culling).unwrap();
 
@@ -844,6 +994,7 @@ mod tests {
             tags: vec!["landscape".to_string(), "mountains".to_string()],
             orientation: Some(6),
             sidecar_source: None,
+            ..Default::default()
         };
         write_sidecar(&img_path, &state).unwrap();
 
@@ -863,6 +1014,7 @@ mod tests {
             tags: vec!["blurry".to_string()],
             orientation: None,
             sidecar_source: None,
+            ..Default::default()
         };
         write_sidecar(&img_path, &reject_state).unwrap();
 
@@ -908,6 +1060,7 @@ mod tests {
             tags: vec!["urban".to_string()],
             orientation: Some(1),
             sidecar_source: None,
+            ..Default::default()
         };
         write_sidecar_xmp(&img_path, &state).unwrap();
 
@@ -970,6 +1123,63 @@ mod tests {
         assert_eq!(read2.rating, 3);
         assert_eq!(read2.sidecar_source, Some("both_rrdata".to_string()));
 
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_editorial_and_date_override_roundtrip() {
+        set_sidecar_mode(SidecarMode::Rrdata);
+        let temp_dir = std::env::temp_dir().join(format!("rr_editorial_test_{}", std::process::id()));
+        fs::create_dir_all(&temp_dir).unwrap();
+        let img_path = temp_dir.join("photo.CR2");
+
+        // 1. Write editorial in rrdata
+        write_editorial_sidecar(
+            &img_path,
+            Some(Some("Jane Doe".to_string())),
+            Some(Some("© 2026 Jane Doe".to_string())),
+            Some(Some("Editorial Use Only".to_string())),
+            Some(Some("Alpine Summit".to_string())),
+            Some(Some("Sunset over the mountains".to_string())),
+        ).unwrap();
+
+        let read = read_sidecar(&img_path);
+        assert_eq!(read.artist.as_deref(), Some("Jane Doe"));
+        assert_eq!(read.copyright.as_deref(), Some("© 2026 Jane Doe"));
+        assert_eq!(read.usage_terms.as_deref(), Some("Editorial Use Only"));
+        assert_eq!(read.title.as_deref(), Some("Alpine Summit"));
+        assert_eq!(read.description.as_deref(), Some("Sunset over the mountains"));
+
+        // 2. Write date override & time shift
+        write_date_override_sidecar(
+            &img_path,
+            Some(Some("2026-07-20T18:45:00".to_string())),
+            Some(Some(3600)),
+        ).unwrap();
+
+        let read2 = read_sidecar(&img_path);
+        assert_eq!(read2.date_override.as_deref(), Some("2026-07-20T18:45:00"));
+        assert_eq!(read2.time_shift_seconds, Some(3600));
+        // Verify editorial preserved!
+        assert_eq!(read2.artist.as_deref(), Some("Jane Doe"));
+
+        // 3. Roundtrip with XMP
+        set_sidecar_mode(SidecarMode::Xmp);
+        write_editorial_sidecar(
+            &img_path,
+            Some(Some("John Smith".to_string())),
+            None, // unchanged
+            None, // unchanged
+            None, // unchanged
+            None, // unchanged
+        ).unwrap();
+
+        let read_xmp = read_sidecar(&img_path);
+        assert_eq!(read_xmp.artist.as_deref(), Some("John Smith"));
+        assert_eq!(read_xmp.copyright.as_deref(), Some("© 2026 Jane Doe"));
+        assert_eq!(read_xmp.date_override.as_deref(), Some("2026-07-20T18:45:00"));
+
+        set_sidecar_mode(SidecarMode::Rrdata);
         let _ = fs::remove_dir_all(&temp_dir);
     }
 }

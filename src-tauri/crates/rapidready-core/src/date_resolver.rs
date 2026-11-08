@@ -34,7 +34,68 @@ pub fn parse_date_from_filename(filename: &str) -> Option<NaiveDateTime> {
     None
 }
 
+pub fn parse_flexible_datetime(s: &str) -> Option<NaiveDateTime> {
+    let trimmed = s.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    // 1. Full with seconds
+    for fmt in &["%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y:%m:%d %H:%M:%S"] {
+        if let Ok(dt) = NaiveDateTime::parse_from_str(trimmed, fmt) {
+            return Some(dt);
+        }
+    }
+    // 2. Without seconds (set seconds :00)
+    for fmt in &["%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M"] {
+        if let Ok(dt) = NaiveDateTime::parse_from_str(trimmed, fmt) {
+            return Some(dt);
+        }
+    }
+    // 3. Date only "YYYY-MM-DD" (set time 00:00:00)
+    if let Ok(d) = chrono::NaiveDate::parse_from_str(trimmed, "%Y-%m-%d") {
+        return d.and_hms_opt(0, 0, 0);
+    }
+    // 4. Year-Month "YYYY-MM" (set day/time -01 00:00:00)
+    if let Ok(d) = chrono::NaiveDate::parse_from_str(&format!("{}-01", trimmed), "%Y-%m-%d") {
+        return d.and_hms_opt(0, 0, 0);
+    }
+    // 5. Year only "YYYY" (4 digits, set -01-01 00:00:00)
+    if trimmed.len() == 4 && trimmed.chars().all(|c| c.is_ascii_digit()) {
+        if let Ok(d) = chrono::NaiveDate::parse_from_str(&format!("{}-01-01", trimmed), "%Y-%m-%d") {
+            return d.and_hms_opt(0, 0, 0);
+        }
+    }
+    None
+}
+
 pub fn get_fast_creation_date(path: &Path, meta: Option<&std::fs::Metadata>) -> Option<NaiveDateTime> {
+    // 0. Sidecar Date Override / Time Shift (Priority 1 if sidecar exists on disk)
+    let has_sidecar = crate::culling::get_sidecar_path(path).is_file()
+        || crate::culling::find_existing_xmp_path(path).is_some();
+    if has_sidecar {
+        let sidecar = crate::culling::read_sidecar(path);
+        if let Some(ref override_str) = sidecar.date_override {
+            if let Some(mut dt) = parse_flexible_datetime(override_str) {
+                if let Some(shift) = sidecar.time_shift_seconds {
+                    dt += chrono::Duration::seconds(shift);
+                }
+                return Some(dt);
+            }
+        }
+        if let Some(shift) = sidecar.time_shift_seconds.filter(|&s| s != 0) {
+            let base_dt = get_creation_date(path).ok()
+                .or_else(|| path.file_name().and_then(|s| s.to_str()).and_then(parse_date_from_filename))
+                .or_else(|| meta.and_then(|m| m.modified().or_else(|_| m.created()).ok().map(|sys_time| {
+                    let dt: chrono::DateTime<chrono::Local> = sys_time.into();
+                    dt.naive_local()
+                })));
+            if let Some(mut dt) = base_dt {
+                dt += chrono::Duration::seconds(shift);
+                return Some(dt);
+            }
+        }
+    }
+
     // 1. EXIF / Metadata is the absolute authority!
     if let Ok(dt) = get_creation_date(path) {
         return Some(dt);
@@ -195,6 +256,44 @@ pub fn get_creation_date(path: &Path) -> Result<NaiveDateTime> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_parse_flexible_datetime() {
+        assert_eq!(
+            parse_flexible_datetime("2026-08-15T14:30:22").unwrap().format("%Y-%m-%d %H:%M:%S").to_string(),
+            "2026-08-15 14:30:22"
+        );
+        assert_eq!(
+            parse_flexible_datetime("2026-08-15 14:30:22").unwrap().format("%Y-%m-%d %H:%M:%S").to_string(),
+            "2026-08-15 14:30:22"
+        );
+        assert_eq!(
+            parse_flexible_datetime("2026:08:15 14:30:22").unwrap().format("%Y-%m-%d %H:%M:%S").to_string(),
+            "2026-08-15 14:30:22"
+        );
+        assert_eq!(
+            parse_flexible_datetime("2026-08-15T14:30").unwrap().format("%Y-%m-%d %H:%M:%S").to_string(),
+            "2026-08-15 14:30:00"
+        );
+        assert_eq!(
+            parse_flexible_datetime("2026-08-15 14:30").unwrap().format("%Y-%m-%d %H:%M:%S").to_string(),
+            "2026-08-15 14:30:00"
+        );
+        assert_eq!(
+            parse_flexible_datetime("2026-08-15").unwrap().format("%Y-%m-%d %H:%M:%S").to_string(),
+            "2026-08-15 00:00:00"
+        );
+        assert_eq!(
+            parse_flexible_datetime("2026-08").unwrap().format("%Y-%m-%d %H:%M:%S").to_string(),
+            "2026-08-01 00:00:00"
+        );
+        assert_eq!(
+            parse_flexible_datetime("2026").unwrap().format("%Y-%m-%d %H:%M:%S").to_string(),
+            "2026-01-01 00:00:00"
+        );
+        assert!(parse_flexible_datetime("").is_none());
+        assert!(parse_flexible_datetime("invalid").is_none());
+    }
 
     #[test]
     fn test_parse_date_from_filename() {

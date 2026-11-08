@@ -3,7 +3,8 @@ use std::path::Path;
 use anyhow::Result;
 use walkdir::WalkDir;
 use chrono::{Datelike, NaiveDateTime};
-use crate::culling::{read_sidecar, CullingState};
+use crate::culling::{get_sidecar_path, read_sidecar, CullingState};
+use crate::culling_xmp::find_existing_xmp_path;
 use regex::Regex;
 use std::sync::LazyLock;
 
@@ -197,6 +198,20 @@ fn get_streaming_discovery_date(
     name: &str,
     meta: Option<&std::fs::Metadata>,
 ) -> Option<NaiveDateTime> {
+    // 0. Priority: Sidecar Date Override (Highest priority if sidecar exists on disk)
+    let has_sidecar = get_sidecar_path(path).is_file() || find_existing_xmp_path(path).is_some();
+    if has_sidecar {
+        let sidecar = read_sidecar(path);
+        if let Some(ref override_str) = sidecar.date_override {
+            if let Some(mut dt) = crate::date_resolver::parse_flexible_datetime(override_str) {
+                if let Some(shift) = sidecar.time_shift_seconds {
+                    dt += chrono::Duration::seconds(shift);
+                }
+                return Some(dt);
+            }
+        }
+    }
+
     // 1. Priority: Parse date from filename
     if let Some(dt) = crate::date_resolver::parse_date_from_filename(name) {
         return Some(dt);

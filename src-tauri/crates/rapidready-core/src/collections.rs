@@ -317,6 +317,48 @@ pub fn prune_folder_from_all_collections(tree: &mut [AlbumItem], folder_path: &s
     modified
 }
 
+/// Replaces old paths with new paths in all albums throughout the tree. Returns true if modified.
+pub fn relocate_paths_in_all_collections(
+    tree: &mut [AlbumItem],
+    replacements: &std::collections::HashMap<String, String>,
+) -> bool {
+    if replacements.is_empty() {
+        return false;
+    }
+    let norm_map: std::collections::HashMap<String, String> = replacements
+        .iter()
+        .map(|(old_p, new_p)| (normalize_path_for_cmp(old_p), new_p.clone()))
+        .collect();
+
+    let mut modified = false;
+
+    fn walk(
+        items: &mut [AlbumItem],
+        norm_map: &std::collections::HashMap<String, String>,
+        modified: &mut bool,
+    ) {
+        for item in items.iter_mut() {
+            match item {
+                AlbumItem::Album { images, .. } => {
+                    for img in images.iter_mut() {
+                        let norm = normalize_path_for_cmp(img);
+                        if let Some(new_path) = norm_map.get(&norm) {
+                            *img = new_path.clone();
+                            *modified = true;
+                        }
+                    }
+                }
+                AlbumItem::Group { children, .. } => {
+                    walk(children, norm_map, modified);
+                }
+            }
+        }
+    }
+
+    walk(tree, &norm_map, &mut modified);
+    modified
+}
+
 /// Prunes (removes) any albums and groups from the tree that belong to the specified library_root.
 /// An album belongs to library_root if its library_root matches or if all its images belong to library_root.
 /// A group belongs to library_root if its library_root matches.
@@ -702,5 +744,53 @@ mod tests {
         // Only a1 should remain!
         assert_eq!(full_tree.len(), 1);
         assert_eq!(full_tree[0].id(), "a1");
+    }
+
+    #[test]
+    fn test_relocate_paths_in_all_collections() {
+        let mut tree = vec![
+            AlbumItem::Album {
+                id: "a1".into(),
+                name: "Trip".into(),
+                icon: None,
+                library_root: None,
+                images: vec!["/Archive/2023/2023-01-01/img1.jpg".into(), "/Archive/2023/2023-01-01/img2.jpg".into()],
+            },
+            AlbumItem::Group {
+                id: "g1".into(),
+                name: "Favorites".into(),
+                icon: None,
+                library_root: None,
+                children: vec![
+                    AlbumItem::Album {
+                        id: "a2".into(),
+                        name: "Best".into(),
+                        icon: None,
+                        library_root: None,
+                        images: vec!["/Archive/2023/2023-01-01/img1.jpg".into()],
+                    }
+                ],
+            }
+        ];
+
+        let mut replacements = std::collections::HashMap::new();
+        replacements.insert("/Archive/2023/2023-01-01/img1.jpg".into(), "/Archive/2024/2024-05-12/img1.jpg".into());
+
+        assert!(relocate_paths_in_all_collections(&mut tree, &replacements));
+
+        if let AlbumItem::Album { images, .. } = &tree[0] {
+            assert_eq!(images[0], "/Archive/2024/2024-05-12/img1.jpg");
+            assert_eq!(images[1], "/Archive/2023/2023-01-01/img2.jpg");
+        } else {
+            panic!("Expected Album");
+        }
+
+        if let AlbumItem::Group { children, .. } = &tree[1] {
+            if let AlbumItem::Album { images, .. } = &children[0] {
+                assert_eq!(images[0], "/Archive/2024/2024-05-12/img1.jpg");
+            } else {
+                panic!("Expected child album");
+            }
+        }
     }
 }

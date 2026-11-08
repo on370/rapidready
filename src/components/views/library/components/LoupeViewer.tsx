@@ -213,7 +213,7 @@ export const LoupeViewer = React.memo(function LoupeViewer({
   // Lazy-load metadata for debounced active variant if needed
   useEffect(() => {
     if (!displayedVariant) return;
-    if (displayedVariant.camera === undefined || displayedVariant.is_monochrome_preview === undefined || displayedVariant.exposure_bias === undefined) {
+    if (displayedVariant.camera === undefined || displayedVariant.is_monochrome_preview === undefined || displayedVariant.exposure_bias === undefined || displayedVariant.original_date === undefined) {
       let isMounted = true;
       invoke<{
         date: string | null;
@@ -245,6 +245,17 @@ export const LoupeViewer = React.memo(function LoupeViewer({
         body_serial?: string | null;
         lens_serial?: string | null;
         subsec_time?: string | null;
+        original_date?: string | null;
+        date_override?: string | null;
+        time_shift_seconds?: number | null;
+        artist?: string | null;
+        copyright?: string | null;
+        usage_terms?: string | null;
+        title?: string | null;
+        description?: string | null;
+        exif_artist?: string | null;
+        exif_copyright?: string | null;
+        exif_description?: string | null;
       }>('get_image_metadata', { path: displayedVariant.path })
         .then((meta) => {
           if (isMounted && meta) {
@@ -278,6 +289,17 @@ export const LoupeViewer = React.memo(function LoupeViewer({
               body_serial: meta.body_serial ?? null,
               lens_serial: meta.lens_serial ?? null,
               subsec_time: meta.subsec_time ?? null,
+              original_date: meta.original_date ?? null,
+              date_override: meta.date_override ?? null,
+              time_shift_seconds: meta.time_shift_seconds ?? null,
+              artist: meta.artist ?? null,
+              copyright: meta.copyright ?? null,
+              usage_terms: meta.usage_terms ?? null,
+              title: meta.title ?? null,
+              description: meta.description ?? null,
+              exif_artist: meta.exif_artist ?? null,
+              exif_copyright: meta.exif_copyright ?? null,
+              exif_description: meta.exif_description ?? null,
             });
           }
         })

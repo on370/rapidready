@@ -87,6 +87,79 @@ static RE_GPS_ALT_REF_TAG: LazyLock<Regex> = LazyLock::new(|| {
 static RE_GPS_ALT_REF_ATTR: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"\bexif:GPSAltitudeRef="([^"]*)""#).unwrap());
 
+// Editorial & Date Regexes
+static RE_DC_CREATOR_BLOCK: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?s)<dc:creator\b[^>]*>.*?<rdf:li\b[^>]*>(.*?)</rdf:li>.*?</dc:creator>").unwrap()
+});
+static RE_DC_CREATOR_FULL_BLOCK: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?s)<dc:creator\b[^>]*>.*?</dc:creator>").unwrap()
+});
+static RE_TIFF_ARTIST_TAG: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?s)<tiff:Artist>([^<]*)</tiff:Artist>").unwrap()
+});
+static RE_TIFF_ARTIST_ATTR: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"\btiff:Artist="([^"]*)""#).unwrap()
+});
+
+static RE_DC_RIGHTS_BLOCK: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?s)<dc:rights\b[^>]*>.*?<rdf:li\b[^>]*>(.*?)</rdf:li>.*?</dc:rights>").unwrap()
+});
+static RE_DC_RIGHTS_FULL_BLOCK: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?s)<dc:rights\b[^>]*>.*?</dc:rights>").unwrap()
+});
+static RE_TIFF_COPYRIGHT_TAG: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?s)<tiff:Copyright>([^<]*)</tiff:Copyright>").unwrap()
+});
+static RE_TIFF_COPYRIGHT_ATTR: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"\btiff:Copyright="([^"]*)""#).unwrap()
+});
+
+static RE_XMP_RIGHTS_USAGE_TERMS_BLOCK: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?s)<xmpRights:UsageTerms\b[^>]*>.*?<rdf:li\b[^>]*>(.*?)</rdf:li>.*?</xmpRights:UsageTerms>").unwrap()
+});
+static RE_XMP_RIGHTS_USAGE_TERMS_FULL_BLOCK: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?s)<xmpRights:UsageTerms\b[^>]*>.*?</xmpRights:UsageTerms>").unwrap()
+});
+static RE_XMP_RIGHTS_USAGE_TERMS_TAG: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?s)<xmpRights:UsageTerms>([^<]*)</xmpRights:UsageTerms>").unwrap()
+});
+static RE_XMP_RIGHTS_USAGE_TERMS_ATTR: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"\bxmpRights:UsageTerms="([^"]*)""#).unwrap()
+});
+
+static RE_DC_TITLE_BLOCK: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?s)<dc:title\b[^>]*>.*?<rdf:li\b[^>]*>(.*?)</rdf:li>.*?</dc:title>").unwrap()
+});
+static RE_DC_TITLE_FULL_BLOCK: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?s)<dc:title\b[^>]*>.*?</dc:title>").unwrap()
+});
+static RE_DC_TITLE_TAG: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?s)<dc:title>([^<]*)</dc:title>").unwrap()
+});
+static RE_DC_TITLE_ATTR: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"\bdc:title="([^"]*)""#).unwrap()
+});
+
+static RE_DC_DESC_BLOCK: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?s)<dc:description\b[^>]*>.*?<rdf:li\b[^>]*>(.*?)</rdf:li>.*?</dc:description>").unwrap()
+});
+static RE_DC_DESC_FULL_BLOCK: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?s)<dc:description\b[^>]*>.*?</dc:description>").unwrap()
+});
+static RE_DC_DESC_TAG: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?s)<dc:description>([^<]*)</dc:description>").unwrap()
+});
+static RE_DC_DESC_ATTR: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"\bdc:description="([^"]*)""#).unwrap()
+});
+
+static RE_PHOTOSHOP_DATE_CREATED_TAG: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?s)<photoshop:DateCreated>([^<]*)</photoshop:DateCreated>").unwrap()
+});
+static RE_PHOTOSHOP_DATE_CREATED_ATTR: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"\bphotoshop:DateCreated="([^"]*)""#).unwrap()
+});
+
 pub fn unescape_xml(s: &str) -> String {
     s.replace("&amp;", "&")
         .replace("&lt;", "<")
@@ -222,6 +295,55 @@ pub fn parse_sidecar_xmp(contents: &str) -> CullingState {
             state.flag = Some(-1);
         }
     }
+
+    // 6. Editorial metadata
+    state.artist = RE_DC_CREATOR_BLOCK
+        .captures(contents)
+        .and_then(|c| c.get(1))
+        .or_else(|| RE_TIFF_ARTIST_TAG.captures(contents).and_then(|c| c.get(1)))
+        .or_else(|| RE_TIFF_ARTIST_ATTR.captures(contents).and_then(|c| c.get(1)))
+        .map(|m| unescape_xml(m.as_str().trim()))
+        .filter(|s| !s.is_empty());
+
+    state.copyright = RE_DC_RIGHTS_BLOCK
+        .captures(contents)
+        .and_then(|c| c.get(1))
+        .or_else(|| RE_TIFF_COPYRIGHT_TAG.captures(contents).and_then(|c| c.get(1)))
+        .or_else(|| RE_TIFF_COPYRIGHT_ATTR.captures(contents).and_then(|c| c.get(1)))
+        .map(|m| unescape_xml(m.as_str().trim()))
+        .filter(|s| !s.is_empty());
+
+    state.usage_terms = RE_XMP_RIGHTS_USAGE_TERMS_BLOCK
+        .captures(contents)
+        .and_then(|c| c.get(1))
+        .or_else(|| RE_XMP_RIGHTS_USAGE_TERMS_TAG.captures(contents).and_then(|c| c.get(1)))
+        .or_else(|| RE_XMP_RIGHTS_USAGE_TERMS_ATTR.captures(contents).and_then(|c| c.get(1)))
+        .map(|m| unescape_xml(m.as_str().trim()))
+        .filter(|s| !s.is_empty());
+
+    state.title = RE_DC_TITLE_BLOCK
+        .captures(contents)
+        .and_then(|c| c.get(1))
+        .or_else(|| RE_DC_TITLE_TAG.captures(contents).and_then(|c| c.get(1)))
+        .or_else(|| RE_DC_TITLE_ATTR.captures(contents).and_then(|c| c.get(1)))
+        .map(|m| unescape_xml(m.as_str().trim()))
+        .filter(|s| !s.is_empty());
+
+    state.description = RE_DC_DESC_BLOCK
+        .captures(contents)
+        .and_then(|c| c.get(1))
+        .or_else(|| RE_DC_DESC_TAG.captures(contents).and_then(|c| c.get(1)))
+        .or_else(|| RE_DC_DESC_ATTR.captures(contents).and_then(|c| c.get(1)))
+        .map(|m| unescape_xml(m.as_str().trim()))
+        .filter(|s| !s.is_empty());
+
+    // 7. DateCreated (date_override)
+    state.date_override = RE_PHOTOSHOP_DATE_CREATED_TAG
+        .captures(contents)
+        .and_then(|c| c.get(1))
+        .or_else(|| RE_PHOTOSHOP_DATE_CREATED_ATTR.captures(contents).and_then(|c| c.get(1)))
+        .map(|m| m.as_str().trim().to_string())
+        .filter(|s| !s.is_empty());
 
     state
 }
@@ -543,6 +665,20 @@ fn patch_xmp_xml(existing: &str, state: &CullingState, rating_val: &str) -> anyh
         if !xml.contains("xmlns:darktable=") && !xml.contains("xmlns:darktable\t") {
             xml = xml.replacen("<rdf:Description", "<rdf:Description\n   xmlns:darktable=\"http://darktable.sf.net/\"", 1);
         }
+        if !xml.contains("xmlns:photoshop=") && !xml.contains("xmlns:photoshop\t") {
+            xml = xml.replacen("<rdf:Description", "<rdf:Description\n   xmlns:photoshop=\"http://ns.adobe.com/photoshop/1.0/\"", 1);
+        }
+        if !xml.contains("xmlns:xmpRights=") && !xml.contains("xmlns:xmpRights\t") {
+            xml = xml.replacen("<rdf:Description", "<rdf:Description\n   xmlns:xmpRights=\"http://ns.adobe.com/xap/1.0/rights/\"", 1);
+        }
+    }
+
+    // Expand self-closing <rdf:Description ... /> early so insertions before </rdf:Description> succeed
+    if let Some(cap) = Regex::new(r"(?s)<rdf:Description\b([^>]*?)/>").unwrap().captures(&xml) {
+        let full = cap.get(0).unwrap().as_str();
+        let attrs = cap.get(1).unwrap().as_str();
+        let expanded = format!("<rdf:Description{}>\n </rdf:Description>", attrs);
+        xml = xml.replace(full, &expanded);
     }
 
     // 2. Patch xmp:Rating
@@ -652,6 +788,116 @@ fn patch_xmp_xml(existing: &str, state: &CullingState, rating_val: &str) -> anyh
         xml = RE_LR_HIERARCHICAL_SUBJECT_BLOCK.replace(&xml, &hierarchical_block).to_string();
     } else if xml.contains("</rdf:Description>") {
         xml = xml.replacen("</rdf:Description>", &format!("{}\n </rdf:Description>", hierarchical_block), 1);
+    }
+
+    // 6. Patch dc:creator (artist)
+    if let Some(ref a) = state.artist {
+        let block = format!(
+            "  <dc:creator>\n   <rdf:Seq>\n    <rdf:li>{}</rdf:li>\n   </rdf:Seq>\n  </dc:creator>",
+            escape_xml(a)
+        );
+        if RE_DC_CREATOR_FULL_BLOCK.is_match(&xml) {
+            xml = RE_DC_CREATOR_FULL_BLOCK.replace(&xml, &block).to_string();
+        } else if xml.contains("</rdf:Description>") {
+            xml = xml.replacen("</rdf:Description>", &format!("{}\n </rdf:Description>", block), 1);
+        }
+        xml = RE_TIFF_ARTIST_TAG.replace_all(&xml, "").to_string();
+        xml = RE_TIFF_ARTIST_ATTR.replace_all(&xml, "").to_string();
+    } else {
+        xml = RE_DC_CREATOR_FULL_BLOCK.replace_all(&xml, "").to_string();
+        xml = RE_TIFF_ARTIST_TAG.replace_all(&xml, "").to_string();
+        xml = RE_TIFF_ARTIST_ATTR.replace_all(&xml, "").to_string();
+    }
+
+    // 7. Patch dc:rights (copyright)
+    if let Some(ref c) = state.copyright {
+        let block = format!(
+            "  <dc:rights>\n   <rdf:Alt>\n    <rdf:li xml:lang=\"x-default\">{}</rdf:li>\n   </rdf:Alt>\n  </dc:rights>",
+            escape_xml(c)
+        );
+        if RE_DC_RIGHTS_FULL_BLOCK.is_match(&xml) {
+            xml = RE_DC_RIGHTS_FULL_BLOCK.replace(&xml, &block).to_string();
+        } else if xml.contains("</rdf:Description>") {
+            xml = xml.replacen("</rdf:Description>", &format!("{}\n </rdf:Description>", block), 1);
+        }
+        xml = RE_TIFF_COPYRIGHT_TAG.replace_all(&xml, "").to_string();
+        xml = RE_TIFF_COPYRIGHT_ATTR.replace_all(&xml, "").to_string();
+    } else {
+        xml = RE_DC_RIGHTS_FULL_BLOCK.replace_all(&xml, "").to_string();
+        xml = RE_TIFF_COPYRIGHT_TAG.replace_all(&xml, "").to_string();
+        xml = RE_TIFF_COPYRIGHT_ATTR.replace_all(&xml, "").to_string();
+    }
+
+    // 8. Patch xmpRights:UsageTerms (usage_terms)
+    if let Some(ref u) = state.usage_terms {
+        let block = format!(
+            "  <xmpRights:UsageTerms>\n   <rdf:Alt>\n    <rdf:li xml:lang=\"x-default\">{}</rdf:li>\n   </rdf:Alt>\n  </xmpRights:UsageTerms>",
+            escape_xml(u)
+        );
+        if RE_XMP_RIGHTS_USAGE_TERMS_FULL_BLOCK.is_match(&xml) {
+            xml = RE_XMP_RIGHTS_USAGE_TERMS_FULL_BLOCK.replace(&xml, &block).to_string();
+        } else if xml.contains("</rdf:Description>") {
+            xml = xml.replacen("</rdf:Description>", &format!("{}\n </rdf:Description>", block), 1);
+        }
+        xml = RE_XMP_RIGHTS_USAGE_TERMS_TAG.replace_all(&xml, "").to_string();
+        xml = RE_XMP_RIGHTS_USAGE_TERMS_ATTR.replace_all(&xml, "").to_string();
+    } else {
+        xml = RE_XMP_RIGHTS_USAGE_TERMS_FULL_BLOCK.replace_all(&xml, "").to_string();
+        xml = RE_XMP_RIGHTS_USAGE_TERMS_TAG.replace_all(&xml, "").to_string();
+        xml = RE_XMP_RIGHTS_USAGE_TERMS_ATTR.replace_all(&xml, "").to_string();
+    }
+
+    // 9. Patch dc:title (title)
+    if let Some(ref t) = state.title {
+        let block = format!(
+            "  <dc:title>\n   <rdf:Alt>\n    <rdf:li xml:lang=\"x-default\">{}</rdf:li>\n   </rdf:Alt>\n  </dc:title>",
+            escape_xml(t)
+        );
+        if RE_DC_TITLE_FULL_BLOCK.is_match(&xml) {
+            xml = RE_DC_TITLE_FULL_BLOCK.replace(&xml, &block).to_string();
+        } else if xml.contains("</rdf:Description>") {
+            xml = xml.replacen("</rdf:Description>", &format!("{}\n </rdf:Description>", block), 1);
+        }
+        xml = RE_DC_TITLE_TAG.replace_all(&xml, "").to_string();
+        xml = RE_DC_TITLE_ATTR.replace_all(&xml, "").to_string();
+    } else {
+        xml = RE_DC_TITLE_FULL_BLOCK.replace_all(&xml, "").to_string();
+        xml = RE_DC_TITLE_TAG.replace_all(&xml, "").to_string();
+        xml = RE_DC_TITLE_ATTR.replace_all(&xml, "").to_string();
+    }
+
+    // 10. Patch dc:description (description)
+    if let Some(ref d) = state.description {
+        let block = format!(
+            "  <dc:description>\n   <rdf:Alt>\n    <rdf:li xml:lang=\"x-default\">{}</rdf:li>\n   </rdf:Alt>\n  </dc:description>",
+            escape_xml(d)
+        );
+        if RE_DC_DESC_FULL_BLOCK.is_match(&xml) {
+            xml = RE_DC_DESC_FULL_BLOCK.replace(&xml, &block).to_string();
+        } else if xml.contains("</rdf:Description>") {
+            xml = xml.replacen("</rdf:Description>", &format!("{}\n </rdf:Description>", block), 1);
+        }
+        xml = RE_DC_DESC_TAG.replace_all(&xml, "").to_string();
+        xml = RE_DC_DESC_ATTR.replace_all(&xml, "").to_string();
+    } else {
+        xml = RE_DC_DESC_FULL_BLOCK.replace_all(&xml, "").to_string();
+        xml = RE_DC_DESC_TAG.replace_all(&xml, "").to_string();
+        xml = RE_DC_DESC_ATTR.replace_all(&xml, "").to_string();
+    }
+
+    // 11. Patch photoshop:DateCreated (date_override)
+    if let Some(ref d) = state.date_override {
+        let tag = format!("  <photoshop:DateCreated>{}</photoshop:DateCreated>", escape_xml(d));
+        if RE_PHOTOSHOP_DATE_CREATED_TAG.is_match(&xml) {
+            xml = RE_PHOTOSHOP_DATE_CREATED_TAG.replace(&xml, &tag).to_string();
+        } else if RE_PHOTOSHOP_DATE_CREATED_ATTR.is_match(&xml) {
+            xml = RE_PHOTOSHOP_DATE_CREATED_ATTR.replace(&xml, format!("photoshop:DateCreated=\"{}\"", escape_xml(d))).to_string();
+        } else if xml.contains("</rdf:Description>") {
+            xml = xml.replacen("</rdf:Description>", &format!("{}\n </rdf:Description>", tag), 1);
+        }
+    } else {
+        xml = RE_PHOTOSHOP_DATE_CREATED_TAG.replace_all(&xml, "").to_string();
+        xml = RE_PHOTOSHOP_DATE_CREATED_ATTR.replace_all(&xml, "").to_string();
     }
 
     Ok(xml)
@@ -796,6 +1042,50 @@ fn generate_fresh_xmp(state: &CullingState, rating_val: &str) -> String {
     let subject_block = build_subject_block(&clean_tags);
     let hierarchical_block = build_hierarchical_subject_block(&clean_tags);
 
+    let mut extra_blocks = Vec::new();
+    if let Some(ref a) = state.artist {
+        extra_blocks.push(format!(
+            "  <dc:creator>\n   <rdf:Seq>\n    <rdf:li>{}</rdf:li>\n   </rdf:Seq>\n  </dc:creator>",
+            escape_xml(a)
+        ));
+    }
+    if let Some(ref c) = state.copyright {
+        extra_blocks.push(format!(
+            "  <dc:rights>\n   <rdf:Alt>\n    <rdf:li xml:lang=\"x-default\">{}</rdf:li>\n   </rdf:Alt>\n  </dc:rights>",
+            escape_xml(c)
+        ));
+    }
+    if let Some(ref u) = state.usage_terms {
+        extra_blocks.push(format!(
+            "  <xmpRights:UsageTerms>\n   <rdf:Alt>\n    <rdf:li xml:lang=\"x-default\">{}</rdf:li>\n   </rdf:Alt>\n  </xmpRights:UsageTerms>",
+            escape_xml(u)
+        ));
+    }
+    if let Some(ref t) = state.title {
+        extra_blocks.push(format!(
+            "  <dc:title>\n   <rdf:Alt>\n    <rdf:li xml:lang=\"x-default\">{}</rdf:li>\n   </rdf:Alt>\n  </dc:title>",
+            escape_xml(t)
+        ));
+    }
+    if let Some(ref d) = state.description {
+        extra_blocks.push(format!(
+            "  <dc:description>\n   <rdf:Alt>\n    <rdf:li xml:lang=\"x-default\">{}</rdf:li>\n   </rdf:Alt>\n  </dc:description>",
+            escape_xml(d)
+        ));
+    }
+    if let Some(ref d) = state.date_override {
+        extra_blocks.push(format!(
+            "  <photoshop:DateCreated>{}</photoshop:DateCreated>",
+            escape_xml(d)
+        ));
+    }
+
+    let extra_blocks_str = if extra_blocks.is_empty() {
+        String::new()
+    } else {
+        format!("\n{}", extra_blocks.join("\n"))
+    };
+
     format!(
         r#"<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="RapidReady">
  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
@@ -804,16 +1094,18 @@ fn generate_fresh_xmp(state: &CullingState, rating_val: &str) -> String {
    xmlns:dc="http://purl.org/dc/elements/1.1/"
    xmlns:tiff="http://ns.adobe.com/tiff/1.0/"
    xmlns:exif="http://ns.adobe.com/exif/1.0/"
+   xmlns:photoshop="http://ns.adobe.com/photoshop/1.0/"
+   xmlns:xmpRights="http://ns.adobe.com/xap/1.0/rights/"
    xmlns:lr="http://ns.adobe.com/lightroom/1.0/"
    xmlns:darktable="http://darktable.sf.net/"
    xmp:Rating="{}"{}{}>
  {}
- {}{}
+ {}{}{}
   </rdf:Description>
  </rdf:RDF>
 </x:xmpmeta>
 "#,
-        rating_val, label_attr, orient_attr, subject_block, hierarchical_block, dt_block
+        rating_val, label_attr, orient_attr, subject_block, hierarchical_block, dt_block, extra_blocks_str
     )
 }
 

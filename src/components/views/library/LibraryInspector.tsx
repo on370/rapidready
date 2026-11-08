@@ -8,6 +8,7 @@ import { normalizePath, isVideoFilename } from "../../../utils/image";
 import { InspectorPreviewCard } from "./inspector/InspectorPreviewCard";
 import { InspectorCullingCard } from "./inspector/InspectorCullingCard";
 import { InspectorTagsCard } from "./inspector/InspectorTagsCard";
+import { InspectorEditorialCard } from "./inspector/InspectorEditorialCard";
 import { InspectorFileInfoCard } from "./inspector/InspectorFileInfoCard";
 import { InspectorCameraCard } from "./inspector/InspectorCameraCard";
 import { InspectorGpsCard } from "./inspector/InspectorGpsCard";
@@ -134,7 +135,7 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
   // Lazy-load detailed EXIF metadata when an image is selected
   useEffect(() => {
     if (!activeImage) return;
-    if (activeImage.camera === undefined || activeImage.is_monochrome_preview === undefined || activeImage.exposure_bias === undefined) {
+    if (activeImage.camera === undefined || activeImage.is_monochrome_preview === undefined || activeImage.exposure_bias === undefined || activeImage.original_date === undefined) {
       let isMounted = true;
       invoke<{
         date: string | null;
@@ -166,6 +167,17 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
         body_serial?: string | null;
         lens_serial?: string | null;
         subsec_time?: string | null;
+        original_date?: string | null;
+        date_override?: string | null;
+        time_shift_seconds?: number | null;
+        artist?: string | null;
+        copyright?: string | null;
+        usage_terms?: string | null;
+        title?: string | null;
+        description?: string | null;
+        exif_artist?: string | null;
+        exif_copyright?: string | null;
+        exif_description?: string | null;
       }>('get_image_metadata', { path: activeImage.path })
         .then(meta => {
           if (isMounted && meta) {
@@ -199,6 +211,17 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
               body_serial: meta.body_serial ?? null,
               lens_serial: meta.lens_serial ?? null,
               subsec_time: meta.subsec_time ?? null,
+              original_date: meta.original_date ?? null,
+              date_override: meta.date_override ?? null,
+              time_shift_seconds: meta.time_shift_seconds ?? null,
+              artist: meta.artist ?? null,
+              copyright: meta.copyright ?? null,
+              usage_terms: meta.usage_terms ?? null,
+              title: meta.title ?? null,
+              description: meta.description ?? null,
+              exif_artist: meta.exif_artist ?? null,
+              exif_copyright: meta.exif_copyright ?? null,
+              exif_description: meta.exif_description ?? null,
             });
           }
         })
@@ -272,6 +295,12 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
               scopedImages={scopedImages}
               isCollapsed={isCollapsed('tags')}
               onToggle={() => toggleSection('tags')}
+            />
+
+            <InspectorEditorialCard
+              activeImage={activeImage}
+              isCollapsed={isCollapsed('editorial')}
+              onToggle={() => toggleSection('editorial')}
             />
 
             <InspectorFileInfoCard

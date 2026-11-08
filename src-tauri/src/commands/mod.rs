@@ -135,4 +135,32 @@ mod tests {
             let _ = std::fs::remove_dir_all(&temp_dir);
         });
     }
+
+    #[test]
+    fn test_date_detection_and_structure() {
+        assert!(is_yyyy_mm_dd("2024-05-12"));
+        assert!(!is_yyyy_mm_dd("2024-05"));
+        assert!(!is_yyyy_mm_dd("invalid"));
+
+        assert!(is_yyyy_mm("2024-05"));
+        assert!(!is_yyyy_mm("2024-05-12"));
+        assert!(!is_yyyy_mm("2024"));
+
+        let temp_dir = std::env::temp_dir().join(format!("rapidready_detect_test_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&temp_dir);
+
+        // Empty dir defaults to true (YYYY-MM-DD)
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        assert!(detect_archive_date_structure(&temp_dir));
+
+        // Adding a month folder -> returns false
+        std::fs::create_dir_all(temp_dir.join("2024").join("2024-05")).unwrap();
+        assert!(!detect_archive_date_structure(&temp_dir));
+
+        // Adding a day folder -> returns true
+        std::fs::create_dir_all(temp_dir.join("2024").join("2024-05-12")).unwrap();
+        assert!(detect_archive_date_structure(&temp_dir));
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
 }

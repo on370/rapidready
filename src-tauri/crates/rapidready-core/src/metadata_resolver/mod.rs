@@ -58,6 +58,28 @@ pub struct ImageMetadata {
     pub lens_serial: Option<String>,
     #[serde(default)]
     pub subsec_time: Option<String>,
+    #[serde(default)]
+    pub original_date: Option<NaiveDateTime>,
+    #[serde(default)]
+    pub date_override: Option<String>,
+    #[serde(default)]
+    pub time_shift_seconds: Option<i64>,
+    #[serde(default)]
+    pub artist: Option<String>,
+    #[serde(default)]
+    pub copyright: Option<String>,
+    #[serde(default)]
+    pub usage_terms: Option<String>,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub exif_artist: Option<String>,
+    #[serde(default)]
+    pub exif_copyright: Option<String>,
+    #[serde(default)]
+    pub exif_description: Option<String>,
 }
 
 pub fn is_video_path(path: &Path) -> bool {
@@ -669,6 +691,30 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
                     meta.subsec_time = Some(digits);
                 }
             }
+
+            // 24. Artist (Tag 0x013B)
+            if let Some(field) = exif.fields().find(|f| f.tag == exif::Tag::Artist) {
+                let s = extract_ascii_field(field);
+                if !s.is_empty() {
+                    meta.exif_artist = Some(s);
+                }
+            }
+
+            // 25. Copyright (Tag 0x8298)
+            if let Some(field) = exif.fields().find(|f| f.tag == exif::Tag::Copyright) {
+                let s = extract_ascii_field(field);
+                if !s.is_empty() {
+                    meta.exif_copyright = Some(s);
+                }
+            }
+
+            // 26. ImageDescription (Tag 0x010E)
+            if let Some(field) = exif.fields().find(|f| f.tag == exif::Tag::ImageDescription) {
+                let s = extract_ascii_field(field);
+                if !s.is_empty() {
+                    meta.exif_description = Some(s);
+                }
+            }
         }
     }
 
@@ -710,16 +756,41 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
         dt.naive_local()
     });
 
-    if let Some(d) = exif_capture_date {
-        meta.date = Some(d);
-        meta.date_modified = exif_modify_date.or(fs_modified);
+    let orig_date = if let Some(d) = exif_capture_date {
+        Some(d)
     } else if let Some(m_date) = exif_modify_date {
-        meta.date = Some(m_date);
-        meta.date_modified = fs_modified;
+        Some(m_date)
     } else {
-        meta.date = crate::date_resolver::get_creation_date(path).ok();
-        meta.date_modified = fs_modified;
+        crate::date_resolver::get_creation_date(path).ok()
+    };
+    meta.original_date = orig_date;
+
+    let sidecar = crate::culling::read_sidecar(path);
+    meta.artist = sidecar.artist.clone().filter(|s| !s.is_empty()).or_else(|| meta.exif_artist.clone());
+    meta.copyright = sidecar.copyright.clone().filter(|s| !s.is_empty()).or_else(|| meta.exif_copyright.clone());
+    meta.usage_terms = sidecar.usage_terms.clone().filter(|s| !s.is_empty());
+    meta.title = sidecar.title.clone().filter(|s| !s.is_empty());
+    meta.description = sidecar.description.clone().filter(|s| !s.is_empty()).or_else(|| meta.exif_description.clone());
+    meta.date_override = sidecar.date_override.clone();
+    meta.time_shift_seconds = sidecar.time_shift_seconds;
+
+    // Calculate effective date:
+    // If sidecar.date_override yields a NaiveDateTime, use it (+ optional time_shift_seconds).
+    // Otherwise use orig_date (+ optional time_shift_seconds).
+    let mut effective_date = if let Some(ref d_str) = sidecar.date_override {
+        crate::date_resolver::parse_flexible_datetime(d_str).or(orig_date)
+    } else {
+        orig_date
+    };
+
+    if let (Some(dt), Some(shift)) = (&mut effective_date, sidecar.time_shift_seconds) {
+        if shift != 0 {
+            *dt += chrono::Duration::seconds(shift);
+        }
     }
+
+    meta.date = effective_date;
+    meta.date_modified = exif_modify_date.or(fs_modified);
 
     meta
 }

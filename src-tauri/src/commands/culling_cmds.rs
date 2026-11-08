@@ -481,3 +481,166 @@ pub async fn get_image_metadata(
     .await
     .map_err(|e| e.to_string())?
 }
+
+#[tauri::command]
+pub async fn set_editorial_batch(
+    app: AppHandle,
+    paths: Vec<String>,
+    artist: Option<String>,
+    copyright: Option<String>,
+    usage_terms: Option<String>,
+    title: Option<String>,
+    description: Option<String>,
+    catalog_state: State<'_, ArchiveCatalogState>,
+) -> Result<BatchCullingResult, String> {
+    let catalog = catalog_state.catalog.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let total = paths.len();
+        let mut succeeded = 0;
+        let mut failed = 0;
+        let mut first_error = None;
+
+        let to_patch_opt = |opt: &Option<String>| -> Option<Option<String>> {
+            match opt {
+                None => None,
+                Some(s) if s.trim().is_empty() => Some(None),
+                Some(s) => Some(Some(s.trim().to_string())),
+            }
+        };
+
+        let artist_patch = to_patch_opt(&artist);
+        let copyright_patch = to_patch_opt(&copyright);
+        let usage_terms_patch = to_patch_opt(&usage_terms);
+        let title_patch = to_patch_opt(&title);
+        let description_patch = to_patch_opt(&description);
+
+        for path_str in paths {
+            let p = PathBuf::from(&path_str);
+            match rapidready_core::culling::write_editorial_sidecar(
+                &p,
+                artist_patch.clone(),
+                copyright_patch.clone(),
+                usage_terms_patch.clone(),
+                title_patch.clone(),
+                description_patch.clone(),
+            ) {
+                Ok(updated_state) => {
+                    succeeded += 1;
+                    let _ = catalog.update_culling(&path_str, &updated_state, None);
+                    let _ = app.emit(
+                        "sidecar-updated",
+                        serde_json::json!({
+                            "path": path_str,
+                            "culling": updated_state
+                        }),
+                    );
+                }
+                Err(e) => {
+                    failed += 1;
+                    if first_error.is_none() {
+                        first_error = Some(format!("{}: {}", path_str, e));
+                    }
+                }
+            }
+        }
+
+        if failed > 0 && succeeded == 0 {
+            return Err(first_error.unwrap_or_else(|| "All file writes failed".into()));
+        }
+
+        Ok(BatchCullingResult {
+            total,
+            succeeded,
+            failed,
+            first_error,
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn set_date_override_batch(
+    app: AppHandle,
+    paths: Vec<String>,
+    date_override: Option<String>,
+    time_shift_seconds: Option<i64>,
+    reset_override: Option<bool>,
+    catalog_state: State<'_, ArchiveCatalogState>,
+) -> Result<BatchCullingResult, String> {
+    let catalog = catalog_state.catalog.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let total = paths.len();
+        let mut succeeded = 0;
+        let mut failed = 0;
+        let mut first_error = None;
+
+        let (date_patch, shift_patch) = if reset_override == Some(true) {
+            (Some(None), Some(None))
+        } else {
+            let d_patch = match date_override {
+                None => None,
+                Some(ref s) if s.trim().is_empty() => Some(None),
+                Some(ref s) => {
+                    if let Some(dt) = rapidready_core::date_resolver::parse_flexible_datetime(s) {
+                        Some(Some(dt.format("%Y-%m-%dT%H:%M:%S").to_string()))
+                    } else {
+                        Some(None)
+                    }
+                }
+            };
+            let s_patch = match time_shift_seconds {
+                None => None,
+                Some(0) => Some(None),
+                Some(s) => Some(Some(s)),
+            };
+            (d_patch, s_patch)
+        };
+
+        for path_str in paths {
+            let p = PathBuf::from(&path_str);
+            match rapidready_core::culling::write_date_override_sidecar(
+                &p,
+                date_patch.clone(),
+                shift_patch.clone(),
+            ) {
+                Ok(updated_state) => {
+                    succeeded += 1;
+                    let meta = rapidready_core::metadata_resolver::get_image_metadata(&p);
+                    let eff_date_str = meta.date.as_ref().map(|d| d.format("%Y-%m-%dT%H:%M:%S").to_string());
+                    if let Some(ref d_str) = eff_date_str {
+                        let _ = catalog.update_exif_date(&path_str, d_str);
+                    }
+                    let _ = catalog.update_culling(&path_str, &updated_state, None);
+                    let _ = app.emit(
+                        "sidecar-updated",
+                        serde_json::json!({
+                            "path": path_str,
+                            "culling": updated_state,
+                            "effectiveDate": eff_date_str
+                        }),
+                    );
+                }
+                Err(e) => {
+                    failed += 1;
+                    if first_error.is_none() {
+                        first_error = Some(format!("{}: {}", path_str, e));
+                    }
+                }
+            }
+        }
+
+        if failed > 0 && succeeded == 0 {
+            return Err(first_error.unwrap_or_else(|| "All file writes failed".into()));
+        }
+
+        Ok(BatchCullingResult {
+            total,
+            succeeded,
+            failed,
+            first_error,
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}

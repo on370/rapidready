@@ -10,6 +10,13 @@ export interface CullingState {
   tags: string[];
   orientation?: number | null;
   sidecar_source?: 'rrdata' | 'xmp' | 'both_rrdata' | 'both_xmp' | null;
+  date_override?: string | null;
+  time_shift_seconds?: number | null;
+  artist?: string | null;
+  copyright?: string | null;
+  usage_terms?: string | null;
+  title?: string | null;
+  description?: string | null;
 }
 
 export interface LibraryImage {
@@ -48,6 +55,17 @@ export interface LibraryImage {
   body_serial?: string | null;
   lens_serial?: string | null;
   subsec_time?: string | null;
+  original_date?: string | null;
+  date_override?: string | null;
+  time_shift_seconds?: number | null;
+  artist?: string | null;
+  copyright?: string | null;
+  usage_terms?: string | null;
+  title?: string | null;
+  description?: string | null;
+  exif_artist?: string | null;
+  exif_copyright?: string | null;
+  exif_description?: string | null;
   stackMembers?: LibraryImage[]; // Alle Bilder des Stapels (Index 0 = RAW/Primärbild, danach JPEGs)
   stackSubfolderLabels?: string[]; // z. B. ['JPG'] oder ['JPG', 'LR/JPG'] für das Kachel-Badge
 }
