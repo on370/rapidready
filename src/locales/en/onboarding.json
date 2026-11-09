@@ -28,7 +28,7 @@
   "steps": {
     "sidebarNav": {
       "title": "Your Command Center",
-      "body": "The sidebar gives you instant access to everything:\n\n• **Import** — ingest photos from memory cards, USB drives & folders\n• **Library** — browse, rapidly cull & organize your archive\n• **Help & Settings** — complete shortcut matrix, preferences & about"
+      "body": "The sidebar gives you instant access to everything:\n\n• **Import** — ingest photos from memory cards, USB drives & folders\n• **Library** — browse, rapidly cull & organize your archive\n• **Help & Settings** — complete shortcut matrix, preferences & about\n\n*Tip: Use \"Collapse\" at the bottom to shrink the sidebar to compact icons at any time.*"
     },
     "importSource": {
       "title": "Step 1: Choose Source",

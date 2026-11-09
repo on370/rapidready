@@ -1,5 +1,6 @@
 import { ViewType } from '../layout/Sidebar';
 import { useLibraryUIStore } from '../../stores/libraryUIStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 
 export interface TourStepDef {
   id: string;                     // Unique stable ID (never rename)
@@ -21,6 +22,9 @@ export const ALL_TOUR_STEPS: TourStepDef[] = [
     targetSelector: '[data-tour="sidebar-nav"]',
     placement: 'right',
     i18nKey: 'steps.sidebarNav',
+    beforeShow: () => {
+      useSettingsStore.getState().setSidebarExpanded(true);
+    },
   },
   {
     id: 'import-source',

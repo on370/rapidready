@@ -86,7 +86,9 @@ interface SettingsState {
   defaultCopyright: string;
   defaultUsageTerms: string;
   autoApplyEditorialOnImport: boolean;
+  sidebarExpanded: boolean;
   
+  setSidebarExpanded: (expanded: boolean) => void;
   setDefaultArtist: (val: string) => void;
   setDefaultCopyright: (val: string) => void;
   setDefaultUsageTerms: (val: string) => void;
@@ -146,6 +148,7 @@ export const useSettingsStore = create<SettingsState>()(
       defaultCopyright: '',
       defaultUsageTerms: '',
       autoApplyEditorialOnImport: true,
+      sidebarExpanded: true,
       presets: [
         {
           id: 'default-std',
@@ -164,6 +167,7 @@ export const useSettingsStore = create<SettingsState>()(
       setLaunchSystem: (launchSystem) => set({ launchSystem }),
       setOpenRapidRaw: (openRapidRaw) => set({ openRapidRaw }),
       setStartupView: (startupView) => set({ startupView }),
+      setSidebarExpanded: (sidebarExpanded) => set({ sidebarExpanded }),
       setLastLibraryPath: (lastLibraryPath) => set({ lastLibraryPath }),
       setGpsMapProvider: (gpsMapProvider) => set({ gpsMapProvider }),
       setShortcutPreset: (shortcutPreset) => set({ shortcutPreset }),

@@ -28,7 +28,7 @@
   "steps": {
     "sidebarNav": {
       "title": "Deine Schaltzentrale",
-      "body": "Die Seitenleiste gibt Dir sofortigen Zugriff auf alles:\n\n• **Import** — Fotos von Karten, Laufwerken & Ordnern einlesen\n• **Bibliothek** — Archiv durchstöbern, bewerten & verwalten\n• **Hilfe & Einstellungen** — Tastaturkürzel, Voreinstellungen & Info"
+      "body": "Die Seitenleiste gibt Dir sofortigen Zugriff auf alles:\n\n• **Import** — Fotos von Karten, Laufwerken & Ordnern einlesen\n• **Bibliothek** — Archiv durchstöbern, bewerten & verwalten\n• **Hilfe & Einstellungen** — Tastaturkürzel, Voreinstellungen & Info\n\n*Tipp: Über „Einklappen“ ganz unten kannst Du die Leiste jederzeit auf kompakte Symbole reduzieren.*"
     },
     "importSource": {
       "title": "Schritt 1: Quelle wählen",

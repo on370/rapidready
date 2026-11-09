@@ -11,6 +11,9 @@
     "library": "Bibliothek",
     "tools": "Tools & Dashboard",
     "about": "Über RapidReady",
+    "aboutShort": "Über",
+    "collapse": "Einklappen",
+    "expandTooltip": "Leiste ausklappen",
     "help": "Hilfe",
     "settings": "Einstellungen"
   },

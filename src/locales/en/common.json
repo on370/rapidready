@@ -11,6 +11,9 @@
     "library": "Library",
     "tools": "Tools & Dashboard",
     "about": "About RapidReady",
+    "aboutShort": "About",
+    "collapse": "Collapse",
+    "expandTooltip": "Expand sidebar",
     "help": "Help",
     "settings": "Settings"
   },
