@@ -5,6 +5,36 @@ All notable changes to RapidReady will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.2] - 2026-11-09
+
+Feature release introducing intelligent 1:N RAW + JPEG stacking with instant variant switching, non-destructive editorial metadata management and rights attribution in companion sidecars (`.rrdata` & `.xmp`), capture date honesty with 1-click archive relocation, an expandable navigation sidebar for improved onboarding, and subfolder grid sorting.
+
+### Added & Improved
+- **Intelligent RAW + JPEG Stacking & Loupe Variant Comparison (`LibraryCenter.tsx`, `GridThumbnailItem.tsx`, `LoupeViewer.tsx`, `ZoomableImage.tsx`):**
+  - **Virtual 1:N Stacking Engine:** Automatically pairs mother RAW files with companion JPEGs in the same folder or direct subfolders (e.g. `./LR/`, `./Export/`, `./JPG/`) without altering physical directory structures or the underlying scan cache ($0\%$ CTSP overhead).
+  - **Responsive Stack Badges:** Visual tile badges (`RAW + JPG`, `RAW + LR/JPG`, `RAW +N JPG`) dynamically truncate long subfolder names based on thumbnail width with full folder paths visible in hover tooltips.
+  - **Zero-Latency Variant Comparison (`J` / `\`):** Seamlessly cycle between RAW and derivative JPEGs in Loupe View with guaranteed 1:1 sensor-zoom point and pan position preservation (`resetZoomKey`).
+  - **Shared Culling & Smart Deletion:** Ratings, picks, rejects, color labels, and tags apply synchronously across stacked members, while deletion offers fine-grained choices (delete entire stack, RAW only, or derivatives only).
+- **Non-Destructive Editorial Metadata & Rights Management (`culling.rs`, `culling_xmp.rs`, `InspectorEditorialCard.tsx`):**
+  - **100% Non-Destructive Sidecar Persistence:** Atomically writes Artist (`artist`), Copyright (`copyright`), Usage Terms (`usage_terms`), Title (`title`), and Description (`description`) to companion `.rrdata` and Adobe `.xmp` sidecars without touching original media files.
+  - **Inspector Editorial Card:** Dedicated collapsible card in the Library Inspector with an inline pencil editor and multi-photo batch assignment for fast editorial attribution.
+  - **Global Master Metadata in Settings:** Configure default Artist, Copyright, and Usage Terms with dynamic `{year}` token resolution evaluated per photo capture date.
+  - **Protected Import Step 2 Overrides:** Pre-populate editorial metadata or override shoot titles/descriptions and capture dates for analog scans directly during ingest, protected by amber warning badges and automatic toggle reset on source change.
+- **Capture Date Honesty & 1-Click Archive Relocation (`date_resolver.rs`, `archive_cmds.rs`, `InspectorFileInfoCard.tsx`):**
+  - **Priority Date Cascade:** Resolves effective capture dates via `effective_date = (date_override ?? original_date) + time_shift_seconds`.
+  - **Inline Inspector Date Editor:** Adjust capture timestamps directly with time-shift controls (`+/- seconds`) or absolute date overrides.
+  - **1-Click Folder Relocation:** If a date correction causes an image to mismatch its archive year/month folder structure, a single click moves the image and its companion sidecars to the correct date folder without altering file contents.
+- **Improved Onboarding & Expandable Navigation Sidebar (`Sidebar.tsx`, `settingsStore.ts`, `tourSteps.ts`):**
+  - **Expandable 152px Sidebar:** Navigation bar starts expanded by default with clear 1-word labels alongside icons (*Import*, *Bibliothek*, *Über*, *Hilfe*, *Einstellungen*) to help new users immediately distinguish core workspaces.
+  - **Dedicated Footer Toggle:** Prominent toggle button at the bottom of the sidebar allows users to collapse to the 60px icon-only bar (or re-expand) with a single click.
+  - **Tour Harmonization:** The guided onboarding tour automatically expands the sidebar upon launch.
+- **Subfolder Grid Sorting & Loupe Folder Navigation (`archive.rs`, `CullingToolbar.tsx`, `useLibraryShortcuts.ts`):**
+  - **Relative Subfolder Sorting:** Sorts archive grids by relative subfolders within dates.
+  - **Loupe Folder Switching:** Navigate between neighboring archive folders directly in Loupe View via <kbd>↑</kbd> and <kbd>↓</kbd>.
+- **Bugfixes & Maintenance:**
+  - **Archive Location Removal Stability (`settingsStore.ts`, `DestinationSelector.tsx`):** Resolved Issue #10 by properly cleaning up active selection state when deleting archive locations.
+  - **Clean Terminal Logs (`importer.rs`):** Eliminated verbose terminal debug output during file import execution.
+
 ## [0.6.1] - 2026-11-06
 
 Maintenance and stability release resolving a critical macOS black-screen/freeze issue during Loupe View deletion, preventing unwanted folder tree scrolling during keyboard navigation, eliminating watcher ghost events, ensuring fail-safe React error recovery, and hardening post-import scan and badge state.

@@ -17,6 +17,28 @@
 
 ## 🚀 Released Milestones
 
+### Released in `v0.6.2` (Build `018A`)
+- [x] **Intelligent RAW + JPEG Stacking & Loupe Variant Comparison (`1:N` Virtual Stacks):**
+  - Same-folder and direct subfolder (`./LR/`, `./Export/`, `./JPG/`) grouping with responsive badge truncation and $0\%$ CTSP overhead.
+  - 1:1 sensor-zoom point preservation during variant cycling (<kbd>J</kbd>).
+  - Synchronous culling and differentiated deletion dialog (stack, RAW only, derivatives only).
+- [x] **Non-Destructive Editorial Metadata & Rights Management (`.rrdata` & `.xmp`):**
+  - Full sidecar schema for Artist, Copyright, Usage Terms, Title, Description.
+  - Dedicated Inspector Editorial Card with inline pencil editor and multi-photo batch editing.
+  - Global master metadata presets in Settings with dynamic per-image `{year}` copyright macro resolution.
+  - Protected Import Step 2 editorial and date overrides for shoots and scans.
+- [x] **Capture Date Honesty & 1-Click Archive Relocation:**
+  - Priority date cascade (`effective_date = (date_override ?? original_date) + time_shift_seconds`).
+  - Inline Inspector date editor and 1-click folder relocation for corrected dates.
+- [x] **Improved Onboarding with Expandable Navigation Sidebar:**
+  - Expandable 152px sidebar with 1-word labels and persistent footer toggle.
+  - Guided tour auto-expansion hook.
+- [x] **Subfolder Grid Sorting & Loupe Folder Navigation:**
+  - Extended grid sorting by subfolder and vertical arrow navigation across archive folders in Loupe view.
+- [x] **Stability Fixes:**
+  - Archive location deletion state cleanup (Issue #10).
+  - Cleaned import execution terminal logging.
+
 ### Released in `v0.6.1` (Build `0180`)
 - [x] **Fast Non-Blocking Trash Deletion on macOS (`system_cmds.rs`):**
   - Cocoa `NSFileManager.trashItemAtURL` (`DeleteMethod::NsFileManager`) integration replacing synchronous Finder AppleScript processes.
@@ -365,7 +387,7 @@
   - **Batch Format Toggles:** Dedicated 1-click action buttons / format pills in the Step 2 source preview toolbar (`[ Select only RAWs ]`, `[ Deselect all JPGs ]`, `[ Videos ]`).
   - **Dynamic Volume Feedback:** Instantly recalculates transfer file count, total bytes, and destination disk headroom without requiring manual folder-by-folder unchecking.
 
-- [ ] **Umschaltbares RAW + JPEG Stacking (`1:N` Kombi-Kacheln inkl. Unterordner-Derivaten & A/B-Toggle in Loupe/Inspector):**
+- [x] **Umschaltbares RAW + JPEG Stacking (`1:N` Kombi-Kacheln inkl. Unterordner-Derivaten & A/B-Toggle in Loupe/Inspector) (`v0.6.2` / Build `018A`):**
   - **Context & Goal:**
     Beim simultanen Fotografieren in RAW + JPG (oder RAW + HIF) sowie beim nachträglichen Entwickeln mit Tools wie Lightroom, Capture One, DxO oder RapidRAW entstehen zu einer RAW-Datei (`.../Mailand-2023/DSC23432.ARW`) korrespondierende JPEGs – entweder im selben Ordner (`DSC23432.JPG`) oder in einem bzw. mehreren direkten Entwicklungs-Unterordnern (z. B. `./LR/DSC23432.jpg`, `./Export/DSC23432.jpg`, `./Fertig/DSC23432.jpg`). Da entwickelte Unterordner-JPEGs ein späteres `mtime` besitzen, erscheinen sie bei der rekursiven Ordnersicht auf `.../Mailand-2023/` bisher weit unten im Grid getrennt vom zugehörigen RAW. Das `1:N` RAW+JPEG Stacking fasst das Mutter-RAW und alle zugehörigen JPEGs (im selben Ordner sowie in direkten Kind-Ordnern) im Grid optional zu einer einzigen virtuellen Kachel zusammen, während ein Direktklick auf einen Unterordner (`.../Mailand-2023/LR/`) weiterhin ungefiltert dessen physische JPEGs zeigt.
   - **Scope-bewusste `1:N` Pairing-Logik (Gleicher Ordner & Direkte Unterordner):**
@@ -1041,7 +1063,7 @@
   - **Performance:**
     - Client-seitige Berechnung via Canvas/WebGL oder Rust Thumbnail-Sampler in unter 5 ms direkt aus dem gecachten Vorschau-JPEG.
 
-- [ ] **Redaktionelle Metadaten: Vorbelegung (Settings/Import), Inspector-Editing & Sidecar-Overrides:**
+- [x] **Redaktionelle Metadaten: Vorbelegung (Settings/Import), Inspector-Editing & Sidecar-Overrides (`v0.6.2` / Build `018A`):**
   - **Problemstellung & Kontext:**
     Professionelle Bildarchive, Kundenübergaben und Presse-Workflows erfordern verlässliche Urheber- und Bildrechte-Angaben (Fotograf, Copyright, Nutzungsrechte, Titel, Bildbeschreibung) sowie die Möglichkeit, fehlerhafte Aufnahmezeiten (z. B. asynchrone Kamerauhren bei Multi-Cam-Shootings oder vergessene Zeitzonen-Umstellungen) zu korrigieren.
   - **Strikte Non-Destructive Data Safety Policy (Zero-Write auf Originale):**
