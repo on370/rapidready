@@ -197,32 +197,46 @@ pub fn parse_sidecar_json(contents: &str) -> CullingState {
             state.orientation = Some(o as u32);
         }
 
-        // 4. Tags & Flag Adapter (rr:pick and rr:reject)
-        if let Some(tags_arr) = val.get("tags").and_then(|v| v.as_array()) {
-            let mut clean_tags = Vec::new();
-            for item in tags_arr {
-                if let Some(s) = item.as_str() {
-                    if s == TAG_PICK {
-                        state.flag = Some(1);
-                    } else if s == TAG_REJECT {
-                        state.flag = Some(-1);
-                    } else {
-                        clean_tags.push(s.to_string());
-                    }
+        // 4. Native "flag" field (highest priority) & Tags cleanup / Legacy fallback
+        let has_explicit_flag_key = val.get("flag").is_some();
+        if let Some(flag_val) = val.get("flag") {
+            if let Some(s) = flag_val.as_str() {
+                match s.trim().to_ascii_lowercase().as_str() {
+                    "pick" | "picked" => state.flag = Some(1),
+                    "reject" | "rejected" => state.flag = Some(-1),
+                    "none" | "unflagged" | "" => state.flag = None,
+                    _ => {}
                 }
-            }
-            state.tags = clean_tags;
-        }
-
-        // Fallback: Check if flag was written as a native number
-        if state.flag.is_none() {
-            if let Some(f) = val.get("flag").and_then(|v| v.as_i64()) {
+            } else if let Some(f) = flag_val.as_i64() {
                 if f == 1 {
                     state.flag = Some(1);
                 } else if f == -1 {
                     state.flag = Some(-1);
                 }
             }
+        }
+
+        if let Some(tags_arr) = val.get("tags").and_then(|v| v.as_array()) {
+            let mut clean_tags = Vec::new();
+            for item in tags_arr {
+                if let Some(s) = item.as_str() {
+                    if s == TAG_PICK {
+                        if !has_explicit_flag_key {
+                            state.flag = Some(1);
+                        }
+                    } else if s == TAG_REJECT {
+                        if !has_explicit_flag_key {
+                            state.flag = Some(-1);
+                        }
+                    } else {
+                        let clean = s.strip_prefix("user:").unwrap_or(s);
+                        if !clean.is_empty() && !clean_tags.iter().any(|t| t == clean) {
+                            clean_tags.push(clean.to_string());
+                        }
+                    }
+                }
+            }
+            state.tags = clean_tags;
         }
 
         // 5. Date override & Time shift
@@ -287,6 +301,44 @@ pub fn next_orientation(current: u32, direction: &str) -> u32 {
     }
 }
 
+/// Returns true if an existing `.rrdata` file still contains legacy `rr:pick` / `rr:reject` tags
+/// or unprefixed user tags (missing `"user:"` / `"ai:"` prefix).
+pub fn rrdata_needs_flag_migration(rr_path: &Path) -> bool {
+    let Ok(contents) = fs::read_to_string(rr_path) else {
+        return false;
+    };
+    if contents.contains(TAG_PICK) || contents.contains(TAG_REJECT) {
+        return true;
+    }
+    if let Ok(val) = serde_json::from_str::<serde_json::Value>(&contents) {
+        if let Some(tags_arr) = val.get("tags").and_then(|v| v.as_array()) {
+            for item in tags_arr {
+                if let Some(s) = item.as_str() {
+                    let trimmed = s.trim();
+                    if !trimmed.is_empty()
+                        && trimmed != TAG_PICK
+                        && trimmed != TAG_REJECT
+                        && !trimmed.starts_with("user:")
+                        && !trimmed.starts_with("ai:")
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+fn format_rrdata_tag(tag: &str) -> String {
+    let trimmed = tag.trim();
+    if trimmed.starts_with("user:") || trimmed.starts_with("ai:") {
+        trimmed.to_string()
+    } else {
+        format!("user:{}", trimmed)
+    }
+}
+
 pub fn write_sidecar_rrdata(original_path: &Path, state: &CullingState) -> anyhow::Result<()> {
     let sidecar_path = get_sidecar_path(original_path);
 
@@ -316,20 +368,25 @@ pub fn write_sidecar_rrdata(original_path: &Path, state: &CullingState) -> anyho
         obj.insert("adjustments".to_string(), serde_json::Value::Null);
     }
 
-    // 4. Update tags with flag adapter (rr:pick, rr:reject)
+    // 4. Clean tags (strip legacy rr:pick / rr:reject, format with "user:" prefix) and write native "flag" field
     let had_tags_array = matches!(obj.get("tags"), Some(serde_json::Value::Array(_)));
-    let mut updated_tags: Vec<String> = state
+    let updated_tags: Vec<String> = state
         .tags
         .iter()
-        .filter(|s| *s != TAG_PICK && *s != TAG_REJECT)
-        .cloned()
+        .filter(|s| *s != TAG_PICK && *s != TAG_REJECT && !s.trim().is_empty())
+        .map(|s| format_rrdata_tag(s))
         .collect();
 
-    // Add pick / reject flag
     match state.flag {
-        Some(1) => updated_tags.push(TAG_PICK.to_string()),
-        Some(-1) => updated_tags.push(TAG_REJECT.to_string()),
-        _ => {}
+        Some(1) => {
+            obj.insert("flag".to_string(), serde_json::json!("pick"));
+        }
+        Some(-1) => {
+            obj.insert("flag".to_string(), serde_json::json!("reject"));
+        }
+        _ => {
+            obj.insert("flag".to_string(), serde_json::Value::Null);
+        }
     }
 
     if updated_tags.is_empty() {
@@ -704,9 +761,9 @@ mod tests {
         // 1. Rating updated
         assert_eq!(val["rating"], 5);
 
-        // 2. Flag written to tags
-        let tags = val["tags"].as_array().unwrap();
-        assert!(tags.iter().any(|t| t == TAG_PICK));
+        // 2. Native flag written, no rr:pick in tags
+        assert_eq!(val["flag"], "pick");
+        assert!(val["tags"].is_null() || !val["tags"].as_array().unwrap().iter().any(|t| t == TAG_PICK));
 
         // 3. Adjustments and EXIF 100% PRESERVED!
         assert_eq!(val["adjustments"]["exposure"], 1.25);
@@ -742,6 +799,9 @@ mod tests {
         assert_eq!(read1.flag, Some(1));
         assert_eq!(read1.rating, 2);
         assert_eq!(read1.tags, vec!["vacation"]);
+        let val1: serde_json::Value = serde_json::from_str(&fs::read_to_string(&sidecar_path).unwrap()).unwrap();
+        assert_eq!(val1["flag"], "pick");
+        assert_eq!(val1["tags"], serde_json::json!(["user:vacation"]));
 
         // 2. Transition from Pick to Reject
         state.flag = Some(-1);
@@ -750,6 +810,9 @@ mod tests {
         let read2 = read_sidecar(&img_path);
         assert_eq!(read2.flag, Some(-1));
         assert_eq!(read2.tags, vec!["vacation"]);
+        let val2: serde_json::Value = serde_json::from_str(&fs::read_to_string(&sidecar_path).unwrap()).unwrap();
+        assert_eq!(val2["flag"], "reject");
+        assert_eq!(val2["tags"], serde_json::json!(["user:vacation"]));
 
         // 3. Transition to Unflagged
         state.flag = None;
@@ -762,12 +825,55 @@ mod tests {
         // Check raw JSON
         let raw = fs::read_to_string(&sidecar_path).unwrap();
         let val: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(val["flag"], serde_json::Value::Null);
         let tags: Vec<String> = val["tags"].as_array().unwrap().iter().map(|v| v.as_str().unwrap().to_string()).collect();
         assert!(!tags.contains(&TAG_PICK.to_string()));
         assert!(!tags.contains(&TAG_REJECT.to_string()));
-        assert_eq!(tags, vec!["vacation"]);
+        assert_eq!(tags, vec!["user:vacation"]);
 
         // Clean up
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_rrdata_native_flag_and_legacy_fallback() {
+        // 1. Native string flags (including case-insensitivity)
+        let s_pick = parse_sidecar_json(r#"{"flag": "PICK", "tags": ["nature"]}"#);
+        assert_eq!(s_pick.flag, Some(1));
+        assert_eq!(s_pick.tags, vec!["nature"]);
+
+        let s_reject = parse_sidecar_json(r#"{"flag": "Reject", "tags": []}"#);
+        assert_eq!(s_reject.flag, Some(-1));
+
+        // 2. Legacy .rrdata without "flag" key falls back to rr:pick / rr:reject in tags and cleans tags
+        let s_legacy = parse_sidecar_json(r#"{"rating": 3, "tags": ["sunset", "rr:pick"]}"#);
+        assert_eq!(s_legacy.flag, Some(1));
+        assert_eq!(s_legacy.rating, 3);
+        assert_eq!(s_legacy.tags, vec!["sunset"]);
+
+        // 3. Explicit "flag": null overrides legacy rr:pick in tags, while still cleaning tags
+        let s_explicit_null = parse_sidecar_json(r#"{"flag": null, "tags": ["sunset", "rr:pick"]}"#);
+        assert_eq!(s_explicit_null.flag, None);
+        assert_eq!(s_explicit_null.tags, vec!["sunset"]);
+
+        // 4. Roundtrip check for "user:" / "ai:" prefixes
+        let parsed = parse_sidecar_json(r#"{"flag": "pick", "tags": ["Testga", "user:rtest", "ai:sunset"]}"#);
+        assert_eq!(parsed.tags, vec!["Testga", "rtest", "ai:sunset"]);
+
+        let temp_dir = std::env::temp_dir().join(format!("rr_user_prefix_{}", std::process::id()));
+        fs::create_dir_all(&temp_dir).unwrap();
+        let img_path = temp_dir.join("test_tags.arw");
+        let rr_path = get_sidecar_path(&img_path);
+
+        // Unprefixed tag in file triggers migration check
+        fs::write(&rr_path, r#"{"flag": "pick", "tags": ["Testga"]}"#).unwrap();
+        assert!(rrdata_needs_flag_migration(&rr_path));
+
+        write_sidecar_rrdata(&img_path, &parsed).unwrap();
+        let raw_written: serde_json::Value = serde_json::from_str(&fs::read_to_string(&rr_path).unwrap()).unwrap();
+        assert_eq!(raw_written["tags"], serde_json::json!(["user:Testga", "user:rtest", "ai:sunset"]));
+        assert!(!rrdata_needs_flag_migration(&rr_path));
+
         let _ = fs::remove_dir_all(&temp_dir);
     }
 

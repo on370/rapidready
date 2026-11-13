@@ -27,6 +27,34 @@ export const FilmstripThumbnailItem = React.memo(function FilmstripThumbnailItem
   const isVideo = img.is_video ?? isVideoFilename(img.name);
   const isRaw = !isVideo && (img.is_raw ?? isRawFilename(img.name));
   const isStacked = Boolean(img.stackMembers && img.stackMembers.length > 1);
+  let filmstripStackLabel = '';
+  if (isStacked && img.stackMembers) {
+    const numDerivatives = img.stackMembers.length - 1;
+    const labels = img.stackSubfolderLabels || [];
+    const exts = labels.length > 0
+      ? labels.map((lbl) => {
+          const lastSlash = lbl.lastIndexOf('/');
+          return lastSlash !== -1 ? lbl.slice(lastSlash + 1) : lbl;
+        })
+      : img.stackMembers.slice(1).map((m) => {
+          const rawExt = m.name.split('.').pop()?.toLowerCase() || '';
+          if (rawExt === 'jpeg') return 'JPG';
+          if (rawExt === 'tiff') return 'TIF';
+          if (rawExt === 'heif') return 'HEIC';
+          return rawExt.toUpperCase() || 'JPG';
+        });
+
+    if (numDerivatives === 1) {
+      filmstripStackLabel = `+${exts[0] || 'JPG'}`;
+    } else {
+      const uniqueExts = Array.from(new Set(exts));
+      if (uniqueExts.length === 1) {
+        filmstripStackLabel = `+${numDerivatives} ${uniqueExts[0]}`;
+      } else {
+        filmstripStackLabel = `+${numDerivatives}`;
+      }
+    }
+  }
   const cacheKey = `${img.path}:${img.culling?.orientation || 1}:1`;
   const [loaded, setLoaded] = useState(loadedThumbnailCache.has(cacheKey));
 
@@ -85,7 +113,7 @@ export const FilmstripThumbnailItem = React.memo(function FilmstripThumbnailItem
           </span>
         ) : isStacked ? (
           <span className="px-1 py-0.2 rounded text-[8px] font-mono font-semibold tracking-wider bg-black/85 text-white border border-accent/50 shadow-sm leading-tight inline-block" title={img.stackMembers?.map(m => m.name).join(' + ')}>
-            +JPG
+            {filmstripStackLabel}
           </span>
         ) : isRaw ? (
           <span className="px-1 py-0.2 rounded text-[8px] font-mono font-semibold tracking-wider bg-black/80 text-white/95 border border-white/20 shadow-sm leading-tight inline-block">

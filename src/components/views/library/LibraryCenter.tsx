@@ -24,15 +24,81 @@ import { FolderHeart, Download, ArrowDownAZ, X } from "lucide-react";
 
 const numericCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 
-const DERIVATIVE_SUFFIX_REGEX = /(?:[-_](?:edit|bearbeitet|lr|dxo|c1|pano|hdr|v\d+|\d{1,2}))$/i;
-
 function getBaseStem(filename: string): string {
   const lastDot = filename.lastIndexOf('.');
   return lastDot > 0 ? filename.substring(0, lastDot) : filename;
 }
 
-function getCleanDerivativeStem(stem: string): string {
-  return stem.replace(DERIVATIVE_SUFFIX_REGEX, '');
+function getDerivativeFormatLabel(filename: string): string {
+  const lastDot = filename.lastIndexOf('.');
+  const ext = lastDot > 0 ? filename.substring(lastDot + 1).toLowerCase() : '';
+  switch (ext) {
+    case 'jpg':
+    case 'jpeg':
+      return 'JPG';
+    case 'tif':
+    case 'tiff':
+      return 'TIF';
+    case 'heic':
+    case 'heif':
+      return 'HEIC';
+    case 'hif':
+      return 'HIF';
+    case 'png':
+      return 'PNG';
+    case 'webp':
+      return 'WEBP';
+    case 'avif':
+      return 'AVIF';
+    default:
+      return ext.toUpperCase() || 'JPG';
+  }
+}
+
+function findMatchingRawEntry<T>(
+  rawByDirAndStem: Map<string, T>,
+  targetDir: string,
+  stemLower: string
+): T | undefined {
+  // 1. Exact stem match
+  const exact = rawByDirAndStem.get(`${targetDir}/${stemLower}`);
+  if (exact) return exact;
+
+  // 2. Right-to-left delimiter prefix match (prefers longest/most specific RAW stem)
+  let current = stemLower;
+  while (current.length > 3) {
+    // Find last occurrence of a delimiter (-, _, space, ., ()
+    let cutIdx = -1;
+    for (let i = current.length - 1; i >= 3; i--) {
+      const ch = current[i];
+      if (ch === '-' || ch === '_' || ch === ' ' || ch === '.' || ch === '(') {
+        cutIdx = i;
+        break;
+      }
+    }
+    if (cutIdx === -1) break;
+
+    // Strip trailing consecutive delimiters at cut point
+    let prefixEnd = cutIdx;
+    while (prefixEnd > 3) {
+      const prev = current[prefixEnd - 1];
+      if (prev === '-' || prev === '_' || prev === ' ' || prev === '.') {
+        prefixEnd--;
+      } else {
+        break;
+      }
+    }
+
+    const candidate = current.substring(0, prefixEnd);
+    if (candidate.length < 3) break;
+
+    const match = rawByDirAndStem.get(`${targetDir}/${candidate}`);
+    if (match) return match;
+
+    current = candidate;
+  }
+
+  return undefined;
 }
 
 function getDirAndParent(normPath: string): { dir: string; parentDir: string; folderName: string } {
@@ -294,13 +360,9 @@ export function LibraryCenter({
       const norm = normalizePath(img.path);
       const { dir, parentDir, folderName } = getDirAndParent(norm);
       const stemLower = getBaseStem(img.name).toLowerCase();
-      const cleanStemLower = getCleanDerivativeStem(stemLower).toLowerCase();
 
       // a) Depth 0 (same folder)
-      let target = rawByDirAndStem.get(`${dir}/${stemLower}`);
-      if (!target && cleanStemLower !== stemLower) {
-        target = rawByDirAndStem.get(`${dir}/${cleanStemLower}`);
-      }
+      let target = findMatchingRawEntry(rawByDirAndStem, dir, stemLower);
 
       if (target) {
         target.depth0Jpegs.push(img);
@@ -310,10 +372,7 @@ export function LibraryCenter({
 
       // b) Depth +1 (direct subfolder)
       if (parentDir) {
-        target = rawByDirAndStem.get(`${parentDir}/${stemLower}`);
-        if (!target && cleanStemLower !== stemLower) {
-          target = rawByDirAndStem.get(`${parentDir}/${cleanStemLower}`);
-        }
+        target = findMatchingRawEntry(rawByDirAndStem, parentDir, stemLower);
 
         if (target) {
           target.depth1Jpegs.push({ img, folderName });
@@ -348,8 +407,8 @@ export function LibraryCenter({
       const stackMembers: LibraryImage[] = [entry.rawImg, ...matchedJpegs];
 
       const stackSubfolderLabels: string[] = [
-        ...entry.depth0Jpegs.map(() => 'JPG'),
-        ...entry.depth1Jpegs.map(d => `${d.folderName.toUpperCase()}/JPG`),
+        ...entry.depth0Jpegs.map(img => getDerivativeFormatLabel(img.name)),
+        ...entry.depth1Jpegs.map(d => `${d.folderName.toUpperCase()}/${getDerivativeFormatLabel(d.img.name)}`),
       ];
 
       const rawCulling = entry.rawImg.culling;

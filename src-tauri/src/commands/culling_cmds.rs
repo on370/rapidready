@@ -283,6 +283,11 @@ pub async fn sync_archive_sidecars(
                             }
                         }
                     }
+                    if rr_exists && !file_synced && rapidready_core::culling::rrdata_needs_flag_migration(&rr_path) {
+                        if rapidready_core::culling::write_sidecar_rrdata(p, &auth_state).is_ok() {
+                            file_synced = true;
+                        }
+                    }
                 }
                 rapidready_core::culling::SidecarMode::Xmp => {
                     // Target is XMP: if .rrdata exists and .xmp is missing or older, write/update .xmp
@@ -313,6 +318,11 @@ pub async fn sync_archive_sidecars(
                                     file_synced = true;
                                 }
                             }
+                        }
+                    }
+                    if rr_exists && !file_synced && rapidready_core::culling::rrdata_needs_flag_migration(&rr_path) {
+                        if rapidready_core::culling::write_sidecar_rrdata(p, &auth_state).is_ok() {
+                            file_synced = true;
                         }
                     }
                 }

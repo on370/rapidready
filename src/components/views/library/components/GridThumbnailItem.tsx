@@ -79,14 +79,25 @@ export const GridThumbnailItem = React.memo(function GridThumbnailItem({
       }
       stackBadgeText = `RAW + ${displayLabel}`;
     } else {
-      stackBadgeText = `RAW +${numJpegs} JPG`;
+      const exts = labels.length > 0
+        ? labels.map((lbl) => {
+            const lastSlash = lbl.lastIndexOf('/');
+            return lastSlash !== -1 ? lbl.slice(lastSlash + 1) : lbl;
+          })
+        : img.stackMembers.slice(1).map((m) => m.name.split('.').pop()?.toUpperCase() || 'JPG');
+      const uniqueExts = Array.from(new Set(exts));
+      if (uniqueExts.length === 1) {
+        stackBadgeText = `RAW +${numJpegs} ${uniqueExts[0]}`;
+      } else {
+        stackBadgeText = `RAW +${numJpegs} ${uniqueExts.join('/')}`;
+      }
     }
     stackTooltip = img.stackMembers.map((m, idx) => {
       if (idx === 0) return m.name;
       const lbl = labels[idx - 1];
-      if (lbl && lbl !== 'JPG') {
-        const prefix = lbl.includes('/JPG') ? lbl.replace('/JPG', '/') : `${lbl}/`;
-        return `${prefix}${m.name}`;
+      if (lbl && lbl.includes('/')) {
+        const subFolder = lbl.slice(0, lbl.lastIndexOf('/'));
+        return `${subFolder}/${m.name}`;
       }
       return m.name;
     }).join(' + ');

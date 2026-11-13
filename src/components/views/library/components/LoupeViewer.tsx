@@ -192,8 +192,10 @@ export const LoupeViewer = React.memo(function LoupeViewer({
     const currentLabel = labels[idx - 1] || 'JPG';
 
     let displayLabel = currentLabel;
-    if (currentLabel.includes('/')) {
-      const [sub, ext] = currentLabel.split('/');
+    const lastSlashIdx = currentLabel.lastIndexOf('/');
+    if (lastSlashIdx !== -1) {
+      const sub = currentLabel.slice(0, lastSlashIdx);
+      const ext = currentLabel.slice(lastSlashIdx + 1);
       if (ext && sub.length > 10) {
         displayLabel = `${sub.slice(0, 9)}…/${ext}`;
       }
@@ -349,6 +351,8 @@ export const LoupeViewer = React.memo(function LoupeViewer({
                 const label = getVariantPillLabel(idx);
                 const labels = loupeActiveImage?.stackSubfolderLabels || [];
                 const currentLabel = idx > 0 ? (labels[idx - 1] || 'JPG') : 'JPG';
+                const slashIdx = idx > 0 ? currentLabel.lastIndexOf('/') : -1;
+                const tooltipPrefix = slashIdx !== -1 ? `${currentLabel.slice(0, slashIdx)}/` : '';
                 return (
                   <button
                     key={member.path}
@@ -361,7 +365,7 @@ export const LoupeViewer = React.memo(function LoupeViewer({
                         ? 'bg-accent text-app-deepest font-bold shadow-md'
                         : 'bg-black/60 text-white/80 hover:text-white hover:bg-white/10'
                     }`}
-                    title={`${ currentLabel !== 'JPG' ? currentLabel.replace('/JPG', '/') : '' }${member.name}`}
+                    title={`${tooltipPrefix}${member.name}`}
                   >
                     {label}
                   </button>
