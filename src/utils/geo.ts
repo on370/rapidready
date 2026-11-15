@@ -453,3 +453,84 @@ export function parseCoordinates(rawInput: string): ParseGpsResult {
     error: 'Format nicht erkannt. Bitte einen Karten-Link oder Koordinaten (DMS, DD, DMM) eingeben.'
   };
 }
+
+export const OSM_TILE_SIZE = 256;
+export const OSM_MIN_ZOOM = 4;
+export const OSM_MAX_ZOOM = 17;
+export const OSM_DEFAULT_ZOOM = 15;
+
+export interface SlippyTileCoords {
+  zoom: number;
+  tileX: number;
+  tileY: number;
+  /** Fractional offset within the center tile [0, 1) */
+  offsetX: number;
+  /** Fractional offset within the center tile [0, 1) */
+  offsetY: number;
+  /** Pin X position in pixels within the 3x3 (768x768) tile grid */
+  pinX: number;
+  /** Pin Y position in pixels within the 3x3 (768x768) tile grid */
+  pinY: number;
+  /** Pin X position in percent within the 3x3 tile grid */
+  pinPercentX: number;
+  /** Pin Y position in percent within the 3x3 tile grid */
+  pinPercentY: number;
+}
+
+const MAX_MERCATOR_LAT = 85.05112878;
+
+/**
+ * Wraps an integer tile X coordinate into [0, 2^zoom - 1].
+ */
+export function wrapTileX(x: number, zoom: number): number {
+  const n = 2 ** zoom;
+  return ((x % n) + n) % n;
+}
+
+/**
+ * Converts WGS84 latitude/longitude into Slippy Map (Web Mercator) tile coordinates
+ * and computes the exact pixel and percentage pin offset inside a 3x3 tile grid
+ * centered on (tileX, tileY).
+ */
+export function latLonToSlippyTile(lat: number, lon: number, zoom: number): SlippyTileCoords {
+  const z = Math.max(0, Math.min(19, Math.round(zoom)));
+  const n = 2 ** z;
+
+  // Normalize longitude into [0, 1) of world width
+  const normX = (((lon + 180) / 360) % 1 + 1) % 1;
+  const xFloat = normX * n;
+  const tileX = Math.floor(xFloat);
+  const offsetX = xFloat - tileX;
+
+  // Clamp latitude to Web Mercator bounds
+  const clampedLat = Math.max(-MAX_MERCATOR_LAT, Math.min(MAX_MERCATOR_LAT, lat));
+  const latRad = (clampedLat * Math.PI) / 180;
+  const rawYFloat = ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n;
+  const yFloat = Math.max(0, Math.min(n - 1e-9, rawYFloat));
+  const tileY = Math.floor(yFloat);
+  const offsetY = yFloat - tileY;
+
+  const pinX = (1 + offsetX) * OSM_TILE_SIZE;
+  const pinY = (1 + offsetY) * OSM_TILE_SIZE;
+  const pinPercentX = ((1 + offsetX) / 3) * 100;
+  const pinPercentY = ((1 + offsetY) / 3) * 100;
+
+  return {
+    zoom: z,
+    tileX,
+    tileY,
+    offsetX,
+    offsetY,
+    pinX,
+    pinY,
+    pinPercentX,
+    pinPercentY,
+  };
+}
+
+/**
+ * Builds an OpenStreetMap standard tile URL for the given zoom, x, and y.
+ */
+export function getOsmTileUrl(zoom: number, x: number, y: number): string {
+  return `https://tile.openstreetmap.org/${zoom}/${wrapTileX(x, zoom)}/${y}.png`;
+}

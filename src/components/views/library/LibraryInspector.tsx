@@ -323,6 +323,8 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
               activeImage={activeImage}
               isCollapsed={isCollapsed('location')}
               onToggle={() => toggleSection('location')}
+              isMapOpen={!!collapsedSections['locationMap_open']}
+              onToggleMap={() => toggleSection('locationMap_open')}
             />
           </div>
         )}

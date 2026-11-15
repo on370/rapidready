@@ -1,4 +1,4 @@
-import { parseCoordinates } from './geo.ts';
+import { parseCoordinates, latLonToSlippyTile, wrapTileX, getOsmTileUrl, OSM_TILE_SIZE } from './geo.ts';
 
 function assert(condition: boolean, msg?: string) {
   if (!condition) throw new Error(msg || 'Assertion failed');
@@ -176,4 +176,50 @@ console.log('Testing geo parser...');
   assert.strictEqual(r3.success, false);
 }
 
-console.log('All geo parser tests passed successfully! 🎉');
+// 9. Slippy Map Tile Conversion
+{
+  // Origin (0, 0) at zoom 0 -> center of single tile
+  const z0 = latLonToSlippyTile(0, 0, 0);
+  assert.strictEqual(z0.zoom, 0);
+  assert.strictEqual(z0.tileX, 0);
+  assert.strictEqual(z0.tileY, 0);
+  assert(Math.abs(z0.offsetX - 0.5) < 1e-9);
+  assert(Math.abs(z0.offsetY - 0.5) < 1e-9);
+  assert(Math.abs(z0.pinX - OSM_TILE_SIZE * 1.5) < 1e-6);
+  assert(Math.abs(z0.pinY - OSM_TILE_SIZE * 1.5) < 1e-6);
+  assert(Math.abs(z0.pinPercentX - 50) < 1e-6);
+  assert(Math.abs(z0.pinPercentY - 50) < 1e-6);
+
+  // Origin (0, 0) at zoom 1 -> top-left corner of tile (1, 1)
+  const z1 = latLonToSlippyTile(0, 0, 1);
+  assert.strictEqual(z1.tileX, 1);
+  assert.strictEqual(z1.tileY, 1);
+  assert(Math.abs(z1.offsetX - 0) < 1e-9);
+  assert(Math.abs(z1.offsetY - 0) < 1e-9);
+  assert(Math.abs(z1.pinX - OSM_TILE_SIZE) < 1e-6);
+  assert(Math.abs(z1.pinY - OSM_TILE_SIZE) < 1e-6);
+
+  // Munich Marienplatz (48.137154, 11.575421) at zoom 15
+  const munich = latLonToSlippyTile(48.137154, 11.575421, 15);
+  assert.strictEqual(munich.tileX, 17437);
+  assert.strictEqual(munich.tileY, 11371);
+  assert(munich.offsetX >= 0 && munich.offsetX < 1);
+  assert(munich.offsetY >= 0 && munich.offsetY < 1);
+  assert(munich.pinX >= OSM_TILE_SIZE && munich.pinX < OSM_TILE_SIZE * 2);
+  assert(munich.pinY >= OSM_TILE_SIZE && munich.pinY < OSM_TILE_SIZE * 2);
+
+  // Antimeridian wrapping & URL generation
+  assert.strictEqual(wrapTileX(-1, 2), 3);
+  assert.strictEqual(wrapTileX(4, 2), 0);
+  assert.strictEqual(getOsmTileUrl(15, 17437, 11367), 'https://tile.openstreetmap.org/15/17437/11367.png');
+  assert.strictEqual(getOsmTileUrl(2, -1, 1), 'https://tile.openstreetmap.org/2/3/1.png');
+
+  // Extreme polar latitude clamping (no NaN/Infinity)
+  const pole = latLonToSlippyTile(90, 180, 10);
+  assert.strictEqual(Number.isFinite(pole.pinX), true);
+  assert.strictEqual(Number.isFinite(pole.pinY), true);
+  assert.strictEqual(pole.tileX, 0);
+  assert.strictEqual(pole.tileY, 0);
+}
+
+console.log('All geo parser & slippy map tests passed successfully! 🎉');

@@ -24,7 +24,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self' tauri: rr-image: asset: data: blob: http://*.localhost http://rr-image.localhost; connect-src 'self' https://api.github.com; img-src 'self' tauri: rr-image: asset: data: blob: http://*.localhost http://rr-image.localhost; style-src 'self' 'unsafe-inline';"
+      "csp": "default-src 'self' tauri: rr-image: asset: data: blob: http://*.localhost http://rr-image.localhost; connect-src 'self' https://api.github.com; img-src 'self' tauri: rr-image: asset: data: blob: http://*.localhost http://rr-image.localhost https://tile.openstreetmap.org; style-src 'self' 'unsafe-inline';"
     }
   },
   "bundle": {

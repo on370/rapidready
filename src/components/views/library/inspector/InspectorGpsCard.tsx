@@ -10,17 +10,22 @@ import { LibraryImage, useLibraryStore } from "../../../../stores/libraryStore";
 import { useSettingsStore } from "../../../../stores/settingsStore";
 import { useToastStore } from "../../../../stores/toastStore";
 import { parseCoordinates, formatDms, formatDd, ParseGpsResult } from "../../../../utils/geo";
+import { OsmMiniMap } from "./OsmMiniMap";
 
 interface InspectorGpsCardProps {
   activeImage: LibraryImage;
   isCollapsed: boolean;
   onToggle: () => void;
+  isMapOpen: boolean;
+  onToggleMap: () => void;
 }
 
 export function InspectorGpsCard({
   activeImage,
   isCollapsed,
   onToggle,
+  isMapOpen,
+  onToggleMap,
 }: InspectorGpsCardProps) {
   const { t } = useTranslation('library');
   const { selectedPaths, updateBatchGps } = useLibraryStore();
@@ -40,6 +45,16 @@ export function InspectorGpsCard({
     setIsEditingGps(false);
     setGpsInputValue('');
   }, [activeImage.path]);
+
+  const handleOpenInMaps = () => {
+    if (activeImage.latitude == null || activeImage.longitude == null) return;
+    const lat = activeImage.latitude;
+    const lon = activeImage.longitude;
+    const url = gpsMapProvider === 'osm'
+      ? `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=16/${lat}/${lon}`
+      : `https://www.google.com/maps?q=${lat},${lon}`;
+    openUrl(url).catch(console.error);
+  };
 
   const handleSaveGps = async () => {
     if (!gpsParseResult.success || !gpsParseResult.coords) return;
@@ -137,14 +152,7 @@ export function InspectorGpsCard({
         <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
           {activeImage.latitude != null && activeImage.longitude != null && !isEditingGps && (
             <button
-              onClick={() => {
-                const lat = activeImage.latitude!;
-                const lon = activeImage.longitude!;
-                const url = gpsMapProvider === 'osm'
-                  ? `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=16/${lat}/${lon}`
-                  : `https://www.google.com/maps?q=${lat},${lon}`;
-                openUrl(url).catch(console.error);
-              }}
+              onClick={handleOpenInMaps}
               className="flex items-center gap-1 text-[10px] text-accent hover:underline hover:text-accent/80 transition-colors mr-1"
               title={gpsMapProvider === 'osm' ? 'OpenStreetMap' : 'Google Maps'}
             >
@@ -279,43 +287,70 @@ export function InspectorGpsCard({
               </div>
             </div>
           ) : (
-            <>
-              {activeImage.latitude != null && activeImage.longitude != null ? (
-                <div className="space-y-1.5 text-[11px]">
-                  <div>
-                    <span className="text-txt-tertiary block text-[10px]">{t('inspector.coordinates')}</span>
+            <div className="space-y-1.5 text-[11px]">
+              <div>
+                <span className="text-txt-tertiary block text-[10px]">{t('inspector.coordinates')}</span>
+                {activeImage.latitude != null && activeImage.longitude != null ? (
+                  <>
                     <p className="text-txt-primary font-mono text-[11px] font-medium select-text">
                       {formatDms(activeImage.latitude, activeImage.longitude)}
                     </p>
                     <p className="text-txt-tertiary font-mono text-[10px] select-text">
                       {formatDd(activeImage.latitude, activeImage.longitude)}
                     </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-txt-tertiary font-mono text-[11px]">
+                      {t('inspector.noGps')}
+                    </p>
+                    <p className="text-txt-tertiary font-mono text-[10px]">
+                      —
+                    </p>
+                  </>
+                )}
+              </div>
+
+              <div className="pt-1 border-t border-app-border/40 flex justify-between items-center">
+                <span className="text-txt-tertiary text-[10px]">{t('inspector.altitude')}</span>
+                <span className={`font-mono text-[11px] ${activeImage.altitude != null ? 'text-txt-primary font-medium' : 'text-txt-tertiary'}`}>
+                  {activeImage.altitude != null ? `${Math.round(activeImage.altitude)} m` : '—'}
+                </span>
+              </div>
+
+              {/* Separately Collapsible OSM Map Preview */}
+              <div className="pt-1.5 border-t border-app-border/30">
+                <div
+                  onClick={onToggleMap}
+                  className="flex items-center justify-between cursor-pointer select-none py-0.5 group/maptoggle"
+                >
+                  <div className="flex items-center gap-1 min-w-0">
+                    {isMapOpen ? (
+                      <ChevronDown className="w-3 h-3 text-txt-tertiary group-hover/maptoggle:text-txt-secondary transition-colors flex-shrink-0" />
+                    ) : (
+                      <ChevronRight className="w-3 h-3 text-txt-tertiary group-hover/maptoggle:text-txt-secondary transition-colors flex-shrink-0" />
+                    )}
+                    <span className="text-[10px] font-medium text-txt-tertiary group-hover/maptoggle:text-txt-secondary transition-colors">
+                      {t('inspector.mapPreview')}
+                    </span>
                   </div>
-                  {activeImage.altitude != null && (
-                    <div className="pt-1 border-t border-app-border/40 flex justify-between items-center">
-                      <span className="text-txt-tertiary text-[10px]">{t('inspector.altitude')}</span>
-                      <span className="text-txt-primary font-mono font-medium text-[11px]">
-                        {Math.round(activeImage.altitude)} m
-                      </span>
-                    </div>
-                  )}
                 </div>
-              ) : (
-                <div className="flex items-center justify-between text-[11px] text-txt-tertiary">
-                  <span>{t('inspector.noGps')}</span>
-                  <button
-                    onClick={() => {
-                      setIsEditingGps(true);
-                      setGpsInputValue('');
-                    }}
-                    className="text-[10px] text-accent hover:underline hover:text-accent/80 transition-colors flex items-center gap-1"
-                  >
-                    <Pencil className="w-2.5 h-2.5" />
-                    <span>{t('inspector.addGps')}</span>
-                  </button>
-                </div>
-              )}
-            </>
+
+                {isMapOpen && (
+                  <div className="pt-1.5">
+                    <OsmMiniMap
+                      latitude={activeImage.latitude ?? null}
+                      longitude={activeImage.longitude ?? null}
+                      onMapClick={activeImage.latitude != null && activeImage.longitude != null ? handleOpenInMaps : undefined}
+                      onAddGpsClick={() => {
+                        setIsEditingGps(true);
+                        setGpsInputValue('');
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
           )}
         </>
       )}
