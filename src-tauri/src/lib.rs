@@ -274,8 +274,16 @@ pub fn run() {
                             let eff_orient = orient_param.or(sidecar_state.orientation);
                             if let Ok(bytes) = std::fs::read(path) {
                                 let content_type = if ext == "png" { "image/png" } else { "image/jpeg" };
-                                let final_bytes = if (ext == "jpg" || ext == "jpeg") && eff_orient.is_some() && eff_orient != Some(1) {
-                                    rapidready_core::thumbnail::inject_orientation_into_jpeg(&bytes, eff_orient.unwrap() as u16)
+                                let final_bytes = if ext == "jpg" || ext == "jpeg" {
+                                    if let Some(o) = eff_orient {
+                                        if o != 1 || rapidready_core::thumbnail::parse_header_orientation(&bytes).unwrap_or(1) != 1 {
+                                            rapidready_core::thumbnail::inject_orientation_into_jpeg(&bytes, o as u16)
+                                        } else {
+                                            bytes
+                                        }
+                                    } else {
+                                        bytes
+                                    }
                                 } else {
                                     bytes
                                 };

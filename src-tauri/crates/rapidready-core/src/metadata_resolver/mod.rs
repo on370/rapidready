@@ -283,7 +283,9 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
 
             // 1. Capture Date (DateTimeOriginal / DateTimeDigitized)
             for tag in [exif::Tag::DateTimeOriginal, exif::Tag::DateTimeDigitized] {
-                if let Some(f) = exif.fields().find(|f| f.tag == tag) {
+                if let Some(f) = exif.get_field(tag, exif::In::PRIMARY)
+                    .or_else(|| exif.fields().find(|f| f.tag == tag))
+                {
                     if let Some(dt) = parse_field_date(f) {
                         exif_capture_date = Some(dt);
                         break;
@@ -292,7 +294,9 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
             }
 
             // 2. Modify Date (DateTime tag 0x0132)
-            if let Some(f) = exif.fields().find(|f| f.tag == exif::Tag::DateTime) {
+            if let Some(f) = exif.get_field(exif::Tag::DateTime, exif::In::PRIMARY)
+                .or_else(|| exif.fields().find(|f| f.tag == exif::Tag::DateTime))
+            {
                 exif_modify_date = parse_field_date(f);
             }
 
@@ -752,7 +756,7 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
     }
 
     let fs_modified = std::fs::metadata(path).ok().and_then(|m| m.modified().ok()).map(|sys_time| {
-        let dt: chrono::DateTime<chrono::Utc> = sys_time.into();
+        let dt: chrono::DateTime<chrono::Local> = sys_time.into();
         dt.naive_local()
     });
 
@@ -776,11 +780,15 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
 
     // Calculate effective date:
     // If sidecar.date_override yields a NaiveDateTime, use it (+ optional time_shift_seconds).
-    // Otherwise use orig_date (+ optional time_shift_seconds).
+    // Otherwise match get_fast_creation_date order (EXIF ModifyDate, then Capture Date, then fallback)
+    // so inspector lazy-load does not overwrite archive_catalog.db with a divergent timestamp.
+    let catalog_base_date = exif_modify_date
+        .or(exif_capture_date)
+        .or(orig_date);
     let mut effective_date = if let Some(ref d_str) = sidecar.date_override {
-        crate::date_resolver::parse_flexible_datetime(d_str).or(orig_date)
+        crate::date_resolver::parse_flexible_datetime(d_str).or(catalog_base_date)
     } else {
-        orig_date
+        catalog_base_date
     };
 
     if let (Some(dt), Some(shift)) = (&mut effective_date, sidecar.time_shift_seconds) {

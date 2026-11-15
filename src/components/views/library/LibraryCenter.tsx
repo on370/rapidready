@@ -228,28 +228,41 @@ export function LibraryCenter({
       list = currentImages;
     }
 
-    // Helper to extract a normalized comparable date string
-    const getDateKey = (img: LibraryImage): string => {
-      let d = img.date || img.date_modified || '';
-      if (d) {
-        if (d.length >= 10 && d[4] === ':' && d[7] === ':') {
-          d = d.substring(0, 4) + '-' + d.substring(5, 7) + '-' + d.substring(8);
+    // Helper to extract a normalized comparable timestamp (ms in local time)
+    const getDateKey = (img: LibraryImage): number | null => {
+      const raw = img.date || img.date_modified || '';
+      if (raw) {
+        const match = raw.match(/^(\d{4})[-:](\d{2})[-:](\d{2})[T ](\d{2}):(\d{2}):(\d{2})/);
+        if (match) {
+          const baseMs = new Date(
+            Number(match[1]),
+            Number(match[2]) - 1,
+            Number(match[3]),
+            Number(match[4]),
+            Number(match[5]),
+            Number(match[6])
+          ).getTime();
+          if (!Number.isNaN(baseMs)) {
+            const subsecMs = img.subsec_time ? (parseFloat('0.' + img.subsec_time) || 0) * 1000 : 0;
+            return baseMs + subsecMs;
+          }
         }
-        if (img.subsec_time) {
-          d += '.' + img.subsec_time;
+        const parsed = Date.parse(raw);
+        if (!Number.isNaN(parsed)) {
+          const subsecMs = img.subsec_time ? (parseFloat('0.' + img.subsec_time) || 0) * 1000 : 0;
+          return parsed + subsecMs;
         }
-        return d;
       }
       if (img.mtime) {
-        return new Date(img.mtime * 1000).toISOString();
+        return img.mtime * 1000;
       }
-      return '';
+      return null;
     };
 
     // Pre-cache date mappings for O(N) lookup instead of O(N log N) during sort
-    let dateMap: Map<string, string> | null = null;
+    let dateMap: Map<string, number | null> | null = null;
     if (sortBy === 'date') {
-      dateMap = new Map<string, string>();
+      dateMap = new Map<string, number | null>();
       for (const img of list) {
         dateMap.set(img.path, getDateKey(img));
       }
@@ -263,11 +276,11 @@ export function LibraryCenter({
         const cmp = numericCollator.compare(a.name, b.name);
         if (cmp !== 0) return cmp * dirMul;
       } else if (sortBy === 'date') {
-        const dateKeyA = dateMap ? (dateMap.get(a.path) || '') : getDateKey(a);
-        const dateKeyB = dateMap ? (dateMap.get(b.path) || '') : getDateKey(b);
-        if (!dateKeyA && dateKeyB) return 1;
-        if (dateKeyA && !dateKeyB) return -1;
-        if (dateKeyA !== dateKeyB) {
+        const dateKeyA = dateMap ? (dateMap.get(a.path) ?? null) : getDateKey(a);
+        const dateKeyB = dateMap ? (dateMap.get(b.path) ?? null) : getDateKey(b);
+        if (dateKeyA == null && dateKeyB != null) return 1;
+        if (dateKeyA != null && dateKeyB == null) return -1;
+        if (dateKeyA != null && dateKeyB != null && dateKeyA !== dateKeyB) {
           return (dateKeyA < dateKeyB ? -1 : 1) * dirMul;
         }
       } else if (sortBy === 'rating') {

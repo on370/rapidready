@@ -1019,3 +1019,13 @@ fn test_capture_one_reverse_dng_preview_and_metadata() {
         );
     }
 }
+
+#[test]
+fn test_inject_orientation_overrides_exif_8_to_1() {
+    let minimal_jpeg = vec![0xFF, 0xD8, 0xFF, 0xD9];
+    let with_orient_8 = inject_orientation_into_jpeg(&minimal_jpeg, 8);
+    assert_eq!(parse_header_orientation(&with_orient_8), Some(8));
+
+    let overridden_to_1 = inject_orientation_into_jpeg(&with_orient_8, 1);
+    assert_eq!(parse_header_orientation(&overridden_to_1), Some(1));
+}

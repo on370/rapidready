@@ -264,7 +264,7 @@ export function LibraryInspector({ close }: LibraryInspectorProps) {
         </button>
       </div>
       
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-scroll p-4 space-y-4" style={{ scrollbarGutter: 'stable' }}>
         {!activeImage ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <div className="w-14 h-14 rounded-2xl bg-app-card border border-app-border flex items-center justify-center mb-3">

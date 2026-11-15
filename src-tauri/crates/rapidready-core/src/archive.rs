@@ -263,6 +263,7 @@ where
     let mut known_exact_xmp: std::collections::HashMap<String, (i64, CullingState)> = std::collections::HashMap::new();
     let mut known_stem_xmp: std::collections::HashMap<String, (i64, CullingState)> = std::collections::HashMap::new();
     let supported_exts = SUPPORTED_EXTENSIONS;
+    let is_remote = crate::metadata_resolver::is_network_or_remote_path(dir);
 
     let resolve_culling_in_memory = |path_norm: &str,
                                      known_rr: &std::collections::HashMap<String, (i64, CullingState)>,
@@ -484,7 +485,11 @@ where
                         .unwrap_or(0);
                     total_bytes += size;
                     let name = entry.file_name().to_string_lossy().into_owned();
-                    let date = get_streaming_discovery_date(path, &name, metadata.as_ref());
+                    let date = if !is_remote {
+                        crate::date_resolver::get_fast_creation_date(path, metadata.as_ref())
+                    } else {
+                        get_streaming_discovery_date(path, &name, metadata.as_ref())
+                    };
                     let is_raw = crate::metadata_resolver::is_raw_path(path);
                     let is_video = crate::metadata_resolver::is_video_path(path);
                     let culling = resolve_culling_in_memory(&path_norm, &known_rrdata, &known_exact_xmp, &known_stem_xmp);

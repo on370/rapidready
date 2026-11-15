@@ -35,50 +35,24 @@ export function InspectorPreviewCard({
   } = useLibraryUIStore();
   const inspectorImageRef = useRef<HTMLImageElement | null>(null);
   const inspectorContainerRef = useRef<HTMLDivElement | null>(null);
-  const [inspectorPreviewSrc, setInspectorPreviewSrc] = useState<string>('');
   const [loadFailed, setLoadFailed] = useState<boolean>(false);
+  const [imageLoadTick, setImageLoadTick] = useState(0);
 
-  // Progressive preview loading: instant thumbnail + background fullres
+  const previewUrl = getRrImageUrl(
+    activeImage.path,
+    false,
+    activeImage.culling?.orientation,
+    1,
+    activeImage.size,
+    activeImage.mtime
+  );
+
   useEffect(() => {
-    let canceled = false;
     setLoadFailed(false);
-    const currentPath = activeImage.path;
-    const thumbUrl = getRrImageUrl(currentPath, false, activeImage.culling?.orientation, 1, activeImage.size, activeImage.mtime);
-    const targetFullresUrl = getRrImageUrl(currentPath, true, activeImage.culling?.orientation, undefined, activeImage.size, activeImage.mtime);
+  }, [activeImage.path]);
 
-    setInspectorPreviewSrc(thumbUrl);
-
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.src = targetFullresUrl;
-    img.onload = () => {
-      if (!canceled) {
-        setInspectorPreviewSrc(prev => (prev === thumbUrl ? targetFullresUrl : prev));
-        setLoadFailed(false);
-      }
-    };
-    img.onerror = () => {
-      if (!canceled) {
-        if (inspectorImageRef.current?.complete && inspectorImageRef.current?.naturalWidth === 0) {
-          setLoadFailed(true);
-        }
-      }
-    };
-
-    return () => {
-      canceled = true;
-      img.onload = null;
-      img.onerror = null;
-      img.src = '';
-    };
-  }, [activeImage.path, activeImage.culling?.orientation, activeImage.size, activeImage.mtime]);
-
-  // Check if current visible image failed on mount / src change
-  useEffect(() => {
-    if (inspectorImageRef.current?.complete && inspectorImageRef.current?.naturalWidth === 0) {
-      setLoadFailed(true);
-    }
-  }, [inspectorPreviewSrc, activeImage.path]);
+  const needsCors = focusPeakingEnabled || inspectorHistogramMode !== 'off';
+  const triggerUpdate = `${previewUrl}|${imageLoadTick}`;
 
   return (
     <div className="space-y-2">
@@ -186,24 +160,29 @@ export function InspectorPreviewCard({
             ) : (
               <>
                 <img 
+                  key={`${activeImage.path}|${needsCors ? 'cors' : 'plain'}`}
                   ref={inspectorImageRef}
-                  src={inspectorPreviewSrc || getRrImageUrl(activeImage.path, false, activeImage.culling?.orientation, undefined, activeImage.size, activeImage.mtime)} 
+                  src={previewUrl} 
                   alt={activeImage.name} 
-                  crossOrigin="anonymous"
+                  crossOrigin={needsCors ? "anonymous" : undefined}
+                  onLoad={() => {
+                    setLoadFailed(false);
+                    setImageLoadTick((n) => n + 1);
+                  }}
                   onError={() => setLoadFailed(true)}
-                  className={`w-full h-full object-contain ${inspectorHistogramMode === 'full' ? 'opacity-0 pointer-events-none' : ''}`} 
+                  className={`absolute inset-0 w-full h-full object-contain ${inspectorHistogramMode === 'full' ? 'opacity-0 pointer-events-none' : ''}`} 
                 />
                 {inspectorHistogramMode !== 'full' && (
                   <FocusPeakingOverlay 
                     imageRef={inspectorImageRef}
                     containerRef={inspectorContainerRef}
-                    triggerUpdate={inspectorPreviewSrc}
+                    triggerUpdate={triggerUpdate}
                   />
                 )}
                 {inspectorHistogramMode === 'overlay' && (
                   <InspectorHistogram
                     imageRef={inspectorImageRef}
-                    triggerUpdate={inspectorPreviewSrc}
+                    triggerUpdate={triggerUpdate}
                     mode="overlay"
                     hasFlag={activeImage.culling.flag === 1 || activeImage.culling.flag === -1}
                   />
@@ -211,7 +190,7 @@ export function InspectorPreviewCard({
                 {inspectorHistogramMode === 'full' && (
                   <InspectorHistogram
                     imageRef={inspectorImageRef}
-                    triggerUpdate={inspectorPreviewSrc}
+                    triggerUpdate={triggerUpdate}
                     mode="full"
                   />
                 )}
@@ -248,59 +227,42 @@ export function InspectorPreviewCard({
                 <span>{(activeImage.size / (1024 * 1024)).toFixed(1)} MB</span>
               </div>
             )}
+            {inspectorHistogramMode !== 'full' && !(loadFailed && (isVideo || activeImage.is_video)) && (
+              <>
+                {isRaw && activeImage.is_monochrome_sensor ? (
+                  <div
+                    className="absolute bottom-2 right-2 z-20 px-2 py-0.5 rounded text-[10px] font-mono backdrop-blur-sm shadow-sm flex items-center gap-1 select-none bg-black/80 border border-white/15 text-white/85"
+                    title={t('inspector.monoSensorTooltip', 'Hardware-Monochromsensor. Das RAW enthält native Schwarz-Weiß-Sensordaten ohne Farbfilter.')}
+                  >
+                    <Camera className="w-2.5 h-2.5 text-white/80 shrink-0" />
+                    <span>{t('inspector.badgeMonoSensor')}</span>
+                  </div>
+                ) : isRaw && activeImage.is_monochrome_preview ? (
+                  <div
+                    className="absolute bottom-2 right-2 z-20 px-2 py-0.5 rounded text-[10px] font-mono backdrop-blur-sm shadow-sm flex items-center gap-1 select-none bg-amber-950/85 border border-amber-500/40 text-amber-300"
+                    title={t('inspector.bwWarningTooltip', 'Die Kamera war auf einen Schwarz-Weiß-Bildstil eingestellt. Das Vorschaubild ist monochrom, die RAW-Datei enthält jedoch die vollen Farbinformationen des Sensors.')}
+                  >
+                    <Info className="w-2.5 h-2.5 text-amber-400 shrink-0" />
+                    <span>{t('inspector.badgeBwPreview')}</span>
+                  </div>
+                ) : isRaw ? (
+                  <div
+                    className="absolute bottom-2 right-2 z-20 px-2 py-0.5 rounded text-[10px] font-mono backdrop-blur-sm shadow-sm flex items-center gap-1 select-none bg-black/80 border border-white/15 text-white/75"
+                    title={t('inspector.inCameraPreviewTooltip', 'Eingebettete Kamera-Vorschau (Farbe & Belichtung können vom RAW-Entwickler abweichen).')}
+                  >
+                    <span>{t('inspector.badgeJpgPreview')}</span>
+                  </div>
+                ) : isVideo ? (
+                  <div
+                    className="absolute bottom-2 right-2 z-20 px-2 py-0.5 rounded text-[10px] font-mono backdrop-blur-sm shadow-sm flex items-center gap-1 select-none bg-black/80 border border-accent/30 text-accent"
+                    title={t('inspector.videoMediaDesc', 'Native Vorschau-Keyframe')}
+                  >
+                    <span>{t('inspector.badgeVideoKeyframe')}</span>
+                  </div>
+                ) : null}
+              </>
+            )}
           </div>
-
-          {/* Video Media Container Badge */}
-          {isVideo && (
-            <div 
-              className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-accent/10 border border-accent/30 text-xs shadow-sm"
-            >
-              <Film className="w-4 h-4 text-accent flex-shrink-0" />
-              <div>
-                <span className="font-semibold text-accent text-[11px] block">{t('inspector.videoMedia', 'Videodatei (Container)')}</span>
-                <span className="text-[10px] text-txt-secondary block leading-snug">{t('inspector.videoMediaDesc', 'Native Vorschau-Keyframe')}</span>
-              </div>
-            </div>
-          )}
-
-          {/* RAW & Monochrome Sensor/Preview Status Notification */}
-          {isRaw && (
-            <>
-              {activeImage.is_monochrome_sensor ? (
-                <div 
-                  className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-txt-secondary text-xs"
-                  title={t('inspector.monoSensorTooltip', 'Hardware-Monochromsensor. Das RAW enthält native Schwarz-Weiß-Sensordaten ohne Farbfilter.')}
-                >
-                  <Camera className="w-4 h-4 text-white/80 flex-shrink-0" />
-                  <div>
-                    <span className="font-semibold text-white/90 text-[11px] block">{t('inspector.monoSensor', 'Monochrom-Sensor')}</span>
-                    <span className="text-[10px] text-txt-tertiary block">{t('inspector.monoSensorDesc', 'Hardware-Sensor ohne Bayer-Matrix (echtes S/W)')}</span>
-                  </div>
-                </div>
-              ) : activeImage.is_monochrome_preview ? (
-                <div 
-                  className="flex items-start gap-2.5 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs shadow-sm"
-                  title={t('inspector.bwWarningTooltip', 'Die Kamera war auf einen Schwarz-Weiß-Bildstil eingestellt. Das Vorschaubild ist monochrom, die RAW-Datei enthält jedoch die vollen Farbinformationen des Sensors.')}
-                >
-                  <Info className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-semibold text-amber-300 text-[11px] block">{t('inspector.bwWarningTitle', 'S/W-Vorschau (RAW ist Farbe)')}</span>
-                    <span className="text-[10px] text-amber-400/80 block mt-0.5 leading-snug">
-                      {t('inspector.bwWarningSubtitle', 'Kamerastil ist Schwarz-Weiß. Die RAW-Datei enthält alle Farbinformationen!')}
-                    </span>
-                  </div>
-                </div>
-              ) : (
-                <div 
-                  className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-app-card/60 border border-app-border/40 text-txt-tertiary text-[10px]"
-                  title={t('inspector.inCameraPreviewTooltip', 'Eingebettete Kamera-Vorschau (Farbe & Belichtung können vom RAW-Entwickler abweichen).')}
-                >
-                  <span>{t('inspector.previewRendering', 'Vorschau: In-Camera JPEG')}</span>
-                  <span className="text-white/40 font-mono">JPG Preview</span>
-                </div>
-              )}
-            </>
-          )}
         </>
       )}
     </div>

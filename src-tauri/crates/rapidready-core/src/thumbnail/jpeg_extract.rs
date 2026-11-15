@@ -211,7 +211,7 @@ pub fn extract_largest_embedded_jpeg(path: &Path, target_orient: Option<u32>) ->
     };
 
     let eff_orient = target_orient.or_else(|| get_effective_orientation(path)).unwrap_or(1);
-    if eff_orient == 1 {
+    if eff_orient == 1 && parse_header_orientation(jpeg_bytes).unwrap_or(1) == 1 {
         Some(jpeg_bytes.to_vec())
     } else {
         Some(inject_orientation_into_jpeg(jpeg_bytes, eff_orient as u16))
@@ -392,7 +392,7 @@ pub fn extract_embedded_thumbnail(path: &Path, target_orient: Option<u32>) -> Op
         .or_else(|| parse_header_orientation(&header))
         .unwrap_or(1);
 
-    if eff_orient == 1 {
+    if eff_orient == 1 && parse_header_orientation(&raw_bytes).unwrap_or(1) == 1 {
         Some(raw_bytes)
     } else {
         Some(inject_orientation_into_jpeg(&raw_bytes, eff_orient as u16))

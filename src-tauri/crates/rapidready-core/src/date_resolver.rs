@@ -121,9 +121,9 @@ pub fn get_fast_creation_date(path: &Path, meta: Option<&std::fs::Metadata>) -> 
 
 fn extract_date_from_exif(exif: &exif::Exif) -> Option<NaiveDateTime> {
     let tags_to_try = [
-        exif::Tag::DateTimeOriginal,
-        exif::Tag::DateTimeDigitized, // sometimes CreateDate
-        exif::Tag::DateTime,          // sometimes ModifyDate
+        exif::Tag::DateTime,          // 1. ModifyDate (if present)
+        exif::Tag::DateTimeOriginal,  // 2. Capture Date
+        exif::Tag::DateTimeDigitized, // 3. CreateDate
         exif::Tag::GPSDateStamp,
     ];
     

@@ -210,6 +210,15 @@ impl ArchiveCatalog {
             )?;
         }
 
+        if user_version < 3 {
+            conn.execute_batch(
+                "DELETE FROM archive_files;
+                 DELETE FROM archive_directories;
+                 UPDATE archive_meta SET is_fully_indexed = 0;
+                 PRAGMA user_version = 3;",
+            )?;
+        }
+
         Ok(())
     }
 
