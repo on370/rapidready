@@ -98,5 +98,5 @@ fi
 if [ "$DEEP_CLEAN" -eq 1 ]; then
   echo "👉 Next step: Run 'npm install' or './scripts/dev.sh' to re-initialize dependencies."
 else
-  echo "👉 Next step: Run './scripts/dev.sh' to start development or './scripts/build-dmg.sh' to build."
+  echo "👉 Next step: Run './scripts/dev.sh' to start development or './scripts/build-dmg.sh' (macOS) / './scripts/build-linux.sh' (Linux) to build."
 fi

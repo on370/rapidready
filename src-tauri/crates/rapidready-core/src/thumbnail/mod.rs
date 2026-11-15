@@ -14,6 +14,8 @@ pub mod header_parser;
 pub mod jpeg_extract;
 pub mod imageio_ffi;
 pub mod worker;
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+pub mod external_decoder;
 #[cfg(test)]
 mod tests;
 
@@ -660,6 +662,16 @@ pub fn get_preview_jpeg_with_orient_and_hints(
         }
     }
 
+    // Stufe 2b (Linux): HEIC/HEIF/AVIF stills and video poster frames via optional
+    // external decoders (heif-dec / ffmpeg) - the OS thumbnailers used on macOS/Windows don't exist here.
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        if let Some(bytes) = external_preview_jpeg(path, target_px, target_orient) {
+            record_thumbnail_cache(&cache_key, blake3_key.as_deref(), scale, &bytes);
+            return Ok(bytes);
+        }
+    }
+
     // Stufe 3: Fallback using thumb_rs for video poster frames (.mp4, .mov) or exotic container formats
     let thumb_scale = ThumbnailScale(scale.max(1));
     let thumb_res = get_thumbnail(path, thumb_scale);
@@ -695,6 +707,30 @@ pub fn get_preview_jpeg_with_orient_and_hints(
     record_thumbnail_cache(&cache_key, blake3_key.as_deref(), scale, &bytes);
         
     Ok(bytes)
+}
+
+/// Linux: decodes a HEIF-family still or video poster frame with an external tool and
+/// encodes it as JPEG. Decoded pixels are already display-oriented (the tools apply the
+/// container rotation), so - like the macOS ImageIO path - only an explicit user rotation
+/// (argument or `.rrdata` sidecar) is applied, as a delta relative to the file's EXIF orientation.
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn external_preview_jpeg(path: &Path, max_px: u32, explicit_orient: Option<u32>) -> Option<Vec<u8>> {
+    external_decoder::media_kind(path)?;
+    let mut img = external_decoder::decode_preview(path, max_px)?;
+
+    let explicit_o = explicit_orient.or_else(|| crate::culling::read_sidecar(path).orientation);
+    if let Some(target_o) = explicit_o {
+        let file_deg = orientation_to_degrees(read_exif_orientation(path).unwrap_or(1));
+        let target_deg = orientation_to_degrees(target_o);
+        let delta_deg = (target_deg + 360 - file_deg) % 360;
+        if delta_deg != 0 {
+            img = rotate_by_degrees(img, delta_deg);
+        }
+    }
+
+    let mut buffer = Cursor::new(Vec::new());
+    img.into_rgb8().write_to(&mut buffer, ImageFormat::Jpeg).ok()?;
+    Some(buffer.into_inner())
 }
 
 pub fn get_preview_jpeg(path: &Path, scale: u32) -> Result<Vec<u8>> {
@@ -800,6 +836,16 @@ pub fn get_max_preview_jpeg_with_orient_and_hints(
         };
         record_thumbnail_cache(&cache_key, blake3_key.as_deref(), 100, &out_bytes);
         return Ok(out_bytes);
+    }
+
+    // 0. Linux: HEIC/HEIF/AVIF stills and video poster frames via optional external decoders.
+    //    Runs before the embedded-JPEG scan, which would otherwise return a tiny EXIF thumbnail.
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        if let Some(bytes) = external_preview_jpeg(path, 2560, explicit_orient) {
+            record_thumbnail_cache(&cache_key, blake3_key.as_deref(), 100, &bytes);
+            return Ok(bytes);
+        }
     }
 
     // 1. Fast path: Extract largest embedded full-res JPEG directly from RAW container
