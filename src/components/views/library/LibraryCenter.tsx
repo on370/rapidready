@@ -11,6 +11,7 @@ import { getTopLevelSelectedPaths } from "./LibraryLeftSidebar";
 import { CullingToolbar } from "./components/CullingToolbar";
 import { LibraryGrid } from "./components/LibraryGrid";
 import { LoupeViewer } from "./components/LoupeViewer";
+import { CalendarView } from "./components/CalendarView";
 import { FullscreenViewer } from "./components/FullscreenViewer";
 import { useLibraryShortcuts } from "./hooks/useLibraryShortcuts";
 import { AppErrorBoundary } from "../../ui/AppErrorBoundary";
@@ -111,8 +112,8 @@ function getDirAndParent(normPath: string): { dir: string; parentDir: string; fo
 }
 
 interface LibraryCenterProps {
-  viewMode?: 'grid' | 'loupe' | 'fullscreen';
-  setViewMode?: (mode: 'grid' | 'loupe' | 'fullscreen') => void;
+  viewMode?: 'grid' | 'calendar' | 'loupe' | 'fullscreen';
+  setViewMode?: (mode: 'grid' | 'calendar' | 'loupe' | 'fullscreen') => void;
   toggleInspector?: () => void;
 }
 
@@ -1490,6 +1491,20 @@ export function LibraryCenter({
             onReorderImages={activeCollection ? handleReorderInCollection : undefined}
           />
         </div>
+
+        {viewMode === 'calendar' && (
+          <div className="absolute inset-0 z-10 flex flex-col bg-app-bg">
+            <CalendarView
+              displayedImages={displayedImages}
+              activePath={activeImage?.path}
+              onOpenDay={(paths, openLoupe) => {
+                setSelectedPaths(new Set(paths));
+                setActiveImageIndex(Math.max(0, displayedImages.findIndex((img) => img.path === paths[0])));
+                setViewMode(openLoupe ? 'loupe' : 'grid');
+              }}
+            />
+          </div>
+        )}
 
         {/* LoupeViewer: mounted on-demand when viewMode === 'loupe' */}
         {viewMode === 'loupe' && (

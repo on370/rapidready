@@ -12,9 +12,9 @@ const resetOsFullscreenIfActive = async () => {
 };
 
 interface LibraryUIStore {
-  viewMode: 'grid' | 'loupe' | 'fullscreen';
-  previousViewMode: 'grid' | 'loupe';
-  setViewMode: (mode: 'grid' | 'loupe' | 'fullscreen') => void;
+  viewMode: 'grid' | 'calendar' | 'loupe' | 'fullscreen';
+  previousViewMode: 'grid' | 'calendar' | 'loupe';
+  setViewMode: (mode: 'grid' | 'calendar' | 'loupe' | 'fullscreen') => void;
   enterFullscreen: () => void;
   exitFullscreen: () => void;
   toggleFullscreen: () => void;
@@ -220,7 +220,7 @@ export const useLibraryUIStore = create<LibraryUIStore>((set) => ({
   previousViewMode: 'grid',
   setViewMode: (mode) => set((state) => {
     if (mode === 'fullscreen') {
-      const prev = (state.viewMode === 'fullscreen' ? state.previousViewMode : state.viewMode) as 'grid' | 'loupe';
+      const prev = (state.viewMode === 'fullscreen' ? state.previousViewMode : state.viewMode) as 'grid' | 'calendar' | 'loupe';
       return {
         viewMode: 'fullscreen',
         previousViewMode: prev || 'grid',
@@ -234,7 +234,7 @@ export const useLibraryUIStore = create<LibraryUIStore>((set) => ({
     }
   }),
   enterFullscreen: () => set((state) => {
-    const prev = (state.viewMode === 'fullscreen' ? state.previousViewMode : state.viewMode) as 'grid' | 'loupe';
+    const prev = (state.viewMode === 'fullscreen' ? state.previousViewMode : state.viewMode) as 'grid' | 'calendar' | 'loupe';
     return {
       viewMode: 'fullscreen',
       previousViewMode: prev || 'grid',

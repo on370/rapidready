@@ -5,7 +5,7 @@ import { isMac, modSymbol, shiftSymbol } from '../../utils/platform';
 import { useSettingsStore, getRawDeveloperDisplayName } from '../../stores/settingsStore';
 
 interface HelpPopoverProps {
-  viewMode: 'grid' | 'loupe' | 'fullscreen';
+  viewMode: 'grid' | 'calendar' | 'loupe' | 'fullscreen';
 }
 
 export function HelpPopover({ viewMode }: HelpPopoverProps) {

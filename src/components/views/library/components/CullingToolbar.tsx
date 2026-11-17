@@ -5,7 +5,7 @@ import {
   SquareArrowOutUpRight, CircleSlash, Tag, ChevronDown, X, ScanEye,
   Maximize2,
   GalleryThumbnails,
-  ArrowDownAZ, Calendar, HardDrive, ArrowUpNarrowWide, ArrowDownWideNarrow,
+  ArrowDownAZ, Calendar, CalendarDays, HardDrive, ArrowUpNarrowWide, ArrowDownWideNarrow,
   Layers
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -91,6 +91,8 @@ export const CullingToolbar = React.memo(function CullingToolbar({
     stackRawJpeg,
     toggleStackRawJpeg,
   } = useLibraryUIStore();
+  // The size slider sets the thumbnail size in grid and the day size in calendar; zoom elsewhere.
+  const thumbSizeMode = viewMode === 'grid' || viewMode === 'calendar';
 
   const activeCollectionId = useCollectionsStore((s) => s.activeCollectionId);
 
@@ -205,7 +207,7 @@ export const CullingToolbar = React.memo(function CullingToolbar({
           <div
             className="flex items-center gap-1.5 bg-app-card border border-app-border rounded-lg px-2 py-1 h-[30px]"
             title={
-              viewMode === 'grid'
+              thumbSizeMode
                 ? t('toolbar.zoomThumbnailSize', { size: gridThumbnailSize })
                 : loupeScale <= 0
                   ? t('toolbar.zoomFit')
@@ -214,7 +216,7 @@ export const CullingToolbar = React.memo(function CullingToolbar({
           >
             <button
               onClick={() => {
-                if (viewMode === 'grid') {
+                if (thumbSizeMode) {
                   setGridThumbnailSize(Math.max(120, gridThumbnailSize - 20));
                 } else {
                   if (loupeScale <= 1) {
@@ -225,20 +227,20 @@ export const CullingToolbar = React.memo(function CullingToolbar({
                 }
               }}
               className="text-txt-tertiary hover:text-txt-secondary transition-colors cursor-pointer p-0.5 rounded"
-              title={viewMode === 'grid' ? t('toolbar.smallerThumbnails') : t('toolbar.zoomOut')}
+              title={thumbSizeMode ? t('toolbar.smallerThumbnails') : t('toolbar.zoomOut')}
             >
               <ZoomOut className="w-3.5 h-3.5" />
             </button>
 
             <input
               type="range"
-              min={viewMode === 'grid' ? 120 : 0}
-              max={viewMode === 'grid' ? 400 : 5}
-              step={viewMode === 'grid' ? 10 : 0.1}
-              value={viewMode === 'grid' ? gridThumbnailSize : loupeScale}
+              min={thumbSizeMode ? 120 : 0}
+              max={thumbSizeMode ? 400 : 5}
+              step={thumbSizeMode ? 10 : 0.1}
+              value={thumbSizeMode ? gridThumbnailSize : loupeScale}
               onChange={(e) => {
                 const val = parseFloat(e.target.value);
-                if (viewMode === 'grid') {
+                if (thumbSizeMode) {
                   setGridThumbnailSize(val);
                 } else {
                   setLoupeScale(val < 0.5 ? 0 : val);
@@ -249,7 +251,7 @@ export const CullingToolbar = React.memo(function CullingToolbar({
 
             <button
               onClick={() => {
-                if (viewMode === 'grid') {
+                if (thumbSizeMode) {
                   setGridThumbnailSize(Math.min(400, gridThumbnailSize + 20));
                 } else {
                   if (loupeScale <= 0) {
@@ -260,7 +262,7 @@ export const CullingToolbar = React.memo(function CullingToolbar({
                 }
               }}
               className="text-txt-tertiary hover:text-txt-secondary transition-colors cursor-pointer p-0.5 rounded"
-              title={viewMode === 'grid' ? t('toolbar.largerThumbnails') : t('toolbar.zoomIn')}
+              title={thumbSizeMode ? t('toolbar.largerThumbnails') : t('toolbar.zoomIn')}
             >
               <ZoomIn className="w-3.5 h-3.5" />
             </button>
@@ -277,6 +279,15 @@ export const CullingToolbar = React.memo(function CullingToolbar({
             >
               <LayoutGrid className="w-3.5 h-3.5" />
               <span>{t('toolbar.viewGrid', 'Raster')}</span>
+            </button>
+            <button
+              className={`px-2.5 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all duration-150 cursor-pointer ${viewMode === 'calendar' ? 'bg-accent/15 text-accent' : 'text-txt-tertiary hover:text-txt-secondary'}`}
+              onClick={() => setViewMode('calendar')}
+              title={t('toolbar.viewCalendarTooltip')}
+              data-view-calendar
+            >
+              <CalendarDays className="w-3.5 h-3.5" />
+              <span>{t('toolbar.viewCalendar')}</span>
             </button>
             <button
               className={`px-2.5 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all duration-150 cursor-pointer ${viewMode === 'loupe' ? 'bg-accent/15 text-accent' : 'text-txt-tertiary hover:text-txt-secondary'}`}
