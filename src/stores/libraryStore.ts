@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import { normalizePath, normalizeSlash } from '../utils/image';
 import { useLibraryUIStore } from './libraryUIStore';
+import { AdvancedFilter, EMPTY_ADVANCED_FILTER } from '../components/views/library/utils/advancedFilter';
 
 export interface CullingState {
   flag: number | null; // 1 = Pick, -1 = Reject, null = Unrated
@@ -140,6 +141,9 @@ interface LibraryStore {
   setSelectedColorFilter: (color: string | null) => void;
   selectedTagFilter: string | null;
   setSelectedTagFilter: (tag: string | null) => void;
+  advancedFilter: AdvancedFilter;
+  /** Merges `patch` into the date / camera / lens / file type / GPS filter; `null` clears it. */
+  setAdvancedFilter: (patch: Partial<AdvancedFilter> | null) => void;
   
   autoAdvance: boolean;
   setAutoAdvance: (val: boolean) => void;
@@ -1088,6 +1092,7 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
       selectedRatingFilter: null,
       selectedColorFilter: null,
       selectedTagFilter: null,
+      advancedFilter: EMPTY_ADVANCED_FILTER,
     }));
   },
   setSelectedFolderPaths: (paths) => {
@@ -1103,6 +1108,7 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
       selectedRatingFilter: null,
       selectedColorFilter: null,
       selectedTagFilter: null,
+      advancedFilter: EMPTY_ADVANCED_FILTER,
     }));
   },
   setActiveImageIndex: (index) => set({ activeImageIndex: index }),
@@ -1127,6 +1133,7 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
       selectedRatingFilter: null,
       selectedColorFilter: null,
       selectedTagFilter: null,
+      advancedFilter: EMPTY_ADVANCED_FILTER,
       pendingSelectAll: true,
     });
   },
@@ -1149,6 +1156,7 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
       selectedRatingFilter: null,
       selectedColorFilter: null,
       selectedTagFilter: null,
+      advancedFilter: EMPTY_ADVANCED_FILTER,
       pendingSelectAll: true,
     });
   },
@@ -1359,7 +1367,8 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
     selectedPaths: new Set(),
     selectedRatingFilter: null,
     selectedColorFilter: null,
-    selectedTagFilter: null
+    selectedTagFilter: null,
+    advancedFilter: EMPTY_ADVANCED_FILTER
   }),
   setLastImportPaths: (paths) => {
     try {
@@ -1376,6 +1385,12 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
   setSelectedColorFilter: (color) => set({ selectedColorFilter: color, activeImageIndex: 0 }),
   selectedTagFilter: null,
   setSelectedTagFilter: (tag) => set({ selectedTagFilter: tag, activeImageIndex: 0 }),
+  advancedFilter: EMPTY_ADVANCED_FILTER,
+  setAdvancedFilter: (patch) =>
+    set((state) => ({
+      advancedFilter: patch ? { ...state.advancedFilter, ...patch } : EMPTY_ADVANCED_FILTER,
+      activeImageIndex: 0,
+    })),
   
   autoAdvance: true,
   setAutoAdvance: (val) => set({ autoAdvance: val }),
