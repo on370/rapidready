@@ -351,6 +351,8 @@ pub fn run() {
             commands::cancel_archive_scan,
             commands::set_culling_state,
             commands::set_culling_state_batch,
+            commands::find_similar_groups,
+            commands::cancel_similar_groups,
             commands::set_gps_batch,
             commands::set_editorial_batch,
             commands::set_date_override_batch,
