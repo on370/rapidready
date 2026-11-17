@@ -1,5 +1,6 @@
 
 
+pub mod cache_settings;
 pub mod commands;
 pub mod menu;
 
@@ -72,10 +73,22 @@ pub fn run() {
 
             use tauri::Manager;
             let app_dir = app.path().app_data_dir()?;
-            let cache_dir = app.path().app_cache_dir()?.join("disk_cache_v2");
+            let default_cache_dir = app.path().app_cache_dir()?.join(cache_settings::DEFAULT_CACHE_SUBDIR);
+            // Applies a location change made in Settings since the last launch (moves the cache).
+            let startup_cache = cache_settings::prepare_startup(&app_dir, &default_cache_dir);
             let catalog = std::sync::Arc::new(rapidready_core::archive_catalog::ArchiveCatalog::new(&app_dir)?);
             rapidready_core::archive_catalog::init_global_catalog(catalog.clone());
-            let _ = rapidready_core::chunk_cache::init_global_chunk_cache(&cache_dir, &app_dir.join("archive_catalog.db"));
+            if let Some(cache_dir) = &startup_cache.dir {
+                if let Ok(cache) = rapidready_core::chunk_cache::init_global_chunk_cache(cache_dir, &app_dir.join("archive_catalog.db")) {
+                    if startup_cache.start_fresh {
+                        // An empty new location: forget the index rows of the deleted old cache.
+                        let _ = cache.clear_cache();
+                        let _ = catalog.reset_all_fully_indexed_flags();
+                    }
+                    cache.set_size_limit(startup_cache.settings.max_bytes);
+                    rapidready_core::chunk_cache::spawn_size_limit_pass();
+                }
+            }
             app.manage(commands::ArchiveCatalogState {
                 catalog,
             });
@@ -399,6 +412,10 @@ pub fn run() {
             commands::rebuild_archive_catalog,
             commands::get_disk_cache_stats,
             commands::clear_disk_cache,
+            commands::get_cache_settings,
+            commands::set_cache_location,
+            commands::set_cache_size_limit,
+            commands::restart_app,
             commands::set_sidecar_mode_cmd,
             commands::set_xmp_naming_mode_cmd,
             commands::sync_archive_sidecars,

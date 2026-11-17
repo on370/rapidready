@@ -521,7 +521,7 @@
     "badgeScan": "⚡ Initial Scan",
     "tooltipScan": "RapidReady discovers all image and video files in the archive folder. Discovered photos appear immediately in the grid.",
     "badgeCache": "⚡ Cache Building",
-    "tooltipCache": "RapidReady creates a local high-speed cache on your SSD. Future launches and scrolling through the archive will work instantly and smoothly, even if the NAS is sleeping.",
+    "tooltipCache": "RapidReady creates a local cache of thumbnails and previews on this computer (location and size limit: Settings → Disk cache). Future launches and scrolling through the archive will work instantly and smoothly, even if the NAS is sleeping.",
     "badgeSync": "⚡ Archive Sync",
     "tooltipSync": "RapidReady reconciles changes since the last scan with the high-speed local cache: newly added, modified, or deleted photos are updated.",
     "subline": "Future launches will open this archive instantly from cached data."

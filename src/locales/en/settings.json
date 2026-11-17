@@ -166,5 +166,53 @@
     "usageTermsLabel": "Terms of Use / License",
     "usageTermsPlaceholder": "e.g. CC-BY 4.0 or Editorial Use Only",
     "guaranteeNote": "This metadata is automatically written to companion sidecars (.rrdata / .xmp) during import. Camera originals remain untouched."
+  },
+  "cache": {
+    "title": "Disk cache",
+    "subtitle": "Thumbnails and previews of your archive, kept on this computer so browsing doesn't have to read the original files again.",
+    "loading": "Reading cache settings…",
+    "location": {
+      "title": "Cache location",
+      "default": "Default",
+      "free": "{{size}} free on this drive",
+      "freeUnknown": "Free space unknown",
+      "hint": "A fast internal drive (SSD) works best.",
+      "change": "Change location…",
+      "useDefault": "Use default location",
+      "open": "Show in file browser",
+      "pickTitle": "Choose a folder for the RapidReady cache"
+    },
+    "moveDialog": {
+      "title": "Move the disk cache?",
+      "message": "The cache will be in {{to}} after RapidReady restarts.",
+      "move": "Move the existing cache ({{size}})",
+      "moveDesc": "Nothing has to be rebuilt. Moving to another drive takes a while on the next launch.",
+      "fresh": "Start with an empty cache",
+      "freshDesc": "The current cache is deleted. Thumbnails and previews are rebuilt from your originals as you browse.",
+      "confirm": "Change location",
+      "cancel": "Cancel"
+    },
+    "restart": {
+      "move": "The cache will be moved to its new location when RapidReady restarts.",
+      "fresh": "RapidReady will start an empty cache in the new location when it restarts.",
+      "button": "Restart now"
+    },
+    "unavailable": "The cache folder isn't available (is its drive connected?). RapidReady is running without a disk cache until it is, or until you choose another location.",
+    "moveFailed": "The cache couldn't be moved, so it stayed where it was: {{error}}",
+    "limit": {
+      "title": "Maximum cache size",
+      "used_one": "Using {{size}} for {{items}} item",
+      "used_other": "Using {{size}} for {{items}} items",
+      "trimming": "over the limit, trimming…",
+      "desc": "When the cache is full, the oldest large previews are removed first, then the oldest thumbnails. They are rebuilt from the original files when you view them again.",
+      "unlimited": "Unlimited"
+    },
+    "clear": {
+      "desc": "Deletes all cached thumbnails and previews. Your photos, ratings and sidecar files are not affected.",
+      "button": "Clear cache",
+      "confirmTitle": "Clear the disk cache?",
+      "confirmMessage": "This deletes {{size}} of cached thumbnails and previews. They are rebuilt from your original files as you browse, which is slow for archives on hard drives or a NAS.",
+      "confirmButton": "Clear cache"
+    }
   }
 }

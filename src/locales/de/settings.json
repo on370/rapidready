@@ -166,5 +166,53 @@
     "usageTermsLabel": "Nutzungsbedingungen / Lizenz",
     "usageTermsPlaceholder": "z. B. CC-BY 4.0 oder Nicht-kommerzielle Nutzung",
     "guaranteeNote": "Diese Stammdaten werden beim Import automatisch in die Sidecar-Dateien (.rrdata / .xmp) geschrieben. Kamera-Originale bleiben unangetastet."
+  },
+  "cache": {
+    "title": "Festplatten-Cache",
+    "subtitle": "Vorschaubilder und Vorschauen deines Archivs, auf diesem Computer gespeichert, damit beim Durchblättern die Originaldateien nicht erneut gelesen werden müssen.",
+    "loading": "Cache-Einstellungen werden gelesen…",
+    "location": {
+      "title": "Cache-Speicherort",
+      "default": "Standard",
+      "free": "{{size}} frei auf diesem Laufwerk",
+      "freeUnknown": "Freier Speicher unbekannt",
+      "hint": "Ein schnelles internes Laufwerk (SSD) ist am besten.",
+      "change": "Speicherort ändern…",
+      "useDefault": "Standard-Speicherort verwenden",
+      "open": "Im Dateibrowser zeigen",
+      "pickTitle": "Ordner für den RapidReady-Cache wählen"
+    },
+    "moveDialog": {
+      "title": "Festplatten-Cache verschieben?",
+      "message": "Nach dem Neustart von RapidReady liegt der Cache in {{to}}.",
+      "move": "Vorhandenen Cache verschieben ({{size}})",
+      "moveDesc": "Nichts muss neu erstellt werden. Das Verschieben auf ein anderes Laufwerk dauert beim nächsten Start eine Weile.",
+      "fresh": "Mit leerem Cache beginnen",
+      "freshDesc": "Der aktuelle Cache wird gelöscht. Vorschaubilder und Vorschauen werden beim Durchblättern aus deinen Originalen neu erstellt.",
+      "confirm": "Speicherort ändern",
+      "cancel": "Abbrechen"
+    },
+    "restart": {
+      "move": "Der Cache wird beim Neustart von RapidReady an den neuen Ort verschoben.",
+      "fresh": "RapidReady beginnt beim Neustart mit einem leeren Cache am neuen Ort.",
+      "button": "Jetzt neu starten"
+    },
+    "unavailable": "Der Cache-Ordner ist nicht verfügbar (ist sein Laufwerk angeschlossen?). RapidReady läuft ohne Festplatten-Cache, bis er wieder verfügbar ist oder du einen anderen Ort wählst.",
+    "moveFailed": "Der Cache konnte nicht verschoben werden und ist am alten Ort geblieben: {{error}}",
+    "limit": {
+      "title": "Maximale Cache-Größe",
+      "used_one": "{{size}} belegt für {{items}} Element",
+      "used_other": "{{size}} belegt für {{items}} Elemente",
+      "trimming": "über dem Limit, wird verkleinert…",
+      "desc": "Ist der Cache voll, werden zuerst die ältesten großen Vorschauen entfernt, danach die ältesten Vorschaubilder. Sie werden beim nächsten Ansehen aus den Originaldateien neu erstellt.",
+      "unlimited": "Unbegrenzt"
+    },
+    "clear": {
+      "desc": "Löscht alle zwischengespeicherten Vorschaubilder und Vorschauen. Deine Fotos, Bewertungen und Sidecar-Dateien bleiben unverändert.",
+      "button": "Cache leeren",
+      "confirmTitle": "Festplatten-Cache leeren?",
+      "confirmMessage": "Damit werden {{size}} an Vorschaubildern und Vorschauen gelöscht. Sie werden beim Durchblättern aus deinen Originaldateien neu erstellt, was bei Archiven auf Festplatten oder einem NAS langsam ist.",
+      "confirmButton": "Cache leeren"
+    }
   }
 }

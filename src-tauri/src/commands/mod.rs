@@ -3,8 +3,10 @@ pub mod archive_cmds;
 pub mod culling_cmds;
 pub mod collection_cmds;
 pub mod system_cmds;
+pub mod cache_cmds;
 
 pub use import_cmds::*;
+pub use cache_cmds::*;
 pub use archive_cmds::*;
 pub use culling_cmds::*;
 pub use collection_cmds::*;
