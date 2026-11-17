@@ -343,18 +343,18 @@ export function ImportLightboxModal({
                 {rawMeta.is_monochrome_sensor ? (
                   <span
                     className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-white/10 text-white/90 font-medium border border-white/15 ml-1"
-                    title="Hardware-Monochromsensor. Das RAW enthält native Schwarz-Weiß-Sensordaten ohne Farbfilter."
+                    title={t('lightbox.monoSensorTooltip')}
                   >
                     <Camera className="w-3 h-3 text-white/80" />
-                    <span>Monochrom-Sensor</span>
+                    <span>{t('lightbox.monoSensor')}</span>
                   </span>
                 ) : rawMeta.is_monochrome_preview ? (
                   <span
                     className="flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-semibold border border-amber-500/40 shadow-xs animate-in fade-in duration-150 ml-1"
-                    title="Die Kamera war auf einen Schwarz-Weiß-Bildstil eingestellt. Das Vorschaubild ist monochrom, die RAW-Datei enthält jedoch die vollen Farbinformationen des Sensors."
+                    title={t('lightbox.monoPreviewTooltip')}
                   >
                     <Info className="w-3.5 h-3.5 text-amber-400" />
-                    <span>S/W-Vorschau (RAW ist Farbe)</span>
+                    <span>{t('lightbox.monoPreview')}</span>
                   </span>
                 ) : null}
               </>
@@ -434,7 +434,7 @@ export function ImportLightboxModal({
             <kbd className="bg-white/10 px-1.5 py-0.5 rounded border border-white/15 text-[10px] text-white/70">
               Space
             </kbd>
-            <span>Auswahl</span>
+            <span>{t('lightbox.toggleSelection')}</span>
             <span className="mx-1 text-white/20">&bull;</span>
             <kbd className="bg-white/10 px-1.5 py-0.5 rounded border border-white/15 text-[10px] text-white/70">
               Z
@@ -444,7 +444,7 @@ export function ImportLightboxModal({
             <kbd className="bg-white/10 px-1.5 py-0.5 rounded border border-white/15 text-[10px] text-white/70">
               Esc
             </kbd>
-            <span>Schließen</span>
+            <span>{t('lightbox.close')}</span>
           </div>
         </div>
       </div>
@@ -471,7 +471,7 @@ export function ImportLightboxModal({
               onPrev();
             }}
             className="absolute left-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-black/60 hover:bg-black/80 border border-white/20 text-white/80 hover:text-white flex items-center justify-center backdrop-blur-md transition-all z-20 shadow-2xl hover:scale-105 active:scale-95"
-            title="Vorheriges Bild (Pfeiltaste links)"
+            title={t('lightbox.prevImage')}
           >
             <ChevronLeft className="w-6 h-6" />
           </button>
@@ -484,7 +484,7 @@ export function ImportLightboxModal({
               onNext();
             }}
             className="absolute right-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-black/60 hover:bg-black/80 border border-white/20 text-white/80 hover:text-white flex items-center justify-center backdrop-blur-md transition-all z-20 shadow-2xl hover:scale-105 active:scale-95"
-            title="Nächstes Bild (Pfeiltaste rechts)"
+            title={t('lightbox.nextImage')}
           >
             <ChevronRight className="w-6 h-6" />
           </button>
@@ -543,7 +543,7 @@ export function ImportLightboxModal({
         {/* Loading badge for fullres arrival */}
         {!fullresReady && (
           <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-md text-white/60 text-xs px-2.5 py-1 rounded-md border border-white/10 pointer-events-none animate-pulse">
-            Lade Sensor-Schärfe...
+            {t('lightbox.loadingFullRes')}
           </div>
         )}
       </div>

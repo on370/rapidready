@@ -18,11 +18,15 @@
     "entireArchiveTooltip": "Gesamtes Archiv anzeigen (Esc)",
     "fullyCachedTooltip": "Archiv ist vollständig im lokalen High-Speed-Cache (100% Offline-Ready, 60 FPS)",
     "cachingInProgressTooltip": "Archiv-Cache wird im Hintergrund aufgebaut...",
-    "notFullyCachedTooltip": "Archiv ist noch nicht vollständig gecacht (Vorschauen werden bei Bedarf geladen)"
+    "notFullyCachedTooltip": "Archiv ist noch nicht vollständig gecacht (Vorschauen werden bei Bedarf geladen)",
+    "lastImportCount_one": "Letzter Import (1 Foto)",
+    "lastImportCount_other": "Letzter Import ({{count}} Fotos)"
   },
   "header": {
     "lastImport": "Letzter Import",
-    "allImages": "Alle Bilder"
+    "allImages": "Alle Bilder",
+    "multipleFolders_one": "1 Ordner",
+    "multipleFolders_other": "{{count}} Ordner"
   },
   "toolbar": {
     "showInFinder": "Im Finder öffnen",
@@ -84,7 +88,10 @@
     "pick": "Als Auswahl markieren",
     "reject": "Als verworfen markieren",
     "unrated": "Markierung aufheben",
-    "rating": "Bewertung:"
+    "rating": "Bewertung:",
+    "stars_one": "1 Stern",
+    "stars_other": "{{count}} Sterne",
+    "matchOfSelected": "{{matched}} von {{selected}}"
   },
   "filters": {
     "label": "Filter:",
@@ -151,7 +158,8 @@
     "choiceOnlyRawDesc": "Behält die JPEGs und hebt deren Verworfen-Status auf.",
     "choiceOnlyJpeg": "Nur JPEG-Dateien der Stapel löschen ({{count}})",
     "choiceOnlyJpegDesc": "Behält die RAW-Dateien und hebt deren Verworfen-Status auf.",
-    "failedError": "Löschen fehlgeschlagen: "
+    "failedError": "Löschen fehlgeschlagen: ",
+    "partialFailed": "{{failed}} von {{total}} Datei(en) konnten nicht gelöscht werden: {{error}}"
   },
   "empty": "Keine Bilder gefunden",
   "loading": {
@@ -367,7 +375,20 @@
     "editorialSaveFailed": "Fehler beim Speichern der redaktionellen Daten",
     "variousValues": "<verschiedene Werte>",
     "editorialBatchBadge": "Wird auf alle {{count}} ausgewählten Bilder angewendet",
-    "resetEditorial": "Zurücksetzen (EXIF wiederherstellen)"
+    "resetEditorial": "Zurücksetzen (EXIF wiederherstellen)",
+    "shadowClipping": "Tiefen",
+    "histogramTitle": "RGB + Luma",
+    "highlightClipping": "Lichter",
+    "histogramTooltip": "Histogramm umschalten: Aus / Overlay / Vollbild (H)",
+    "videoMediaDesc": "Native Vorschau-Keyframe",
+    "yearChipTooltip": "Fügt © {year} ein (wird pro Bild mit dem jeweiligen Aufnahmejahr ersetzt)",
+    "gpsErrors": {
+      "empty": "Keine Eingabe vorhanden.",
+      "invalidNumbers": "Ungültige Zahlenwerte für Koordinaten.",
+      "latitudeOutOfRange": "Breitengrad außerhalb des gültigen Bereichs ({{value}}° liegt nicht zwischen -90° und +90°).",
+      "longitudeOutOfRange": "Längengrad außerhalb des gültigen Bereichs ({{value}}° liegt nicht zwischen -180° und +180°).",
+      "unrecognized": "Format nicht erkannt. Bitte einen Karten-Link oder Koordinaten (DMS, DD, DMM) eingeben."
+    }
   },
   "colors": {
     "none": "Keine Farbe",
@@ -382,7 +403,8 @@
     "cullingSaveFailedDesc": "Die Sidecar-Datei (.rrdata) konnte nicht geschrieben werden. Möglicherweise ist das Speichermedium schreibgeschützt (Read-Only) oder die Berechtigungen fehlen.",
     "batchSaveFailed": "Fehler beim Speichern von {{failed}} von {{total}} Dateien.",
     "watcherErrorTitle": "Dateisystem-Überwachung unterbrochen",
-    "watcherErrorDesc": "Automatische Sidecar-Aktualisierungen sind unterbrochen (z. B. Netzwerk-Share getrennt)."
+    "watcherErrorDesc": "Automatische Sidecar-Aktualisierungen sind unterbrochen (z. B. Netzwerk-Share getrennt).",
+    "sortFailed": "Sortierung fehlgeschlagen"
   },
   "folderMenu": {
     "showInFinder": "Im Finder anzeigen",
@@ -418,7 +440,16 @@
     "expandSelectedSubfolders": "Ausgewählte Ordner aufklappen",
     "collapseSelectedSubfolders": "Ausgewählte Ordner einklappen",
     "deleteRejectedInMultiFolders": "Nur verworfene Bilder ({{count}}) in Auswahl löschen...",
-    "deleteMultiFolders": "{{count}} ausgewählte Ordner löschen..."
+    "deleteMultiFolders": "{{count}} ausgewählte Ordner löschen...",
+    "unstageMultiFolders_one": "Löschvormerkung für 1 Ordner aufheben",
+    "unstageMultiFolders_other": "Löschvormerkung für {{count}} Ordner aufheben",
+    "stageMultiFolders_one": "1 Ordner zum Löschen vormerken (X)",
+    "stageMultiFolders_other": "{{count}} Ordner zum Löschen vormerken (X)",
+    "stagedBadge": "Zum Löschen vorgemerkt",
+    "noRootPath": "Kein aktives Archiv ausgewählt.",
+    "slashNotAllowed": "Der Ordnername darf keine Schrägstriche (/ oder \\) enthalten.",
+    "createFolderFailed": "Fehler beim Erstellen des Ordners",
+    "renameFolderFailed": "Fehler beim Umbenennen des Ordners"
   },
   "folderDelete": {
     "localTitle": "Ordner in den Papierkorb verschieben?",
@@ -438,7 +469,12 @@
     "stagedSuccess": "{{count}} Ordner zum Löschen vorgemerkt (X)",
     "unstagedSuccess": "Löschvormerkung für {{count}} Ordner aufgehoben",
     "cancel": "Abbrechen",
-    "error": "Löschen des Ordners fehlgeschlagen: "
+    "error": "Löschen des Ordners fehlgeschlagen: ",
+    "nasSuccessToast_one": "1 Ordner dauerhaft vom Netzwerklaufwerk gelöscht.",
+    "nasSuccessToast_other": "{{count}} Ordner dauerhaft vom Netzwerklaufwerk gelöscht.",
+    "localSuccessToast_one": "1 Ordner in den Papierkorb verschoben.",
+    "localSuccessToast_other": "{{count}} Ordner in den Papierkorb verschoben.",
+    "scanActiveWarning": "Während eines laufenden Archiv-Scans können keine Ordner gelöscht werden."
   },
   "collections": {
     "title": "Sammlungen",
@@ -473,7 +509,23 @@
     "tempLocationModalDesc_other": "Du hast im temporären Ordner „{{name}}“ {{count}} Sammlungen angelegt. Möchtest du diesen Ordner als feste Bibliothek speichern, damit deine Sammlungen dauerhaft erhalten bleiben?",
     "saveAsLocation": "Als Bibliothek speichern",
     "discardCollections": "Sammlungen verwerfen",
-    "savedAsLocationSuccess": "„{{name}}“ als Bibliothek gespeichert."
+    "savedAsLocationSuccess": "„{{name}}“ als Bibliothek gespeichert.",
+    "noCollectionsYet": "Keine Sammlungen angelegt",
+    "newAlbum": "Neue Sammlung...",
+    "newGroup": "Neue Gruppe (Ordner)...",
+    "rename": "Umbenennen...",
+    "confirmDeleteGroup": "Gruppe und alle Untereinträge wirklich löschen?",
+    "confirmDeleteAlbum": "Sammlung wirklich löschen? Die Originaldateien bleiben unberührt.",
+    "delete": "Löschen",
+    "createAlbumTitle": "Neue Sammlung",
+    "createGroupTitle": "Neue Gruppe",
+    "renameTitle": "Umbenennen",
+    "namePlaceholder": "Name eingeben...",
+    "addedCount_one": "1 Foto zu „{{name}}“ hinzugefügt.",
+    "addedCount_other": "{{count}} Fotos zu „{{name}}“ hinzugefügt.",
+    "collectionCount_one": "1 Sammlung",
+    "collectionCount_other": "{{count}} Sammlungen",
+    "fallbackName": "Sammlung"
   },
   "exportModal": {
     "title": "Sammlung exportieren",
@@ -504,7 +556,13 @@
     "qualityLabel": "JPEG-Qualität:",
     "exporting": "Exportiere...",
     "startExport": "Exportieren starten",
-    "exportSuccess": "{{count}} Fotos erfolgreich exportiert!"
+    "exportSuccess": "{{count}} Fotos erfolgreich exportiert!",
+    "scrollDownHint": "Nach unten scrollen (weitere Einstellungen)",
+    "moreOptions": "Weitere Einstellungen",
+    "presetOriginalBadge": "Originalgröße",
+    "readyToExport": "Bereit zum Export",
+    "maxWidth": "Max. Breite (px)",
+    "maxHeight": "Max. Höhe (px)"
   },
   "scanMenu": {
     "refreshFolder": "Aktuellen Ordner aktualisieren",
@@ -550,5 +608,24 @@
     "ratingFeedback": "{{count}} Sterne",
     "colorFeedback": "Farbkennzeichnung: {{color}}",
     "noColorFeedback": "Keine Farbkennzeichnung"
+  },
+  "common": {
+    "cancel": "Abbrechen",
+    "save": "Speichern",
+    "create": "Erstellen",
+    "reset": "Zurücksetzen",
+    "edit": "Bearbeiten"
+  },
+  "previewFiles": "Dateien",
+  "grid": {
+    "ramCacheAbove_one": "1 Bild oberhalb im RAM-Cache",
+    "ramCacheAbove_other": "{{count}} Bilder oberhalb im RAM-Cache",
+    "ramCacheBelow_one": "1 Bild unterhalb im RAM-Cache",
+    "ramCacheBelow_other": "{{count}} Bilder unterhalb im RAM-Cache"
+  },
+  "loupe": {
+    "ramCache_one": "1 Bild im RAM-Cache",
+    "ramCache_other": "{{count}} Bilder im RAM-Cache",
+    "errorTitle": "Fehler in der Lupenansicht"
   }
 }

@@ -235,7 +235,7 @@ export function InspectorGpsCard({
                 ) : (
                   <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-400 flex items-start gap-1.5 text-[10px]">
                     <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-                    <span>{gpsParseResult.error || 'Ungültiges Format.'}</span>
+                    <span>{t(`inspector.gpsErrors.${gpsParseResult.error ?? 'unrecognized'}`, { value: gpsParseResult.errorValue?.toFixed(4) })}</span>
                   </div>
                 )}
               </div>

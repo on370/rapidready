@@ -1094,6 +1094,7 @@ export function LibraryLeftSidebar() {
             t('delete.partialFailed', {
               failed: result.failed.length,
               total: count,
+              error: firstErr,
               defaultValue: `${result.failed.length} von ${count} Datei(en) konnten nicht gelöscht werden: ${firstErr}`
             })
           );

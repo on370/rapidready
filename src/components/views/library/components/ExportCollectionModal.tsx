@@ -262,7 +262,7 @@ export function ExportCollectionModal() {
                 {t('exportModal.destDirLabel', 'Zielordner (Echte Kopien)')}
               </label>
               {destinationDir && (
-                <span className="text-[10px] text-emerald-400/90 font-medium">Bereit zum Export</span>
+                <span className="text-[10px] text-emerald-400/90 font-medium">{t('exportModal.readyToExport')}</span>
               )}
             </div>
             <div className="flex gap-2">
@@ -454,7 +454,7 @@ export function ExportCollectionModal() {
                 {sizePreset === 'custom' && (
                   <div className="grid grid-cols-2 gap-2.5">
                     <div className="flex flex-col gap-1">
-                      <label className="text-[10px] text-txt-secondary font-semibold">Max. Breite (px)</label>
+                      <label className="text-[10px] text-txt-secondary font-semibold">{t('exportModal.maxWidth')}</label>
                       <input
                         type="number"
                         disabled={isExporting}
@@ -464,7 +464,7 @@ export function ExportCollectionModal() {
                       />
                     </div>
                     <div className="flex flex-col gap-1">
-                      <label className="text-[10px] text-txt-secondary font-semibold">Max. Höhe (px)</label>
+                      <label className="text-[10px] text-txt-secondary font-semibold">{t('exportModal.maxHeight')}</label>
                       <input
                         type="number"
                         disabled={isExporting}

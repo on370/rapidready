@@ -139,7 +139,7 @@ export function ImportMetadataOverrideBar() {
                   type="text"
                   value={importDateOverride}
                   onChange={(e) => setImportDateOverride(e.target.value)}
-                  placeholder="z. B. 1985-07-15, 1985-07 oder 1985"
+                  placeholder={t('preview.datePlaceholder')}
                   className="w-full px-2.5 py-1.5 bg-app-panel border border-app-border rounded-md text-txt-primary text-xs font-mono placeholder:text-txt-tertiary/60 focus:outline-none focus:border-accent"
                 />
               </div>

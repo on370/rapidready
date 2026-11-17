@@ -772,7 +772,7 @@ export const LibraryGrid = React.memo(function LibraryGrid({
       {topCount > 0 && (
         <div 
           className="absolute top-3 left-1/2 -translate-x-1/2 z-30 pointer-events-none flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-black/60 backdrop-blur-md border border-white/15 text-[11px] font-mono text-white/90 shadow-lg select-none transition-opacity duration-200"
-          title={`${topCount} ${topCount === 1 ? 'Bild' : 'Bilder'} oberhalb im RAM-Cache`}
+          title={t('grid.ramCacheAbove', { count: topCount })}
         >
           <span className="text-[9px] text-accent">▲</span>
           <span>{topCount}</span>
@@ -783,7 +783,7 @@ export const LibraryGrid = React.memo(function LibraryGrid({
       {bottomCount > 0 && (
         <div 
           className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 pointer-events-none flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-black/60 backdrop-blur-md border border-white/15 text-[11px] font-mono text-white/90 shadow-lg select-none transition-opacity duration-200"
-          title={`${bottomCount} ${bottomCount === 1 ? 'Bild' : 'Bilder'} unterhalb im RAM-Cache`}
+          title={t('grid.ramCacheBelow', { count: bottomCount })}
         >
           <span className="text-[9px] text-accent">▼</span>
           <span>{bottomCount}</span>

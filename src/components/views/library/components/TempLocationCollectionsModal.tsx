@@ -63,7 +63,7 @@ export const TempLocationCollectionsModal: React.FC<TempLocationCollectionsModal
                 {t('collections.tempLocationModalTitle', 'Sammlungen in temporärem Ordner behalten?')}
               </h3>
               <p className="text-xs text-txt-tertiary truncate max-w-[280px]" title={folderName}>
-                «{folderName}» ({collectionsCount === 1 ? '1 Sammlung' : `${collectionsCount} Sammlungen`})
+                «{folderName}» ({t('collections.collectionCount', { count: collectionsCount })})
               </p>
             </div>
           </div>

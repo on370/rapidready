@@ -108,7 +108,11 @@
     "updateAvailable": "New version available: {{tag}}",
     "download": "Download",
     "checkError": "Error checking for updates: {{error}}",
-    "connectionError": "Unable to connect to GitHub (offline or connection blocked)"
+    "connectionError": "Unable to connect to GitHub (offline or connection blocked)",
+    "updateAvailableTitle": "New version available!",
+    "noReleaseNotes": "No release notes available.",
+    "remindLater": "Remind me later",
+    "downloadOnGithub": "View & download on GitHub"
   },
   "tour": {
     "title": "Guided Tour",
@@ -151,7 +155,10 @@
     "syncCompletedDesc": "Synchronization complete: {{synced}} sidecars updated ({{total}} photos scanned).",
     "syncCancelledTitle": "Sync Cancelled",
     "syncCancelledDesc": "Synchronization cancelled. {{synced}} sidecars were updated prior to cancellation.",
-    "syncErrorTitle": "Error During Sidecar Sync"
+    "syncErrorTitle": "Error During Sidecar Sync",
+    "watcherErrorTitle": "File system watcher",
+    "watcherErrorDesc": "Automatic sidecar sync was interrupted (e.g. a network share was disconnected).",
+    "syncProgressDetail": "({{processed}} / {{total}} photos checked • {{synced}} sidecars updated)"
   },
   "editorial": {
     "title": "Default Metadata & Copyright (Import Presets)",
@@ -165,6 +172,7 @@
     "previewPrefix": "Preview",
     "usageTermsLabel": "Terms of Use / License",
     "usageTermsPlaceholder": "e.g. CC-BY 4.0 or Editorial Use Only",
-    "guaranteeNote": "This metadata is automatically written to companion sidecars (.rrdata / .xmp) during import. Camera originals remain untouched."
+    "guaranteeNote": "This metadata is automatically written to companion sidecars (.rrdata / .xmp) during import. Camera originals remain untouched.",
+    "copyrightPlaceholder": "e.g. © {year} Jane Doe. All rights reserved."
   }
 }

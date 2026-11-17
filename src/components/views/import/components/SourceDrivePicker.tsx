@@ -241,7 +241,7 @@ export const SourceDrivePicker = React.memo(function SourceDrivePicker() {
                       <RefreshCw className="w-3.5 h-3.5 animate-spin flex-shrink-0" />
                       <span>
                         {scanProgress && scanProgress.total > 0
-                          ? `${scanProgress.current} von ${scanProgress.total} Dateien`
+                          ? t('source.scanProgress', { current: scanProgress.current, total: scanProgress.total })
                           : t('source.readingCard')}
                       </span>
                     </div>
@@ -278,7 +278,7 @@ export const SourceDrivePicker = React.memo(function SourceDrivePicker() {
                       <File className="w-3 h-3 text-accent" /> 
                       {pairStats.pairs > 0 ? (
                         <span>
-                          {pairStats.totalPhotos} Fotos ({newFiles.length} Dateien · {pairStats.pairs} Paare)
+                          {t('source.pairStatsDetail', { photos: pairStats.totalPhotos, files: newFiles.length, pairs: pairStats.pairs })}
                         </span>
                       ) : (
                         <span>

@@ -108,7 +108,11 @@
     "updateAvailable": "Neue Version verfügbar: {{tag}}",
     "download": "Herunterladen",
     "checkError": "Fehler beim Prüfen auf Updates: {{error}}",
-    "connectionError": "Keine Verbindung zu GitHub möglich (Offline oder Anfrage blockiert)"
+    "connectionError": "Keine Verbindung zu GitHub möglich (Offline oder Anfrage blockiert)",
+    "updateAvailableTitle": "Neue Version verfügbar!",
+    "noReleaseNotes": "Keine Versionshinweise verfügbar.",
+    "remindLater": "Später erinnern",
+    "downloadOnGithub": "Auf GitHub ansehen & laden"
   },
   "tour": {
     "title": "Geführte Einführung",
@@ -151,7 +155,10 @@
     "syncCompletedDesc": "Abgleich abgeschlossen: {{synced}} Sidecars aktualisiert ({{total}} Fotos geprüft).",
     "syncCancelledTitle": "Abgleich abgebrochen",
     "syncCancelledDesc": "Abgleich abgebrochen. {{synced}} Sidecars wurden bis zum Abbruch synchronisiert.",
-    "syncErrorTitle": "Fehler beim Sidecar-Abgleich"
+    "syncErrorTitle": "Fehler beim Sidecar-Abgleich",
+    "watcherErrorTitle": "Dateisystem-Überwachung",
+    "watcherErrorDesc": "Automatische Sidecar-Synchronisation unterbrochen (z. B. Netzwerkfreigabe getrennt).",
+    "syncProgressDetail": "({{processed}} / {{total}} Fotos geprüft • {{synced}} Sidecars aktualisiert)"
   },
   "editorial": {
     "title": "Standard-Metadaten & Urheberrecht (Import-Vorbelegung)",
@@ -165,6 +172,7 @@
     "previewPrefix": "Vorschau",
     "usageTermsLabel": "Nutzungsbedingungen / Lizenz",
     "usageTermsPlaceholder": "z. B. CC-BY 4.0 oder Nicht-kommerzielle Nutzung",
-    "guaranteeNote": "Diese Stammdaten werden beim Import automatisch in die Sidecar-Dateien (.rrdata / .xmp) geschrieben. Kamera-Originale bleiben unangetastet."
+    "guaranteeNote": "Diese Stammdaten werden beim Import automatisch in die Sidecar-Dateien (.rrdata / .xmp) geschrieben. Kamera-Originale bleiben unangetastet.",
+    "copyrightPlaceholder": "z. B. © {year} Max Mustermann. Alle Rechte vorbehalten."
   }
 }

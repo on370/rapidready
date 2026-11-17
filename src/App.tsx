@@ -154,8 +154,8 @@ function App() {
       (event) => {
         console.warn("Sidecar watcher error:", event.payload);
         useToastStore.getState().showWarning(
-          "Automatische Sidecar-Synchronisation unterbrochen (z. B. Netzwerkfreigabe getrennt).",
-          "Dateisystem-Überwachung"
+          t("sidecar.watcherErrorDesc"),
+          t("sidecar.watcherErrorTitle")
         );
       }
     );

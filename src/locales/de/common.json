@@ -31,5 +31,13 @@
     "copy": "Kopieren",
     "paste": "Einfügen",
     "selectAll": "Alles auswählen"
+  },
+  "errorBoundary": {
+    "title": "Ein unerwarteter Anzeigefehler ist aufgetreten",
+    "desc": "Die Benutzeroberfläche wurde vor einem Absturz geschützt.",
+    "recover": "Oberfläche wiederherstellen"
+  },
+  "confirm": {
+    "deletePermanently": "Unwiderruflich löschen"
   }
 }

@@ -372,7 +372,7 @@ export function InspectorEditorialCard({
                     type="button"
                     onClick={handleInsertYearMacro}
                     className="text-[9px] px-1.5 py-0.5 rounded bg-accent/15 text-accent hover:bg-accent/25 transition-colors font-mono cursor-pointer"
-                    title="Fügt © {year} ein (wird pro Bild mit dem jeweiligen Aufnahmejahr ersetzt)"
+                    title={t('inspector.yearChipTooltip')}
                   >
                     + © {'{year}'}
                   </button>

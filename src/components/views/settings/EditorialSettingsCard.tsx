@@ -106,7 +106,7 @@ export function EditorialSettingsCard() {
               type="text"
               value={defaultCopyright}
               onChange={(e) => setDefaultCopyright(e.target.value)}
-              placeholder="z. B. © {year} Max Mustermann. Alle Rechte vorbehalten."
+              placeholder={t('editorial.copyrightPlaceholder')}
               className="w-full px-3 py-1.5 bg-app-panel border border-app-border rounded-lg text-txt-primary text-xs font-mono placeholder:text-txt-tertiary focus:outline-none focus:border-accent"
             />
             {defaultCopyright.includes('{year}') && (
