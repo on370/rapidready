@@ -12,6 +12,7 @@ pub mod archive;
 pub mod metadata_resolver;
 pub mod collections;
 pub mod collection_export;
+pub mod rapidraw_cli;
 pub mod archive_catalog;
 pub mod chunk_cache;
 

@@ -504,7 +504,11 @@
     "qualityLabel": "JPEG-Qualität:",
     "exporting": "Exportiere...",
     "startExport": "Exportieren starten",
-    "exportSuccess": "{{count}} Fotos erfolgreich exportiert!"
+    "exportSuccess": "{{count}} Fotos erfolgreich exportiert!",
+    "rapidrawEditsTitle": "RapidRAW-Bearbeitungen übernehmen",
+    "rapidrawEditsDesc": "RapidRAW rendert jedes Foto mit Deinen Bearbeitungen (bei RAW+JPEG-Stapeln das RAW). Langsamer als der Export der Vorschaubilder, RapidRAW läuft dabei unsichtbar im Hintergrund.",
+    "keepMetadata": "Metadaten beibehalten (EXIF, z. B. Kamera und Aufnahmedatum)",
+    "exportPartial": "{{exported}} Fotos exportiert, {{failed}} fehlgeschlagen. Erster Fehler: {{error}}"
   },
   "scanMenu": {
     "refreshFolder": "Aktuellen Ordner aktualisieren",

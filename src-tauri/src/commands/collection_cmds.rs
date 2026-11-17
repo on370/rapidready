@@ -1,4 +1,5 @@
-use rapidready_core::collection_export::{CollectionExportOptions, run_collection_export};
+use rapidready_core::collection_export::{CollectionExportOptions, ExportSummary, run_collection_export};
+use rapidready_core::rapidraw_cli::resolve_rapidraw_binary;
 use rapidready_core::collections::{
     add_to_collection as core_add_to_collection,
     create_collection_item as core_create_collection_item,
@@ -140,12 +141,24 @@ pub async fn prune_collections_by_library(app: AppHandle, library_root: String) 
     Ok(tree)
 }
 
+/// Reports whether exports can apply RapidRAW edits: RapidRAW must be the configured editor and installed.
+#[tauri::command]
+pub async fn get_rapidraw_export_support(developer: Option<String>, custom_path: Option<String>) -> bool {
+    resolve_rapidraw_binary(developer.as_deref(), custom_path.as_deref()).is_some()
+}
+
 #[tauri::command]
 pub async fn export_collection(
     app: AppHandle,
     state: tauri::State<'_, CollectionExportState>,
-    options: CollectionExportOptions,
-) -> Result<usize, String> {
+    mut options: CollectionExportOptions,
+    developer: Option<String>,
+    custom_path: Option<String>,
+) -> Result<ExportSummary, String> {
+    if options.apply_rapidraw_edits {
+        options.rapidraw_binary = resolve_rapidraw_binary(developer.as_deref(), custom_path.as_deref());
+    }
+
     let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let tree = core_load_collections(&app_dir)?;
 

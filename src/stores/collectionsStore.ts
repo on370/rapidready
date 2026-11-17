@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import { normalizePath } from '../utils/image';
+import { useSettingsStore } from './settingsStore';
 
 export type AlbumItem = Album | AlbumGroup;
 
@@ -37,6 +38,15 @@ export interface CollectionExportOptions {
   jpegQuality: number;
   synthesizeExifDates: boolean;
   isSequential: boolean;
+  /** Render each photo with its RapidRAW edits (only offered when RapidRAW is the configured editor and installed) */
+  applyRapidrawEdits: boolean;
+  keepMetadata: boolean;
+}
+
+export interface ExportSummary {
+  exported: number;
+  failed: number;
+  firstError: string | null;
 }
 
 export interface ExportProgress {
@@ -76,7 +86,7 @@ interface CollectionsStore {
 
   openExportModal: (collection: Album) => void;
   closeExportModal: () => void;
-  exportCollection: (options: CollectionExportOptions) => Promise<number>;
+  exportCollection: (options: CollectionExportOptions) => Promise<ExportSummary>;
   cancelExport: () => Promise<void>;
 }
 
@@ -291,7 +301,12 @@ export const useCollectionsStore = create<CollectionsStore>((set, get) => ({
   },
 
   exportCollection: async (options: CollectionExportOptions) => {
-    return await invoke<number>('export_collection', { options });
+    const { rawDeveloper, customRawDeveloperPath } = useSettingsStore.getState();
+    return await invoke<ExportSummary>('export_collection', {
+      options,
+      developer: rawDeveloper,
+      customPath: customRawDeveloperPath,
+    });
   },
 
   cancelExport: async () => {

@@ -42,6 +42,20 @@ export async function openInConfiguredRawDeveloper(path: string): Promise<void> 
   });
 }
 
+/** True if exports can apply RapidRAW edits: RapidRAW is the configured editor and its binary was found. */
+export async function getRapidRawExportSupport(): Promise<boolean> {
+  const { rawDeveloper, customRawDeveloperPath } = useSettingsStore.getState();
+  if (rawDeveloper !== 'rapidraw' && rawDeveloper !== 'custom') return false;
+  try {
+    return await invoke<boolean>('get_rapidraw_export_support', {
+      developer: rawDeveloper,
+      customPath: customRawDeveloperPath,
+    });
+  } catch {
+    return false;
+  }
+}
+
 export interface ArchiveLocation {
   id: string;
   name: string;
