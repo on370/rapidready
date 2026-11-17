@@ -52,7 +52,8 @@
       "showInExplorer": "Im Explorer anzeigen",
       "settings": "Einstellungen öffnen",
       "help": "Diese Hilfe anzeigen",
-      "quit": "RapidReady beenden"
+      "quit": "RapidReady beenden",
+      "undoRedo": "Rückgängig / Wiederholen"
     },
     "footer": "RapidReady Hilfe & Tastaturkürzel"
   }

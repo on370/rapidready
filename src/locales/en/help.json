@@ -52,7 +52,8 @@
       "showInExplorer": "Show in Explorer",
       "settings": "Open Settings",
       "help": "Show this Help",
-      "quit": "Quit Application"
+      "quit": "Quit Application",
+      "undoRedo": "Undo / Redo"
     },
     "footer": "RapidReady Help & Shortcuts"
   }

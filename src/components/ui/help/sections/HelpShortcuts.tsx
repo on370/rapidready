@@ -52,6 +52,8 @@ export function HelpShortcuts() {
             { desc: 'Assign Yellow Label', keys: isDarktable ? ['7', '|', 'F3'] : ['7'] },
             { desc: 'Assign Green Label', keys: isDarktable ? ['8', '|', 'F4'] : ['8'] },
             { desc: 'Assign Blue Label', keys: isDarktable ? ['9', '|', 'F5'] : ['9'] },
+            { desc: 'Undo Last Culling Change', keys: ['Cmd', 'Z'] },
+            { desc: 'Redo', keys: isMac ? ['Cmd', 'Shift', 'Z'] : ['Cmd', 'Shift', 'Z', '|', 'Cmd', 'Y'] },
           ],
         },
         {
@@ -107,6 +109,8 @@ export function HelpShortcuts() {
             { desc: 'Gelbes Farblabel zuweisen', keys: isDarktable ? ['7', '|', 'F3'] : ['7'] },
             { desc: 'Grünes Farblabel zuweisen', keys: isDarktable ? ['8', '|', 'F4'] : ['8'] },
             { desc: 'Blaues Farblabel zuweisen', keys: isDarktable ? ['9', '|', 'F5'] : ['9'] },
+            { desc: 'Letzte Culling-Änderung rückgängig machen', keys: ['Cmd', 'Z'] },
+            { desc: 'Wiederholen', keys: isMac ? ['Cmd', 'Shift', 'Z'] : ['Cmd', 'Shift', 'Z', '|', 'Cmd', 'Y'] },
           ],
         },
         {
