@@ -11,8 +11,8 @@ interface UseLibraryShortcutsProps {
   activeImageIndex: number;
   displayedImages: LibraryImage[];
   numColumns?: number;
-  viewMode: 'grid' | 'loupe' | 'fullscreen';
-  setViewMode: (mode: 'grid' | 'loupe' | 'fullscreen') => void;
+  viewMode: 'grid' | 'calendar' | 'loupe' | 'fullscreen';
+  setViewMode: (mode: 'grid' | 'calendar' | 'loupe' | 'fullscreen') => void;
   setActiveImageIndex: (index: number) => void;
   setSelectedPaths: (paths: Set<string>) => void;
   selectAll: (displayedImages: LibraryImage[]) => void;
@@ -284,11 +284,17 @@ export function useLibraryShortcuts({
             setViewMode('grid');
             e.preventDefault();
             break;
+          case 'c':
+          case 'C':
+            if (e.metaKey || e.ctrlKey || e.altKey) break; // keep Copy working
+            setViewMode('calendar');
+            e.preventDefault();
+            break;
           case 'Escape':
             e.preventDefault();
             if (viewMode === 'fullscreen') {
               useLibraryUIStore.getState().exitFullscreen();
-            } else if (viewMode === 'loupe') {
+            } else if (viewMode === 'loupe' || viewMode === 'calendar') {
               setViewMode('grid');
             } else {
               // In grid view: deselect any selected collection, last import, or folder

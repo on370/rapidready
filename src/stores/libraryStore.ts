@@ -129,8 +129,8 @@ interface LibraryStore {
   ) => void;
   updateImageCullings: (items: Array<{ path: string; culling: CullingState }>) => void;
   
-  viewMode: 'grid' | 'loupe' | 'fullscreen';
-  setViewMode: (mode: 'grid' | 'loupe' | 'fullscreen') => void;
+  viewMode: 'grid' | 'calendar' | 'loupe' | 'fullscreen';
+  setViewMode: (mode: 'grid' | 'calendar' | 'loupe' | 'fullscreen') => void;
   
   filterMode: string;
   setFilterMode: (mode: string) => void;

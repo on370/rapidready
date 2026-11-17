@@ -72,7 +72,9 @@
     "focusSensitivity": "Empfindlichkeit",
     "focusSensHigh": "Hoch",
     "focusSensNormal": "Normal",
-    "focusSensLow": "Niedrig"
+    "focusSensLow": "Niedrig",
+    "viewCalendar": "Kalender",
+    "viewCalendarTooltip": "Kalenderansicht (C)"
   },
   "contextMenu": {
     "selectedCount": "{{count}} Bilder ausgewählt",
@@ -550,5 +552,12 @@
     "ratingFeedback": "{{count}} Sterne",
     "colorFeedback": "Farbkennzeichnung: {{color}}",
     "noColorFeedback": "Keine Farbkennzeichnung"
+  },
+  "calendar": {
+    "noDates": "Keines dieser Fotos hat ein Aufnahmedatum.",
+    "undated_one": "1 Foto ohne Datum wird nicht angezeigt.",
+    "undated_other": "{{count}} Fotos ohne Datum werden nicht angezeigt.",
+    "dayTooltip_one": "1 Foto · Klick zeigt es im Raster, Doppelklick öffnet es",
+    "dayTooltip_other": "{{count}} Fotos · Klick zeigt sie im Raster, Doppelklick öffnet das erste"
   }
 }

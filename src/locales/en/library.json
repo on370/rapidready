@@ -72,7 +72,9 @@
     "focusSensitivity": "Sensitivity",
     "focusSensHigh": "High",
     "focusSensNormal": "Normal",
-    "focusSensLow": "Low"
+    "focusSensLow": "Low",
+    "viewCalendar": "Calendar",
+    "viewCalendarTooltip": "Calendar view (C)"
   },
   "contextMenu": {
     "selectedCount": "{{count}} images selected",
@@ -550,5 +552,12 @@
     "ratingFeedback": "{{count}} stars",
     "colorFeedback": "Color label: {{color}}",
     "noColorFeedback": "No color label"
+  },
+  "calendar": {
+    "noDates": "None of these photos have a capture date.",
+    "undated_one": "1 photo without a date is not shown.",
+    "undated_other": "{{count}} photos without a date are not shown.",
+    "dayTooltip_one": "1 photo · click to show in grid, double-click to open",
+    "dayTooltip_other": "{{count}} photos · click to show in grid, double-click to open"
   }
 }
