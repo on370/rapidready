@@ -166,7 +166,8 @@ export function ZoomableImage({ src, previewSrc, alt, onContextMenu, resetZoomKe
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (document.activeElement?.tagName === 'INPUT') return;
-      if (e.key === 'z' || e.key === 'Z') {
+      // Cmd/Ctrl + Z is undo, not zoom
+      if (!e.metaKey && !e.ctrlKey && (e.key === 'z' || e.key === 'Z')) {
         e.preventDefault();
         toggleZoom();
       }

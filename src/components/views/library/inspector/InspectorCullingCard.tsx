@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { LibraryImage, useLibraryStore } from "../../../../stores/libraryStore";
 import { COLOR_PALETTE } from "../../../../constants/culling";
 import { useToastStore } from "../../../../stores/toastStore";
+import { recordCullingUndo, recordRotationUndo, trackCullingWrite } from "../../../../stores/undoStore";
 
 interface InspectorCullingCardProps {
   activeImage: LibraryImage;
@@ -26,15 +27,16 @@ export function InspectorCullingCard({
     const pathsToUpdate = selectedPaths.has(activeImage.path) && selectedPaths.size > 1
       ? Array.from(selectedPaths)
       : [activeImage.path];
+    recordCullingUndo(pathsToUpdate, { flag, rating });
 
     if (pathsToUpdate.length > 1) {
       updateBatchCullingState(pathsToUpdate, { flag, rating });
-      invoke<{ total: number; succeeded: number; failed: number }>('set_culling_state_batch', { 
+      trackCullingWrite(invoke<{ total: number; succeeded: number; failed: number }>('set_culling_state_batch', { 
         paths: pathsToUpdate, 
         flag: flag === null ? 0 : flag, 
         rating, 
         color: null 
-      }).then((res) => {
+      })).then((res) => {
         if (res && res.failed > 0) {
           useToastStore.getState().showWarning(
             t('errors.batchSaveFailed', { failed: res.failed, total: res.total, defaultValue: `Fehler beim Speichern von ${res.failed} von ${res.total} Dateien.` }),
@@ -51,13 +53,13 @@ export function InspectorCullingCard({
     } else {
       const globalIndex = images.findIndex(img => img.path === activeImage.path);
       if (globalIndex !== -1) updateCullingState(globalIndex, { flag, rating });
-      invoke<import('../../../../stores/libraryStore').CullingState>('set_culling_state', { 
+      trackCullingWrite(invoke<import('../../../../stores/libraryStore').CullingState>('set_culling_state', { 
         path: activeImage.path, 
         flag, 
         rating, 
         color: activeImage.culling.color,
         tags: activeImage.culling.tags,
-      }).then((updatedState) => {
+      })).then((updatedState) => {
         if (updatedState && globalIndex !== -1) {
           updateCullingState(globalIndex, updatedState);
         }
@@ -75,13 +77,14 @@ export function InspectorCullingCard({
     const pathsToUpdate = selectedPaths.has(activeImage.path) && selectedPaths.size > 1
       ? Array.from(selectedPaths)
       : [activeImage.path];
+    recordCullingUndo(pathsToUpdate, { color });
 
     if (pathsToUpdate.length > 1) {
       updateBatchCullingState(pathsToUpdate, { color });
-      invoke<{ total: number; succeeded: number; failed: number }>('set_culling_state_batch', {
+      trackCullingWrite(invoke<{ total: number; succeeded: number; failed: number }>('set_culling_state_batch', {
         paths: pathsToUpdate,
         color: color || 'none',
-      }).then((res) => {
+      })).then((res) => {
         if (res && res.failed > 0) {
           useToastStore.getState().showWarning(
             t('errors.batchSaveFailed', { failed: res.failed, total: res.total, defaultValue: `Fehler beim Speichern von ${res.failed} von ${res.total} Dateien.` }),
@@ -98,13 +101,13 @@ export function InspectorCullingCard({
     } else {
       const globalIndex = images.findIndex(img => img.path === activeImage.path);
       if (globalIndex !== -1) updateCullingState(globalIndex, { color });
-      invoke<import('../../../../stores/libraryStore').CullingState>('set_culling_state', { 
+      trackCullingWrite(invoke<import('../../../../stores/libraryStore').CullingState>('set_culling_state', { 
         path: activeImage.path, 
         flag: activeImage.culling.flag, 
         rating: activeImage.culling.rating, 
         color,
         tags: activeImage.culling.tags,
-      }).then((updatedState) => {
+      })).then((updatedState) => {
         if (updatedState && globalIndex !== -1) {
           updateCullingState(globalIndex, updatedState);
         }
@@ -130,6 +133,7 @@ export function InspectorCullingCard({
       });
       if (res && res.length > 0) {
         updateImageCullings(res);
+        recordRotationUndo(res.map(r => r.path), direction);
       }
     } catch (err) {
       console.error('Failed to rotate images:', err);

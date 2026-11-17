@@ -70,6 +70,10 @@ export function HelpPopover({ viewMode }: HelpPopoverProps) {
                   <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">{isDarktable ? '6-9 / F2-F5' : '6-9'}</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
+                  <span className="text-txt-secondary">{t('shortcuts.actions.undoRedo')}</span>
+                  <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">{modSymbol}Z / {modSymbol}{shiftSymbol}Z</span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
                   <span className="text-txt-secondary">{t('shortcuts.actions.rotateCw')}</span>
                   <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">{modSymbol}R / .</span>
                 </div>
@@ -138,6 +142,10 @@ export function HelpPopover({ viewMode }: HelpPopoverProps) {
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-txt-secondary">{t('tooltip.colorLabels')}</span>
                   <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">{isDarktable ? '6-9 / F2-F5' : '6-9'}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-txt-secondary">{t('shortcuts.actions.undoRedo')}</span>
+                  <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">{modSymbol}Z / {modSymbol}{shiftSymbol}Z</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-txt-secondary">{t('shortcuts.actions.rotateCw')}</span>

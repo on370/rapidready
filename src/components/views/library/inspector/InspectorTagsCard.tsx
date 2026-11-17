@@ -5,6 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { LibraryImage, useLibraryStore } from "../../../../stores/libraryStore";
 import { useLibraryUIStore } from "../../../../stores/libraryUIStore";
 import { useToastStore } from "../../../../stores/toastStore";
+import { recordCullingUndo, trackCullingWrite } from "../../../../stores/undoStore";
 
 interface InspectorTagsCardProps {
   activeImage: LibraryImage;
@@ -91,13 +92,16 @@ export function InspectorTagsCard({
       return;
     }
     const newTags = [...activeImage.culling.tags, trimmed];
-    activeImage.culling.tags = newTags;
 
     const initialPaths = selectedPaths.has(activeImage.path) && selectedPaths.size > 1
       ? Array.from(selectedPaths)
       : [activeImage.path];
 
     const pathsToUpdate = expandWithStackMembers(initialPaths);
+    recordCullingUndo(pathsToUpdate, (cur) =>
+      cur.tags.some(t => t.toLowerCase() === trimmed.toLowerCase()) ? {} : { tags: [...cur.tags, trimmed] }
+    );
+    activeImage.culling.tags = newTags;
 
     if (pathsToUpdate.length > 1) {
       for (const p of pathsToUpdate) {
@@ -108,10 +112,10 @@ export function InspectorTagsCard({
           if (idx !== -1) updateCullingState(idx, { tags: updated });
         }
       }
-      invoke<{ total: number; succeeded: number; failed: number }>('set_culling_state_batch', {
+      trackCullingWrite(invoke<{ total: number; succeeded: number; failed: number }>('set_culling_state_batch', {
         paths: pathsToUpdate,
         addTag: trimmed,
-      }).then((res) => {
+      })).then((res) => {
         if (res && res.failed > 0) {
           useToastStore.getState().showWarning(
             t('errors.batchSaveFailed', { failed: res.failed, total: res.total, defaultValue: `Fehler beim Speichern von ${res.failed} von ${res.total} Dateien.` }),
@@ -128,13 +132,13 @@ export function InspectorTagsCard({
     } else {
       const globalIndex = images.findIndex(img => img.path === activeImage.path);
       if (globalIndex !== -1) updateCullingState(globalIndex, { tags: newTags });
-      invoke('set_culling_state', { 
+      trackCullingWrite(invoke('set_culling_state', { 
         path: activeImage.path, 
         flag: activeImage.culling.flag, 
         rating: activeImage.culling.rating, 
         color: activeImage.culling.color,
         tags: newTags,
-      }).catch((err) => {
+      })).catch((err) => {
         console.error('Failed to add tag:', err);
         useToastStore.getState().showError(
           t('errors.cullingSaveFailedDesc', { defaultValue: 'Die Sidecar-Datei (.rrdata) konnte nicht geschrieben werden.' }),
@@ -179,13 +183,14 @@ export function InspectorTagsCard({
 
   const handleRemoveTag = (tagToRemove: string) => {
     const newTags = activeImage.culling.tags.filter(t => t !== tagToRemove);
-    activeImage.culling.tags = newTags;
 
     const initialPaths = selectedPaths.has(activeImage.path) && selectedPaths.size > 1
       ? Array.from(selectedPaths)
       : [activeImage.path];
 
     const pathsToUpdate = expandWithStackMembers(initialPaths);
+    recordCullingUndo(pathsToUpdate, (cur) => ({ tags: cur.tags.filter(t => t !== tagToRemove) }));
+    activeImage.culling.tags = newTags;
 
     if (pathsToUpdate.length > 1) {
       for (const p of pathsToUpdate) {
@@ -196,10 +201,10 @@ export function InspectorTagsCard({
           if (idx !== -1) updateCullingState(idx, { tags: updated });
         }
       }
-      invoke<{ total: number; succeeded: number; failed: number }>('set_culling_state_batch', {
+      trackCullingWrite(invoke<{ total: number; succeeded: number; failed: number }>('set_culling_state_batch', {
         paths: pathsToUpdate,
         removeTag: tagToRemove,
-      }).then((res) => {
+      })).then((res) => {
         if (res && res.failed > 0) {
           useToastStore.getState().showWarning(
             t('errors.batchSaveFailed', { failed: res.failed, total: res.total, defaultValue: `Fehler beim Speichern von ${res.failed} von ${res.total} Dateien.` }),
@@ -216,13 +221,13 @@ export function InspectorTagsCard({
     } else {
       const globalIndex = images.findIndex(img => img.path === activeImage.path);
       if (globalIndex !== -1) updateCullingState(globalIndex, { tags: newTags });
-      invoke('set_culling_state', { 
+      trackCullingWrite(invoke('set_culling_state', { 
         path: activeImage.path, 
         flag: activeImage.culling.flag, 
         rating: activeImage.culling.rating, 
         color: activeImage.culling.color,
         tags: newTags,
-      }).catch((err) => {
+      })).catch((err) => {
         console.error('Failed to remove tag:', err);
         useToastStore.getState().showError(
           t('errors.cullingSaveFailedDesc', { defaultValue: 'Die Sidecar-Datei (.rrdata) konnte nicht geschrieben werden.' }),
