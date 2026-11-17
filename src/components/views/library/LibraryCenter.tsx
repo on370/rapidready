@@ -9,6 +9,7 @@ import { normalizePath, normalizeSlash, isRawFilename, isVideoFilename } from ".
 import { getTopLevelSelectedPaths } from "./LibraryLeftSidebar";
 
 import { CullingToolbar } from "./components/CullingToolbar";
+import { collectFilterOptions, matchesAdvancedFilter } from "./utils/advancedFilter";
 import { LibraryGrid } from "./components/LibraryGrid";
 import { LoupeViewer } from "./components/LoupeViewer";
 import { FullscreenViewer } from "./components/FullscreenViewer";
@@ -145,6 +146,7 @@ export function LibraryCenter({
     selectedRatingFilter,
     selectedColorFilter,
     selectedTagFilter,
+    advancedFilter,
     lastImportPaths, isViewingLastImport, rootPath, scanState,
   } = useLibraryStore();
 
@@ -488,6 +490,9 @@ export function LibraryCenter({
       if (selectedRatingFilter !== null && (img.culling.rating || 0) < selectedRatingFilter) {
         return false;
       }
+      if (!matchesAdvancedFilter(img, advancedFilter)) {
+        return false;
+      }
       if (filterMode === 'picks') return img.culling.flag === 1;
       if (filterMode === 'rejected') return img.culling.flag === -1;
       if (filterMode.startsWith('rated')) {
@@ -496,7 +501,9 @@ export function LibraryCenter({
       }
       return true; // 'all'
     });
-  }, [stackedScopedImages, selectedTagFilter, selectedColorFilter, selectedRatingFilter, filterMode]);
+  }, [stackedScopedImages, selectedTagFilter, selectedColorFilter, selectedRatingFilter, advancedFilter, filterMode]);
+
+  const filterOptions = React.useMemo(() => collectFilterOptions(scopedImages), [scopedImages]);
 
   const lastCountsRef = useRef<{ tags: { name: string; count: number }[]; colors: Map<string, number>; ratings: number[] }>({
     tags: [],
@@ -1402,6 +1409,7 @@ export function LibraryCenter({
           activeImage={activeImage}
           displayedImages={displayedImages}
           availableTags={availableTags}
+          filterOptions={filterOptions}
           colorCounts={colorCounts}
           ratingCounts={ratingCounts}
           rejectedCount={totalRejectedCount}

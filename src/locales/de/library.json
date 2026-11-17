@@ -98,7 +98,30 @@
     "noColorsInFolder": "Keine Farblabels im Ordner",
     "allTags": "Alle Schlagwörter",
     "tagFilter": "Schlagwort",
-    "noTagsInFolder": "Keine Schlagwörter im Ordner"
+    "noTagsInFolder": "Keine Schlagwörter im Ordner",
+    "more": {
+      "label": "Weitere Filter",
+      "active_one": "1 weiterer Filter",
+      "active_other": "{{count}} weitere Filter",
+      "tooltip": "Nach Aufnahmedatum, Kamera, Objektiv, Dateityp und Ort filtern",
+      "clear": "Diese Filter zurücksetzen",
+      "date": "Aufnahmedatum",
+      "from": "Von",
+      "to": "Bis",
+      "camera": "Kamera",
+      "lens": "Objektiv",
+      "any": "Alle",
+      "fileType": "Dateityp",
+      "fileTypes": {
+        "raw": "RAW",
+        "jpeg": "JPEG",
+        "video": "Video",
+        "other": "Andere"
+      },
+      "location": "Ort",
+      "withGps": "Mit GPS",
+      "withoutGps": "Ohne GPS"
+    }
   },
   "sort": {
     "label": "Sortieren nach",

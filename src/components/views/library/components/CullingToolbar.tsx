@@ -18,11 +18,14 @@ import { HelpPopover } from '../../../ui/HelpPopover';
 import { COLOR_PALETTE, getColorConfig } from '../../../../constants/culling';
 import { normalizeSlash } from '../../../../utils/image';
 import { isMac, modSymbol, shiftSymbol } from '../../../../utils/platform';
+import { FilterOptions } from '../utils/advancedFilter';
+import { AdvancedFilterMenu } from './AdvancedFilterMenu';
 
 export interface CullingToolbarProps {
   activeImage: LibraryImage | undefined;
   displayedImages: LibraryImage[];
   availableTags: Array<{ name: string; count: number }>;
+  filterOptions: FilterOptions;
   colorCounts: Map<string, number>;
   ratingCounts: number[];
   rejectedCount: number;
@@ -37,6 +40,7 @@ export const CullingToolbar = React.memo(function CullingToolbar({
   activeImage,
   displayedImages,
   availableTags,
+  filterOptions,
   colorCounts,
   ratingCounts,
   rejectedCount,
@@ -716,6 +720,8 @@ export const CullingToolbar = React.memo(function CullingToolbar({
             </div>
           )}
         </div>
+
+        <AdvancedFilterMenu options={filterOptions} />
 
         {/* Sort Controls (hidden in collections) */}
         {!activeCollectionId && (
