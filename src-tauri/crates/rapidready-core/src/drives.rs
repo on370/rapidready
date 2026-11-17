@@ -57,3 +57,23 @@ pub fn get_removable_drives() -> Vec<DriveInfo> {
     
     drives
 }
+
+/// Free space on the volume that holds `path` (the mounted disk with the longest matching mount
+/// point), or `None` when no mounted disk contains it.
+pub fn available_space_for(path: &std::path::Path) -> Option<u64> {
+    let key = |p: &std::path::Path| {
+        let s = p.to_string_lossy().replace('\\', "/");
+        if cfg!(any(target_os = "windows", target_os = "macos")) {
+            s.to_lowercase()
+        } else {
+            s
+        }
+    };
+    let target = key(path);
+    let disks = Disks::new_with_refreshed_list();
+    disks
+        .iter()
+        .filter(|d| target.starts_with(&key(d.mount_point())))
+        .max_by_key(|d| d.mount_point().as_os_str().len())
+        .map(|d| d.available_space())
+}

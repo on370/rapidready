@@ -521,7 +521,7 @@
     "badgeScan": "⚡ Initialer Scan",
     "tooltipScan": "RapidReady erfasst alle Bild- und Videodateien im Archivordner. Gefundene Fotos erscheinen sofort im Grid.",
     "badgeCache": "⚡ Cache-Aufbau",
-    "tooltipCache": "RapidReady erstellt den lokalen High-Speed-Cache auf deiner SSD. Zukünftige Starts und das Scrollen im Archiv funktionieren danach selbst bei schlafendem NAS verzögerungsfrei und flüssig.",
+    "tooltipCache": "RapidReady erstellt einen lokalen Cache mit Vorschaubildern und Vorschauen auf diesem Computer (Speicherort und Größenlimit: Einstellungen → Festplatten-Cache). Zukünftige Starts und das Scrollen im Archiv funktionieren danach selbst bei schlafendem NAS verzögerungsfrei und flüssig.",
     "badgeSync": "⚡ Archiv-Sync",
     "tooltipSync": "RapidReady gleicht Änderungen seit dem letzten Scan mit dem schnellen lokalen Cache ab: neu hinzugefügte, geänderte oder gelöschte Fotos werden aktualisiert.",
     "subline": "Zukünftige Starts öffnen dieses Archiv sofort aus den zwischengespeicherten Daten."

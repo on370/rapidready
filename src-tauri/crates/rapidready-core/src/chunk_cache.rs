@@ -2,11 +2,28 @@ use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use anyhow::{Context, Result};
 use rusqlite::Connection;
 
 pub const DEFAULT_MAX_CHUNK_SIZE: u64 = 128 * 1024 * 1024; // 128 MB
+
+/// How many bytes may be written between two background size-limit checks.
+const LIMIT_CHECK_INTERVAL_BYTES: u64 = 64 * 1024 * 1024; // 64 MB
+
+/// When the size limit is exceeded, entries are evicted until the cache is back under this share
+/// of the limit, so it does not have to evict again after every few writes.
+const EVICTION_TARGET_PERCENT: u64 = 90;
+
+/// What one size-limit pass removed.
+#[derive(Debug, Default)]
+pub struct EvictionReport {
+    pub bytes_before: u64,
+    pub bytes_after: u64,
+    pub previews_removed: usize,
+    pub chunks_removed: usize,
+}
 
 /// Canonical BLAKE3 Cache-Key for Thumbnails & Screen Previews.
 /// Key = BLAKE3(normalize_path(path) + "_" + file_size + "_" + mtime + "_scale" + scale + "_rot" + orientation)
@@ -85,6 +102,12 @@ pub struct ChunkCache {
     max_chunk_size: u64,
     index: RwLock<HashMap<String, ChunkLocation>>,
     open_chunk_files: Mutex<HashMap<u32, Arc<File>>>,
+    /// Maximum total size of chunks + previews in bytes; 0 = unlimited.
+    size_limit: AtomicU64,
+    /// Bytes written since the size limit was last checked.
+    bytes_since_check: AtomicU64,
+    /// Set while a background size-limit pass is running.
+    enforcing: AtomicBool,
 }
 
 static GLOBAL_CHUNK_CACHE: std::sync::RwLock<Option<Arc<ChunkCache>>> = std::sync::RwLock::new(None);
@@ -98,6 +121,30 @@ pub fn init_global_chunk_cache(cache_dir: &Path, db_path: &Path) -> Result<Arc<C
 
 pub fn get_global_chunk_cache() -> Option<Arc<ChunkCache>> {
     GLOBAL_CHUNK_CACHE.read().unwrap().clone()
+}
+
+/// Runs one size-limit pass of the global cache on a background thread, unless one is running.
+pub fn spawn_size_limit_pass() {
+    let Some(cache) = get_global_chunk_cache() else {
+        return;
+    };
+    if cache.enforcing.swap(true, Ordering::AcqRel) {
+        return;
+    }
+    std::thread::spawn(move || {
+        match cache.enforce_size_limit() {
+            Ok(r) if r.previews_removed + r.chunks_removed > 0 => println!(
+                "Disk cache over its limit: removed {} previews and {} thumbnail chunks ({} -> {} bytes)",
+                r.previews_removed,
+                r.chunks_removed,
+                r.bytes_before,
+                r.bytes_after
+            ),
+            Ok(_) => {}
+            Err(e) => eprintln!("Disk cache size-limit pass failed: {e:#}"),
+        }
+        cache.enforcing.store(false, Ordering::Release);
+    });
 }
 
 impl ChunkCache {
@@ -172,7 +219,132 @@ impl ChunkCache {
             max_chunk_size: DEFAULT_MAX_CHUNK_SIZE,
             index: RwLock::new(index_map),
             open_chunk_files: Mutex::new(HashMap::new()),
+            size_limit: AtomicU64::new(0),
+            bytes_since_check: AtomicU64::new(0),
+            enforcing: AtomicBool::new(false),
         })
+    }
+
+    /// Sets the maximum total cache size in bytes (`None` or 0 = unlimited).
+    pub fn set_size_limit(&self, max_bytes: Option<u64>) {
+        self.size_limit.store(max_bytes.unwrap_or(0), Ordering::Relaxed);
+    }
+
+    fn size_limit(&self) -> Option<u64> {
+        match self.size_limit.load(Ordering::Relaxed) {
+            0 => None,
+            n => Some(n),
+        }
+    }
+
+    /// Counts written bytes and, every `LIMIT_CHECK_INTERVAL_BYTES`, enforces the size limit on a
+    /// background thread (only one pass runs at a time).
+    fn note_written(&self, bytes: u64) {
+        if self.size_limit().is_none() {
+            return;
+        }
+        let total = self.bytes_since_check.fetch_add(bytes, Ordering::Relaxed) + bytes;
+        if total < LIMIT_CHECK_INTERVAL_BYTES {
+            return;
+        }
+        self.bytes_since_check.store(0, Ordering::Relaxed);
+        spawn_size_limit_pass();
+    }
+
+    /// Brings the cache under its size limit, if one is set. Large screen previews go first,
+    /// oldest first; small grid thumbnails (packed in chunk files) are only evicted, oldest chunk
+    /// first, when removing every preview is not enough. The chunk being written is never evicted.
+    /// Evicted images are rebuilt from the original file the next time they are viewed.
+    pub fn enforce_size_limit(&self) -> Result<EvictionReport> {
+        let Some(limit) = self.size_limit() else {
+            return Ok(EvictionReport::default());
+        };
+
+        let mut chunks: Vec<(u32, u64)> = Vec::new();
+        if let Ok(entries) = fs::read_dir(&self.chunks_dir) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().into_owned();
+                let Some(id) = name
+                    .strip_prefix("chunk_")
+                    .and_then(|s| s.strip_suffix(".bin"))
+                    .and_then(|s| s.parse::<u32>().ok())
+                else {
+                    continue;
+                };
+                // Not `entry.metadata()`: on Windows a directory listing can report a stale size for
+                // the chunk still open for appending.
+                if let Ok(meta) = fs::metadata(entry.path()) {
+                    chunks.push((id, meta.len()));
+                }
+            }
+        }
+
+        let mut previews: Vec<(PathBuf, u64, std::time::SystemTime)> = Vec::new();
+        if self.previews_dir.exists() {
+            for entry in walkdir::WalkDir::new(&self.previews_dir).into_iter().flatten() {
+                if entry.file_type().is_file() {
+                    if let Ok(meta) = entry.metadata() {
+                        let mtime = meta.modified().unwrap_or(std::time::UNIX_EPOCH);
+                        previews.push((entry.into_path(), meta.len(), mtime));
+                    }
+                }
+            }
+        }
+
+        let total: u64 =
+            chunks.iter().map(|c| c.1).sum::<u64>() + previews.iter().map(|p| p.1).sum::<u64>();
+        let mut report = EvictionReport { bytes_before: total, bytes_after: total, ..Default::default() };
+        if total <= limit {
+            return Ok(report);
+        }
+        let target = limit / 100 * EVICTION_TARGET_PERCENT;
+        let mut current = total;
+
+        // 1. Screen previews, oldest first.
+        previews.sort_by_key(|p| p.2);
+        for (path, size, _) in previews {
+            if current <= target {
+                break;
+            }
+            if fs::remove_file(&path).is_ok() {
+                current = current.saturating_sub(size);
+                report.previews_removed += 1;
+            }
+        }
+
+        // 2. Grid thumbnail chunks, oldest first, never the one being written.
+        if current > target {
+            let writing = self.writer.lock().unwrap().as_ref().map(|w| w.current_chunk_id);
+            chunks.sort_by_key(|c| c.0);
+            for (id, size) in chunks {
+                if current <= target {
+                    break;
+                }
+                if Some(id) == writing {
+                    continue;
+                }
+                self.evict_chunk(id)?;
+                current = current.saturating_sub(size);
+                report.chunks_removed += 1;
+            }
+        }
+
+        report.bytes_after = current;
+        Ok(report)
+    }
+
+    /// Removes one chunk file and every index entry that points into it.
+    fn evict_chunk(&self, chunk_id: u32) -> Result<()> {
+        self.index.write().unwrap().retain(|_, loc| loc.chunk_file_id != chunk_id);
+        {
+            let conn = self.conn.lock().unwrap();
+            conn.execute("DELETE FROM thumbnail_chunks WHERE chunk_file_id = ?1", [chunk_id])?;
+        }
+        if let Ok(mut files) = self.open_chunk_files.lock() {
+            files.remove(&chunk_id);
+        }
+        let _ = fs::remove_file(self.chunks_dir.join(format!("chunk_{:04}.bin", chunk_id)));
+        Ok(())
     }
 
     fn get_chunk_file(&self, chunk_id: u32) -> Result<Arc<File>> {
@@ -369,6 +541,7 @@ impl ChunkCache {
             },
         );
 
+        self.note_written(data_len);
         Ok(())
     }
 
@@ -382,11 +555,11 @@ impl ChunkCache {
 
     /// Reads Tier 2 Screen Preview from sharded filesystem tree.
     pub fn read_preview(&self, cache_key: &str) -> Result<Option<Vec<u8>>> {
-        let p = self.preview_path(cache_key);
-        if p.is_file() {
-            Ok(Some(fs::read(p)?))
-        } else {
-            Ok(None)
+        // A preview can be evicted between the check and the read: that is a cache miss.
+        match fs::read(self.preview_path(cache_key)) {
+            Ok(bytes) => Ok(Some(bytes)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(e.into()),
         }
     }
 
@@ -406,6 +579,7 @@ impl ChunkCache {
         let tmp = p.with_extension(format!("tmp_{}", std::process::id()));
         fs::write(&tmp, data)?;
         fs::rename(tmp, p)?;
+        self.note_written(data.len() as u64);
         Ok(())
     }
 
@@ -468,7 +642,8 @@ impl ChunkCache {
 
         if let Ok(entries) = fs::read_dir(&self.chunks_dir) {
             for entry in entries.flatten() {
-                if let Ok(meta) = entry.metadata() {
+                // fs::metadata, not entry.metadata(): see enforce_size_limit (stale size on Windows).
+                if let Ok(meta) = fs::metadata(entry.path()) {
                     if meta.is_file() {
                         stats.chunk_bytes += meta.len();
                         stats.chunk_count += 1;
@@ -605,6 +780,57 @@ mod tests {
         let cache_reopened = ChunkCache::new(&cache_dir, &db_path).unwrap();
         let r1_again = cache_reopened.read_thumbnail("key1", 0).unwrap().unwrap();
         assert_eq!(r1_again, thumb1);
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_size_limit_evicts_previews_first_then_oldest_chunks() {
+        let temp_dir = std::env::temp_dir().join(format!("rr_limit_test_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let db_path = temp_dir.join("catalog.db");
+        let cache_dir = temp_dir.join("cache");
+        let mut cache = ChunkCache::new(&cache_dir, &db_path).unwrap();
+        cache.set_max_chunk_size(1000);
+
+        // Three thumbnail chunks of 800 bytes each (chunk 1, 2, 3) and two 1000-byte previews.
+        cache.write_thumbnail("t1", 1, &vec![1u8; 800]).unwrap();
+        cache.write_thumbnail("t2", 1, &vec![2u8; 800]).unwrap();
+        cache.write_thumbnail("t3", 1, &vec![3u8; 800]).unwrap();
+        cache.write_thumbnail("pa", 2, &vec![4u8; 1000]).unwrap();
+        cache.write_thumbnail("pb", 2, &vec![5u8; 1000]).unwrap();
+        // Total 4400 bytes.
+
+        // No limit: nothing happens.
+        assert_eq!(cache.enforce_size_limit().unwrap().previews_removed, 0);
+
+        // Limit 4000 (target 3600): removing one preview is enough, the thumbnails stay.
+        cache.set_size_limit(Some(4000));
+        let r = cache.enforce_size_limit().unwrap();
+        assert_eq!(r.bytes_before, 4400);
+        assert_eq!((r.previews_removed, r.chunks_removed), (1, 0));
+        assert_eq!(r.bytes_after, 3400);
+        assert!(cache.has_thumbnail("t1", 1));
+
+        // Limit 2000 (target 1800): the other preview goes, then the oldest chunk; the chunk being
+        // written (chunk 3) is never evicted.
+        cache.set_size_limit(Some(2000));
+        let r = cache.enforce_size_limit().unwrap();
+        assert_eq!((r.previews_removed, r.chunks_removed), (1, 1));
+        assert!(!cache.has_thumbnail("pa", 2) && !cache.has_thumbnail("pb", 2));
+        assert!(!cache.has_thumbnail("t1", 1), "oldest chunk must be evicted");
+        assert!(cache.read_thumbnail("t1", 1).unwrap().is_none());
+        assert_eq!(cache.read_thumbnail("t2", 1).unwrap().unwrap(), vec![2u8; 800]);
+        assert_eq!(cache.read_thumbnail("t3", 1).unwrap().unwrap(), vec![3u8; 800]);
+        assert!(!cache_dir.join("chunks/chunk_0001.bin").exists());
+
+        // The evicted rows are gone from the database too: a reopened cache doesn't know t1.
+        drop(cache);
+        let reopened = ChunkCache::new(&cache_dir, &db_path).unwrap();
+        assert!(!reopened.has_thumbnail("t1", 1));
+        assert!(reopened.has_thumbnail("t2", 1));
 
         let _ = fs::remove_dir_all(&temp_dir);
     }
