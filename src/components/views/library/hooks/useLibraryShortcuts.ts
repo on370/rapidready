@@ -5,6 +5,7 @@ import { useCollectionsStore } from '../../../../stores/collectionsStore';
 import { useDialogStore } from '../../../../stores/dialogStore';
 import { useLibraryUIStore } from '../../../../stores/libraryUIStore';
 import { useSettingsStore, openInConfiguredRawDeveloper } from '../../../../stores/settingsStore';
+import { resolveAnchorIndex, computeRangeSelection } from '../../../../utils/selection';
 
 interface UseLibraryShortcutsProps {
   activeImage: LibraryImage | undefined;
@@ -36,6 +37,22 @@ export function useLibraryShortcuts({
   handleRotate,
 }: UseLibraryShortcutsProps) {
   useEffect(() => {
+    // Moves the active photo; with Shift the selection becomes the range from the anchor to it.
+    const moveTo = (index: number, extend: boolean) => {
+      setActiveImageIndex(index);
+      const target = displayedImages[index];
+      if (!target) return;
+      if (!extend) {
+        setSelectedPaths(new Set([target.path]));
+        return;
+      }
+      const orderedPaths = displayedImages.map((img) => img.path);
+      const lib = useLibraryStore.getState();
+      const anchorIdx = resolveAnchorIndex(orderedPaths, lib.selectionAnchorPath, activeImageIndex);
+      setSelectedPaths(computeRangeSelection(orderedPaths, anchorIdx, index));
+      lib.setSelectionAnchorPath(orderedPaths[anchorIdx] ?? target.path);
+    };
+
     const handleKeyDown = (e: KeyboardEvent) => {
       // Don't trigger shortcuts if an input/textarea is focused
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
@@ -188,19 +205,11 @@ export function useLibraryShortcuts({
       if (e.key === 'ArrowRight' || e.key === 'j') {
         e.preventDefault();
         if (displayedImages.length === 0) return;
-        const next = Math.min(displayedImages.length - 1, activeImageIndex + 1);
-        setActiveImageIndex(next);
-        if (!e.shiftKey && displayedImages[next]) {
-          setSelectedPaths(new Set([displayedImages[next].path]));
-        }
+        moveTo(Math.min(displayedImages.length - 1, activeImageIndex + 1), e.shiftKey);
       } else if (e.key === 'ArrowLeft' || e.key === 'k') {
         e.preventDefault();
         if (displayedImages.length === 0) return;
-        const prev = Math.max(0, activeImageIndex - 1);
-        setActiveImageIndex(prev);
-        if (!e.shiftKey && displayedImages[prev]) {
-          setSelectedPaths(new Set([displayedImages[prev].path]));
-        }
+        moveTo(Math.max(0, activeImageIndex - 1), e.shiftKey);
       } else if (e.key === 'ArrowDown') {
         e.preventDefault();
         if (
@@ -215,11 +224,7 @@ export function useLibraryShortcuts({
         }
         if (displayedImages.length === 0) return;
         const step = viewMode === 'grid' ? numColumns : 1;
-        const next = Math.min(displayedImages.length - 1, activeImageIndex + step);
-        setActiveImageIndex(next);
-        if (!e.shiftKey && displayedImages[next]) {
-          setSelectedPaths(new Set([displayedImages[next].path]));
-        }
+        moveTo(Math.min(displayedImages.length - 1, activeImageIndex + step), e.shiftKey);
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         if (
@@ -234,11 +239,7 @@ export function useLibraryShortcuts({
         }
         if (displayedImages.length === 0) return;
         const step = viewMode === 'grid' ? numColumns : 1;
-        const prev = Math.max(0, activeImageIndex - step);
-        setActiveImageIndex(prev);
-        if (!e.shiftKey && displayedImages[prev]) {
-          setSelectedPaths(new Set([displayedImages[prev].path]));
-        }
+        moveTo(Math.max(0, activeImageIndex - step), e.shiftKey);
       } else {
         switch (e.key) {
           case 'p':
