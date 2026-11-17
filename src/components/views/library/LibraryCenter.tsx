@@ -6,6 +6,7 @@ import { ArchiveConnectingOverlay } from "./components/ArchiveConnectingOverlay"
 import { ArchiveScanBanner } from "./components/ArchiveScanBanner";
 import { invoke } from "@tauri-apps/api/core";
 import { normalizePath, normalizeSlash, isRawFilename, isVideoFilename } from "../../../utils/image";
+import { sortByRating, resolveActiveIndex } from "../../../utils/librarySort";
 import { getTopLevelSelectedPaths } from "./LibraryLeftSidebar";
 
 import { CullingToolbar } from "./components/CullingToolbar";
@@ -283,17 +284,6 @@ export function LibraryCenter({
         if (dateKeyA != null && dateKeyB != null && dateKeyA !== dateKeyB) {
           return (dateKeyA < dateKeyB ? -1 : 1) * dirMul;
         }
-      } else if (sortBy === 'rating') {
-        const ratingA = a.culling.rating || 0;
-        const ratingB = b.culling.rating || 0;
-        if (ratingA !== ratingB) {
-          return (ratingA - ratingB) * dirMul;
-        }
-        const flagA = a.culling.flag || 0;
-        const flagB = b.culling.flag || 0;
-        if (flagA !== flagB) {
-          return (flagA - flagB) * dirMul;
-        }
       } else if (sortBy === 'size') {
         const sizeA = a.size || 0;
         const sizeB = b.size || 0;
@@ -302,7 +292,8 @@ export function LibraryCenter({
         }
       }
 
-      // Deterministic tie-breaker
+      // Deterministic tie-breaker (also the base order for the rating sort, which is
+      // applied live in sortedStackedImages because ratings change while culling)
       const nameCmp = numericCollator.compare(a.name, b.name);
       if (nameCmp !== 0) return nameCmp;
       return a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
@@ -477,8 +468,15 @@ export function LibraryCenter({
     return result;
   }, [scopedImages, stackRawJpeg, activeCollectionId]);
 
+  // Rating sort runs on current culling data (merged per RAW+JPEG stack), so the order
+  // follows rating/flag changes the same way filters do. Collections keep manual order.
+  const sortedStackedImages = React.useMemo(() => {
+    if (sortBy !== 'rating' || activeCollectionId) return stackedScopedImages;
+    return sortByRating(stackedScopedImages, sortDirection);
+  }, [stackedScopedImages, sortBy, sortDirection, activeCollectionId]);
+
   const displayedImages = React.useMemo(() => {
-    return stackedScopedImages.filter(img => {
+    return sortedStackedImages.filter(img => {
       if (selectedTagFilter && !img.culling.tags.includes(selectedTagFilter)) {
         return false;
       }
@@ -496,7 +494,7 @@ export function LibraryCenter({
       }
       return true; // 'all'
     });
-  }, [stackedScopedImages, selectedTagFilter, selectedColorFilter, selectedRatingFilter, filterMode]);
+  }, [sortedStackedImages, selectedTagFilter, selectedColorFilter, selectedRatingFilter, filterMode]);
 
   const lastCountsRef = useRef<{ tags: { name: string; count: number }[]; colors: Map<string, number>; ratings: number[] }>({
     tags: [],
@@ -558,7 +556,10 @@ export function LibraryCenter({
     return counts;
   }, [scopedImages, scanState]);
 
-  const safeActiveIndex = displayedImages.length === 0 ? 0 : Math.min(Math.max(activeImageIndex, 0), displayedImages.length - 1);
+  const safeActiveIndex = useMemo(
+    () => resolveActiveIndex(displayedImages, activeImageIndex, selectedPaths),
+    [displayedImages, activeImageIndex, selectedPaths]
+  );
 
   const activeImage = useMemo(() => {
     if (selectedPaths.size === 0) return undefined;
@@ -631,9 +632,32 @@ export function LibraryCenter({
     }
   }, [activeFolderPath, selectedFoldersKey, isViewingLastImport, activeCollectionId, activeCollection, displayedImages, setActiveImageIndex, setSelectedPaths, setGridScrollTop]);
 
+  // Path of the active photo and the list it was resolved against, to keep focus on the
+  // same photo when a re-sort moves it (e.g. rating changed while sorting by rating)
+  const activeAnchorRef = useRef<{ list: LibraryImage[]; path: string | null; index: number }>({ list: displayedImages, path: null, index: -1 });
+
   // Safeguard: keep activeImageIndex and selection synchronized when displayedImages changes (e.g. filter change or deletes)
   useEffect(() => {
     if (displayedImages.length > 0) {
+      const anchor = activeAnchorRef.current;
+      if (anchor.list !== displayedImages) {
+        // With a multi-selection the stored index may now point at another selected photo;
+        // follow the previously active photo by path as long as it is still selected and
+        // nothing else (navigation, auto-advance) has moved focus in the meantime
+        if (anchor.path && anchor.index === activeImageIndex && selectedPaths.has(anchor.path) && displayedImages[safeActiveIndex]?.path !== anchor.path) {
+          const movedIdx = displayedImages.findIndex((img) => img.path === anchor.path);
+          if (movedIdx !== -1) {
+            anchor.list = displayedImages;
+            anchor.index = movedIdx;
+            setActiveImageIndex(movedIdx);
+            return;
+          }
+        }
+        anchor.list = displayedImages;
+      }
+      anchor.path = displayedImages[safeActiveIndex]?.path ?? null;
+      anchor.index = safeActiveIndex;
+
       if (activeImageIndex !== safeActiveIndex) {
         setActiveImageIndex(safeActiveIndex);
       }
