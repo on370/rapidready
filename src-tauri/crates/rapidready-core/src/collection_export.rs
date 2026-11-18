@@ -20,6 +20,9 @@ pub enum ExportResizeMode {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct CollectionExportOptions {
+    /// Source collection for `export_collection`. Ignored (and may be omitted)
+    /// when exporting an explicit list of paths via `export_photos`.
+    #[serde(default)]
     pub album_id: String,
     pub destination_dir: String,
     pub filename_prefix: String,
@@ -359,6 +362,25 @@ mod tests {
     use super::*;
     use std::io::{BufReader, Cursor};
     use image::ImageFormat;
+
+    #[test]
+    fn test_options_deserialize_without_album_id() {
+        // Selection exports (export_photos) send options without an albumId.
+        let json = r#"{
+            "destinationDir": "C:/out",
+            "filenamePrefix": "",
+            "digits": 3,
+            "preserveOriginalName": false,
+            "resizeMode": { "mode": "longEdge", "value": 2048 },
+            "jpegQuality": 90,
+            "synthesizeExifDates": false,
+            "isSequential": false
+        }"#;
+        let opts: CollectionExportOptions = serde_json::from_str(json).expect("should deserialize");
+        assert_eq!(opts.album_id, "");
+        assert_eq!(opts.resize_mode, ExportResizeMode::LongEdge(2048));
+        assert!(!opts.is_sequential);
+    }
 
     #[test]
     fn test_exif_injection_and_parsing() {
