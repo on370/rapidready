@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { open } from '@tauri-apps/plugin-dialog';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
-import { Download, Folder, X, Loader2, ChevronDown } from 'lucide-react';
+import { Download, Folder, X, Loader2, ChevronDown, Wand2 } from 'lucide-react';
 import {
   useCollectionsStore,
   CollectionExportOptions,
@@ -10,6 +10,7 @@ import {
   ExportProgress,
 } from '../../../../stores/collectionsStore';
 import { useToastStore } from '../../../../stores/toastStore';
+import { useSettingsStore, getRapidRawExportSupport } from '../../../../stores/settingsStore';
 
 export function ExportCollectionModal() {
   const { t } = useTranslation('library');
@@ -25,8 +26,17 @@ export function ExportCollectionModal() {
   const [customHeight, setCustomHeight] = useState<number>(2048);
   const [jpegQuality, setJpegQuality] = useState<number>(90);
   const [synthesizeExifDates, setSynthesizeExifDates] = useState(true);
+  const [applyRapidrawEdits, setApplyRapidrawEdits] = useState(true);
+  const [keepMetadata, setKeepMetadata] = useState(true);
+  const [rapidrawAvailable, setRapidrawAvailable] = useState(false);
+  const rawDeveloper = useSettingsStore((s) => s.rawDeveloper);
+  const customRawDeveloperPath = useSettingsStore((s) => s.customRawDeveloperPath);
+
+  // RapidRAW edits are only offered when RapidRAW is the configured editor and installed
+  const renderEdits = rapidrawAvailable && applyRapidrawEdits;
 
   const [isExporting, setIsExporting] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
   const [progress, setProgress] = useState<ExportProgress | null>(null);
 
   const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
@@ -50,9 +60,21 @@ export function ExportCollectionModal() {
       setFilenamePrefix(`${sanitized}_`);
       setProgress(null);
       setIsExporting(false);
+      setIsCancelling(false);
       setIsSequential(true);
     }
   }, [exportTarget]);
+
+  useEffect(() => {
+    if (!exportTarget) return;
+    let active = true;
+    getRapidRawExportSupport().then((available) => {
+      if (active) setRapidrawAvailable(available);
+    });
+    return () => {
+      active = false;
+    };
+  }, [exportTarget, rawDeveloper, customRawDeveloperPath]);
 
   // Handle Escape key to close modal (if not currently exporting)
   useEffect(() => {
@@ -116,7 +138,7 @@ export function ExportCollectionModal() {
       window.removeEventListener('resize', checkScroll);
       if (observer) observer.disconnect();
     };
-  }, [scrollEl, checkScroll, isSequential, sizePreset, customWidth, customHeight]);
+  }, [scrollEl, checkScroll, isSequential, sizePreset, customWidth, customHeight, renderEdits]);
 
   const handleScrollToBottom = () => {
     if (!scrollEl) return;
@@ -179,19 +201,40 @@ export function ExportCollectionModal() {
       jpegQuality,
       synthesizeExifDates: isSequential ? synthesizeExifDates : false,
       isSequential,
+      applyRapidrawEdits: renderEdits,
+      keepMetadata,
     };
 
     try {
       setIsExporting(true);
+      setIsCancelling(false);
       setProgress({ current: 0, total: exportTarget.images.length, filename: '' });
-      const exportedCount = await exportCollection(options);
+      const summary = await exportCollection(options);
       setIsExporting(false);
-      useToastStore.getState().showSuccess(
-        t('exportModal.exportSuccess', {
-          count: exportedCount,
-          defaultValue: `${exportedCount} Fotos erfolgreich exportiert!`,
-        })
-      );
+      if (summary.gpuFailure) {
+        useToastStore.getState().showError(
+          t(
+            'exportModal.gpuFailure',
+            'RapidRAWs GPU-Verarbeitung ist fehlgeschlagen, daher wurde der Export gestoppt, um schwarze Bilder zu vermeiden. Öffne in RapidRAW die Einstellungen, setze das Verarbeitungs-Backend auf „Auto“, starte RapidRAW neu und exportiere erneut.'
+          )
+        );
+      } else if (summary.failed > 0) {
+        useToastStore.getState().showError(
+          t('exportModal.exportPartial', {
+            exported: summary.exported,
+            failed: summary.failed,
+            error: summary.firstError ?? '',
+            defaultValue: `${summary.exported} Fotos exportiert, ${summary.failed} fehlgeschlagen. Erster Fehler: ${summary.firstError ?? ''}`,
+          })
+        );
+      } else {
+        useToastStore.getState().showSuccess(
+          t('exportModal.exportSuccess', {
+            count: summary.exported,
+            defaultValue: `${summary.exported} Fotos erfolgreich exportiert!`,
+          })
+        );
+      }
       closeExportModal();
     } catch (err) {
       setIsExporting(false);
@@ -284,6 +327,46 @@ export function ExportCollectionModal() {
               </button>
             </div>
           </div>
+
+          {/* RapidRAW Edits (only when RapidRAW is the configured editor and installed) */}
+          {rapidrawAvailable && (
+            <div className="p-3.5 bg-app-card rounded-lg border border-app-border flex flex-col gap-3">
+              <label className={`flex items-start gap-2.5 select-none ${isExporting ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
+                <input
+                  type="checkbox"
+                  checked={applyRapidrawEdits}
+                  onChange={(e) => setApplyRapidrawEdits(e.target.checked)}
+                  disabled={isExporting}
+                  className={`mt-0.5 rounded accent-accent ${isExporting ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                />
+                <div className="flex flex-col">
+                  <span className="font-semibold text-txt-primary text-xs flex items-center gap-1.5">
+                    <Wand2 className="w-3.5 h-3.5 text-accent" />
+                    {t('exportModal.rapidrawEditsTitle', 'RapidRAW-Bearbeitungen übernehmen')}
+                  </span>
+                  <span className="text-[11px] text-txt-secondary leading-relaxed mt-0.5">
+                    {t(
+                      'exportModal.rapidrawEditsDesc',
+                      'RapidRAW rendert die Fotos nacheinander mit Deinen Bearbeitungen (bei RAW+JPEG-Stapeln das RAW). Langsamer als der Export der Vorschaubilder, RapidRAW läuft dabei unsichtbar im Hintergrund.'
+                    )}
+                  </span>
+                </div>
+              </label>
+
+              {applyRapidrawEdits && (
+                <label className={`pt-3 border-t border-app-border/40 flex items-center gap-2.5 select-none text-txt-secondary text-[11px] ${isExporting ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
+                  <input
+                    type="checkbox"
+                    checked={keepMetadata}
+                    onChange={(e) => setKeepMetadata(e.target.checked)}
+                    disabled={isExporting}
+                    className={`rounded accent-accent ${isExporting ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                  />
+                  <span>{t('exportModal.keepMetadata', 'Metadaten beibehalten (EXIF, z. B. Kamera und Aufnahmedatum)')}</span>
+                </label>
+              )}
+            </div>
+          )}
 
           {/* Card 2: Sequential Mode & Filenames */}
           <div className="p-3.5 bg-app-card rounded-lg border border-app-border flex flex-col gap-3">
@@ -413,12 +496,14 @@ export function ExportCollectionModal() {
                   </div>
                 </div>
 
-                <p className="text-[11px] text-txt-tertiary">
-                  {t(
-                    'exportModal.standardExportHint',
-                    'Dateien werden als 1:1 Kopien mit ihren Original-Aufnahmedaten exportiert.'
-                  )}
-                </p>
+                {!renderEdits && (
+                  <p className="text-[11px] text-txt-tertiary">
+                    {t(
+                      'exportModal.standardExportHint',
+                      'Dateien werden als 1:1 Kopien mit ihren Original-Aufnahmedaten exportiert.'
+                    )}
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -448,8 +533,8 @@ export function ExportCollectionModal() {
               </select>
             </div>
 
-            {/* Custom Size & Quality Sliders (if not original) */}
-            {sizePreset !== 'original' && (
+            {/* Custom Size & Quality Sliders (if re-encoded: resized or rendered by RapidRAW) */}
+            {(sizePreset !== 'original' || renderEdits) && (
               <div className="pt-2.5 border-t border-app-border/40 flex flex-col gap-3">
                 {sizePreset === 'custom' && (
                   <div className="grid grid-cols-2 gap-2.5">
@@ -547,7 +632,7 @@ export function ExportCollectionModal() {
             {exportTarget.images.length} {t('exportModal.photosCount', 'Fotos')}
             <span className="mx-1.5">•</span>
             {sizePreset === 'original'
-              ? t('exportModal.presetOriginalBadge', 'Originalgröße')
+              ? `${t('exportModal.presetOriginalBadge', 'Originalgröße')}${renderEdits ? ` (${jpegQuality}%)` : ''}`
               : `${sizePreset.toUpperCase()} (${jpegQuality}%)`}
           </div>
 
@@ -555,10 +640,17 @@ export function ExportCollectionModal() {
             {isExporting ? (
               <button
                 type="button"
-                onClick={cancelExport}
-                className="px-4 py-2 bg-red-500/20 text-red-300 hover:bg-red-500/30 rounded-lg font-medium text-xs transition-colors cursor-pointer"
+                onClick={() => {
+                  setIsCancelling(true);
+                  cancelExport();
+                }}
+                disabled={isCancelling}
+                className="px-4 py-2 bg-red-500/20 text-red-300 hover:bg-red-500/30 rounded-lg font-medium text-xs transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1.5"
               >
-                {t('common.cancel', 'Abbrechen')}
+                {isCancelling && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {isCancelling
+                  ? t('exportModal.finishingCurrent', 'Aktuelles Foto wird fertiggestellt…')
+                  : t('common.cancel', 'Abbrechen')}
               </button>
             ) : (
               <>

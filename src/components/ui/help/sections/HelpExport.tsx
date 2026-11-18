@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { SectionHeading, TipBox, FeatureCard } from '../HelpShared';
-import { Hash, Clock, Image as ImageIcon, Sliders } from 'lucide-react';
+import { Hash, Clock, Image as ImageIcon, Sliders, Wand2 } from 'lucide-react';
 
 export function HelpExport() {
   const { i18n } = useTranslation();
@@ -77,6 +77,31 @@ export function HelpExport() {
           {isEn
             ? 'When resizing, use the slider to finely tune JPEG compression quality (default: 90%) to achieve the optimal balance between file size and sharpness.'
             : 'Bei der Verkleinerung bestimmst Du per Schieberegler stufenlos die gewünschte JPEG-Qualität (Standard: 90%), um die optimale Balance zwischen Dateigröße und Bildschärfe zu erzielen.'}
+        </FeatureCard>
+
+        <FeatureCard
+          icon={<Wand2 className="w-4 h-4" />}
+          title={isEn ? 'Export with RapidRAW Edits' : 'Export mit RapidRAW-Bearbeitungen'}
+        >
+          {isEn ? (
+            <>
+              With <strong>Apply RapidRAW edits</strong>, RapidRAW renders the photos with their edits in the
+              background, one photo at a time (for RAW+JPEG stacks, the RAW). Destination, size, JPEG quality
+              and naming work as usual; you can choose whether to keep the metadata. The option only appears
+              when RapidRAW (1.6.0 or newer) is set as your RAW developer and installed. If the export stops
+              because of a GPU error, set the processing backend in RapidRAW&apos;s settings to Auto and
+              restart RapidRAW.
+            </>
+          ) : (
+            <>
+              Mit <strong>„RapidRAW-Bearbeitungen übernehmen“</strong> rendert RapidRAW die Fotos im
+              Hintergrund nacheinander mit Deinen Bearbeitungen (bei RAW+JPEG-Stapeln das RAW). Zielordner,
+              Größe, JPEG-Qualität und Benennung funktionieren wie gewohnt, die Metadaten kannst Du wahlweise
+              behalten. Die Option erscheint nur, wenn RapidRAW (ab 1.6.0) als RAW-Entwickler eingestellt
+              und installiert ist. Bricht der Export wegen eines GPU-Fehlers ab, stelle in den
+              RapidRAW-Einstellungen das Verarbeitungs-Backend auf „Auto“ und starte RapidRAW neu.
+            </>
+          )}
         </FeatureCard>
       </div>
 

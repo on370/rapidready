@@ -1,5 +1,6 @@
+use std::collections::HashSet;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use anyhow::{Context, Result};
@@ -30,6 +31,27 @@ pub struct CollectionExportOptions {
     pub synthesize_exif_dates: bool,
     #[serde(default)]
     pub is_sequential: bool,
+    /// Render each photo with its RapidRAW edits via RapidRAW's headless export
+    #[serde(default)]
+    pub apply_rapidraw_edits: bool,
+    /// Keep the source metadata in RapidRAW-rendered files
+    #[serde(default)]
+    pub keep_metadata: bool,
+    /// Resolved RapidRAW executable, set by the caller (never sent by the frontend)
+    #[serde(skip)]
+    pub rapidraw_binary: Option<PathBuf>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportSummary {
+    pub exported: usize,
+    pub failed: usize,
+    /// Error of the first failed photo, if any
+    pub first_error: Option<String>,
+    /// RapidRAW's GPU processing failed and the export was stopped to avoid black images
+    #[serde(default)]
+    pub gpu_failure: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -83,6 +105,16 @@ pub fn inject_or_update_exif_date(jpeg_bytes: &[u8], date: NaiveDateTime) -> Vec
 
 /// Extracts all APP2 ICC_PROFILE segments from JPEG bytes.
 pub fn extract_icc_profile_segments(bytes: &[u8]) -> Vec<Vec<u8>> {
+    extract_app_segments(bytes, 0xE2, b"ICC_PROFILE\0")
+}
+
+/// Extracts the APP1 Exif segments from JPEG bytes.
+pub fn extract_exif_segments(bytes: &[u8]) -> Vec<Vec<u8>> {
+    extract_app_segments(bytes, 0xE1, b"Exif\0\0")
+}
+
+/// Extracts all APPn segments with the given marker whose payload starts with `signature`.
+fn extract_app_segments(bytes: &[u8], app_marker: u8, signature: &[u8]) -> Vec<Vec<u8>> {
     let mut segments = Vec::new();
     if bytes.len() < 4 || bytes[0] != 0xFF || bytes[1] != 0xD8 {
         return segments;
@@ -101,9 +133,9 @@ pub fn extract_icc_profile_segments(bytes: &[u8]) -> Vec<Vec<u8>> {
         if next_pos > bytes.len() {
             break;
         }
-        if marker == 0xE2 && len >= 14 {
+        if marker == app_marker && len >= 2 + signature.len() {
             let payload = &bytes[pos + 4..next_pos];
-            if payload.starts_with(b"ICC_PROFILE\0") {
+            if payload.starts_with(signature) {
                 segments.push(bytes[pos..next_pos].to_vec());
             }
         }
@@ -197,14 +229,160 @@ fn resize_image(img: DynamicImage, mode: &ExportResizeMode) -> DynamicImage {
     }
 }
 
-/// Runs the sequential export for a collection of image paths.
+/// Builds the export filename for the photo at `index`; `collision > 0` appends a uniqueness suffix.
+fn target_filename(options: &CollectionExportOptions, index: usize, stem: &str, collision: usize) -> String {
+    let suffix = if collision > 0 { format!("_{}", collision) } else { String::new() };
+    if options.is_sequential {
+        let formatted_num = format!("{:0width$}", index + 1, width = options.digits);
+        if options.preserve_original_name {
+            format!("{}{}_{}{}.jpg", options.filename_prefix, formatted_num, stem, suffix)
+        } else {
+            format!("{}{}{}.jpg", options.filename_prefix, formatted_num, suffix)
+        }
+    } else {
+        format!("{}{}{}.jpg", options.filename_prefix, stem, suffix)
+    }
+}
+
+fn encode_jpeg(img: &DynamicImage, quality: u8) -> Result<Vec<u8>> {
+    let mut encoded_buf = Vec::new();
+    let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut encoded_buf, quality.clamp(1, 100));
+    encoder.encode_image(img).context("Failed to encode JPEG")?;
+    Ok(encoded_buf)
+}
+
+/// Moves a file, falling back to copy + delete across volumes.
+fn move_file(from: &Path, to: &Path) -> Result<()> {
+    if fs::rename(from, to).is_err() {
+        fs::copy(from, to).context("Failed to copy rendered JPEG")?;
+        let _ = fs::remove_file(from);
+    }
+    Ok(())
+}
+
+/// Shared, read-only state for all export workers.
+struct ExportContext<'a> {
+    options: &'a CollectionExportOptions,
+    should_synthesize: bool,
+    base_date: NaiveDateTime,
+    /// RapidRAW binary and temporary folder when rendering with RapidRAW edits
+    render: Option<(PathBuf, PathBuf)>,
+}
+
+/// Exports one photo from its embedded preview or original file.
+fn export_from_source(src_path: &Path, target_path: &Path, current_date: NaiveDateTime, ctx: &ExportContext) -> Result<()> {
+    let options = ctx.options;
+    let ext = src_path
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    let is_jpeg = ext == "jpg" || ext == "jpeg";
+
+    // Fast path: direct copy if original JPEG, no resizing, and no EXIF synthesis
+    if is_jpeg
+        && options.resize_mode == ExportResizeMode::Original
+        && !ctx.should_synthesize
+    {
+        fs::copy(src_path, target_path).context("Failed to copy image file")?;
+        return Ok(());
+    }
+
+    // Need processing (RAW conversion, resizing, or EXIF injection)
+    let mut jpeg_bytes = if is_jpeg && options.resize_mode == ExportResizeMode::Original {
+        fs::read(src_path).context("Failed to read JPEG")?
+    } else {
+        let raw_or_img_bytes = if is_jpeg || ["png", "webp", "tif", "tiff", "bmp"].contains(&ext.as_str()) {
+            fs::read(src_path).context("Failed to read image file")?
+        } else {
+            crate::thumbnail::get_max_preview_jpeg(src_path)
+                .or_else(|_| fs::read(src_path))
+                .context("Failed to obtain image data for export")?
+        };
+
+        let dynamic_img = image::load_from_memory(&raw_or_img_bytes)
+            .context("Failed to decode image")?;
+
+        // Apply effective orientation (sidecar rotation or EXIF orientation)
+        let eff_orient = crate::thumbnail::get_effective_orientation(src_path);
+        let deg = crate::thumbnail::orientation_to_degrees(eff_orient.unwrap_or(1));
+        let oriented_img = crate::thumbnail::rotate_by_degrees(dynamic_img, deg);
+
+        let processed_img = resize_image(oriented_img, &options.resize_mode);
+        let encoded_buf = encode_jpeg(&processed_img, options.jpeg_quality)?;
+
+        // Preserve original ICC profile (e.g. Display P3) if present in source
+        let icc_segments = extract_icc_profile_segments(&raw_or_img_bytes);
+        inject_app_segments(&encoded_buf, &icc_segments)
+    };
+
+    if ctx.should_synthesize {
+        jpeg_bytes = inject_or_update_exif_date(&jpeg_bytes, current_date);
+    }
+
+    fs::write(target_path, jpeg_bytes).context("Failed to write exported JPEG")?;
+    Ok(())
+}
+
+/// Exports one photo rendered by RapidRAW's headless export with the edits from its sidecar.
+fn export_rendered(
+    src_path: &Path,
+    target_path: &Path,
+    index: usize,
+    current_date: NaiveDateTime,
+    (binary, temp_dir): (&Path, &Path),
+    ctx: &ExportContext,
+) -> Result<()> {
+    let options = ctx.options;
+    let needs_resize = options.resize_mode != ExportResizeMode::Original;
+    let temp_path = temp_dir.join(format!("{}.jpg", index));
+    // Render at maximum quality if the result is re-encoded after resizing anyway
+    let render_quality = if needs_resize { 100 } else { options.jpeg_quality };
+    crate::rapidraw_cli::render_with_rapidraw(
+        binary,
+        src_path,
+        &temp_path,
+        render_quality,
+        options.keep_metadata,
+    )?;
+
+    let result = (|| {
+        if !needs_resize && !ctx.should_synthesize {
+            // Already the final JPEG: avoid a second lossy encode
+            return move_file(&temp_path, target_path);
+        }
+        let mut jpeg_bytes = fs::read(&temp_path).context("Failed to read rendered JPEG")?;
+        if needs_resize {
+            // RapidRAW bakes the orientation into the pixels, so no rotation is needed here
+            let img = image::load_from_memory(&jpeg_bytes).context("Failed to decode rendered JPEG")?;
+            let encoded_buf = encode_jpeg(&resize_image(img, &options.resize_mode), options.jpeg_quality)?;
+            let mut segments = Vec::new();
+            if options.keep_metadata {
+                segments.extend(extract_exif_segments(&jpeg_bytes));
+            }
+            segments.extend(extract_icc_profile_segments(&jpeg_bytes));
+            jpeg_bytes = inject_app_segments(&encoded_buf, &segments);
+        }
+        if ctx.should_synthesize {
+            jpeg_bytes = inject_or_update_exif_date(&jpeg_bytes, current_date);
+        }
+        fs::write(target_path, jpeg_bytes).context("Failed to write exported JPEG")
+    })();
+    let _ = fs::remove_file(&temp_path);
+    result
+}
+
+/// Runs the export for a collection of image paths.
 /// Produces genuine file copies only with sequential naming, optional resizing, and optional synthetic linear EXIF timestamps.
+/// With `apply_rapidraw_edits`, each photo is rendered by RapidRAW, one at a time.
+/// A failing photo does not abort the batch; failures are counted in the returned summary.
+/// Only a RapidRAW GPU failure stops the export, since all following photos would fail too.
 pub fn run_collection_export<F>(
     image_paths: &[String],
     options: &CollectionExportOptions,
     is_cancelled: Arc<AtomicBool>,
     mut on_progress: F,
-) -> Result<usize>
+) -> Result<ExportSummary>
 where
     F: FnMut(ExportProgress),
 {
@@ -212,6 +390,22 @@ where
     if !dest_dir.exists() {
         fs::create_dir_all(dest_dir).context("Failed to create export destination directory")?;
     }
+
+    let render = if options.apply_rapidraw_edits {
+        let binary = options
+            .rapidraw_binary
+            .clone()
+            .context("RapidRAW was not found, cannot apply RapidRAW edits")?;
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let temp_dir = std::env::temp_dir().join(format!("rapidready-export-{}-{}", std::process::id(), nanos));
+        fs::create_dir_all(&temp_dir).context("Failed to create temporary export directory")?;
+        Some((binary, temp_dir))
+    } else {
+        None
+    };
 
     let total = image_paths.len();
     let should_synthesize = options.is_sequential && options.synthesize_exif_dates;
@@ -225,133 +419,90 @@ where
         chrono::Local::now().naive_local()
     };
 
-    let mut exported_count = 0;
-
+    // Resolve all target filenames up front and in order
+    // Collision protection: ensure unique target filename if file already exists
+    let mut reserved = HashSet::new();
+    let mut jobs: Vec<(usize, &Path, PathBuf)> = Vec::new();
     for (index, path_str) in image_paths.iter().enumerate() {
-        if is_cancelled.load(Ordering::Relaxed) {
-            break;
-        }
-
         let src_path = Path::new(path_str);
         if !src_path.exists() {
             continue;
         }
-
         let stem = src_path
             .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or("image");
-
-        let target_filename = if options.is_sequential {
-            let num = index + 1;
-            let formatted_num = format!("{:0width$}", num, width = options.digits);
-            if options.preserve_original_name {
-                format!("{}{}_{}.jpg", options.filename_prefix, formatted_num, stem)
-            } else {
-                format!("{}{}.jpg", options.filename_prefix, formatted_num)
+        let mut collision_seq = 0;
+        let target_path = loop {
+            let candidate = dest_dir.join(target_filename(options, index, stem, collision_seq));
+            if !candidate.exists() && reserved.insert(candidate.to_string_lossy().to_lowercase()) {
+                break candidate;
             }
-        } else {
-            format!("{}{}.jpg", options.filename_prefix, stem)
-        };
-
-        // Collision protection: ensure unique target filename if file already exists
-        let mut target_path = dest_dir.join(&target_filename);
-        let mut collision_seq = 1;
-        while target_path.exists() {
-            let coll_filename = if options.is_sequential {
-                let num = index + 1;
-                let formatted_num = format!("{:0width$}", num, width = options.digits);
-                if options.preserve_original_name {
-                    format!("{}{}_{}_{}.jpg", options.filename_prefix, formatted_num, stem, collision_seq)
-                } else {
-                    format!("{}{}_{}.jpg", options.filename_prefix, formatted_num, collision_seq)
-                }
-            } else {
-                format!("{}{}_{}.jpg", options.filename_prefix, stem, collision_seq)
-            };
-            target_path = dest_dir.join(&coll_filename);
             collision_seq += 1;
+        };
+        jobs.push((index, src_path, target_path));
+    }
+
+    let ctx = ExportContext {
+        options,
+        should_synthesize,
+        base_date,
+        render,
+    };
+    let mut summary = ExportSummary::default();
+
+    // Photos are exported strictly one after another. RapidRAW must never run twice at the same
+    // time: a second process sees the first one's GPU init crash flag and permanently switches
+    // RapidRAW to its OpenGL fallback backend, which can render black images.
+    for (index, src_path, target_path) in &jobs {
+        // A cancel only stops new photos; a running RapidRAW render is left to finish, since
+        // killing it during GPU init can leave its crash flag behind as well
+        if is_cancelled.load(Ordering::Relaxed) {
+            break;
         }
-
-        let ext = src_path
-            .extension()
-            .and_then(|s| s.to_str())
-            .unwrap_or("")
-            .to_lowercase();
-        let is_jpeg = ext == "jpg" || ext == "jpeg";
-
         // Synthetic timestamp for this index: base + index * 10 seconds
-        let current_date = base_date + Duration::seconds((index as i64) * 10);
-
-        // Fast path: direct copy if original JPEG, no resizing, and no EXIF synthesis
-        if is_jpeg
-            && options.resize_mode == ExportResizeMode::Original
-            && !should_synthesize
-        {
-            fs::copy(src_path, &target_path).context("Failed to copy image file")?;
-        } else {
-            // Need processing (RAW conversion, resizing, or EXIF injection)
-            let mut jpeg_bytes = if is_jpeg && options.resize_mode == ExportResizeMode::Original {
-                fs::read(src_path).context("Failed to read JPEG")?
-            } else {
-                let raw_or_img_bytes = if is_jpeg || ["png", "webp", "tif", "tiff", "bmp"].contains(&ext.as_str()) {
-                    fs::read(src_path).context("Failed to read image file")?
-                } else {
-                    crate::thumbnail::get_max_preview_jpeg(src_path)
-                        .or_else(|_| fs::read(src_path))
-                        .context("Failed to obtain image data for export")?
-                };
-
-                let dynamic_img = image::load_from_memory(&raw_or_img_bytes)
-                    .context("Failed to decode image")?;
-
-                // Apply effective orientation (sidecar rotation or EXIF orientation)
-                let eff_orient = crate::thumbnail::get_effective_orientation(src_path);
-                let deg = crate::thumbnail::orientation_to_degrees(eff_orient.unwrap_or(1));
-                let oriented_img = crate::thumbnail::rotate_by_degrees(dynamic_img, deg);
-
-                let processed_img = resize_image(oriented_img, &options.resize_mode);
-
-                let mut encoded_buf = Vec::new();
-                let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(
-                    &mut encoded_buf,
-                    options.jpeg_quality.clamp(1, 100),
-                );
-                encoder
-                    .encode_image(&processed_img)
-                    .context("Failed to encode JPEG")?;
-
-                // Preserve original ICC profile (e.g. Display P3) if present in source
-                let icc_segments = extract_icc_profile_segments(&raw_or_img_bytes);
-                if !icc_segments.is_empty() {
-                    inject_app_segments(&encoded_buf, &icc_segments)
-                } else {
-                    encoded_buf
+        let current_date = ctx.base_date + Duration::seconds((*index as i64) * 10);
+        let result = match &ctx.render {
+            Some((binary, temp_dir)) => export_rendered(
+                src_path,
+                target_path,
+                *index,
+                current_date,
+                (binary.as_path(), temp_dir.as_path()),
+                &ctx,
+            ),
+            None => export_from_source(src_path, target_path, current_date, &ctx),
+        };
+        match result {
+            Ok(()) => summary.exported += 1,
+            Err(e) => {
+                summary.failed += 1;
+                summary
+                    .first_error
+                    .get_or_insert_with(|| format!("{}: {:#}", src_path.display(), e));
+                if e.downcast_ref::<crate::rapidraw_cli::RapidRawGpuFailure>().is_some() {
+                    // Every following photo would fail the same way
+                    summary.gpu_failure = true;
+                    break;
                 }
-            };
-
-            if should_synthesize {
-                jpeg_bytes = inject_or_update_exif_date(&jpeg_bytes, current_date);
             }
-
-            fs::write(&target_path, jpeg_bytes).context("Failed to write exported JPEG")?;
         }
-
-        exported_count += 1;
-        let actual_filename = target_path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or(&target_filename)
-            .to_string();
-
         on_progress(ExportProgress {
-            current: exported_count,
+            current: summary.exported + summary.failed,
             total,
-            filename: actual_filename,
+            filename: target_path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or_default()
+                .to_string(),
         });
     }
 
-    Ok(exported_count)
+    if let Some((_, temp_dir)) = &ctx.render {
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    Ok(summary)
 }
 
 #[cfg(test)]
@@ -411,6 +562,9 @@ mod tests {
             jpeg_quality: 90,
             synthesize_exif_dates: true,
             is_sequential: true,
+            apply_rapidraw_edits: false,
+            keep_metadata: false,
+            rapidraw_binary: None,
         };
 
         let count = run_collection_export(
@@ -418,7 +572,7 @@ mod tests {
             &seq_opts,
             Arc::new(AtomicBool::new(false)),
             |_| {},
-        ).unwrap();
+        ).unwrap().exported;
 
         assert_eq!(count, 2);
         assert!(dest_dir.join("Book_001_photo_a.jpg").exists());
@@ -436,6 +590,9 @@ mod tests {
             jpeg_quality: 90,
             synthesize_exif_dates: false,
             is_sequential: false,
+            apply_rapidraw_edits: false,
+            keep_metadata: false,
+            rapidraw_binary: None,
         };
 
         let count_std = run_collection_export(
@@ -443,11 +600,56 @@ mod tests {
             &std_opts,
             Arc::new(AtomicBool::new(false)),
             |_| {},
-        ).unwrap();
+        ).unwrap().exported;
 
         assert_eq!(count_std, 2);
         assert!(dest_std.join("photo_a.jpg").exists());
         assert!(dest_std.join("photo_b.jpg").exists());
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_rapidraw_failures_do_not_abort_batch() {
+        let temp_dir = std::env::temp_dir().join(format!("rr_render_fail_test_{}", std::process::id()));
+        let src_dir = temp_dir.join("src");
+        let _ = fs::create_dir_all(&src_dir);
+
+        let img = DynamicImage::new_rgb8(10, 10);
+        let mut image_paths = Vec::new();
+        for name in ["photo_a.jpg", "photo_b.jpg"] {
+            let path = src_dir.join(name);
+            img.save_with_format(&path, ImageFormat::Jpeg).unwrap();
+            image_paths.push(path.to_str().unwrap().to_string());
+        }
+
+        let opts = CollectionExportOptions {
+            album_id: "test".into(),
+            destination_dir: temp_dir.join("dest").to_str().unwrap().into(),
+            filename_prefix: "".into(),
+            digits: 3,
+            preserve_original_name: false,
+            resize_mode: ExportResizeMode::Original,
+            jpeg_quality: 90,
+            synthesize_exif_dates: false,
+            is_sequential: false,
+            apply_rapidraw_edits: true,
+            keep_metadata: true,
+            rapidraw_binary: Some(temp_dir.join("missing-rapidraw-binary")),
+        };
+
+        let mut progress_calls = 0;
+        let summary = run_collection_export(
+            &image_paths,
+            &opts,
+            Arc::new(AtomicBool::new(false)),
+            |_| progress_calls += 1,
+        ).unwrap();
+
+        assert_eq!(summary.exported, 0);
+        assert_eq!(summary.failed, 2);
+        assert_eq!(progress_calls, 2);
+        assert!(summary.first_error.unwrap().contains("Failed to start RapidRAW"));
 
         let _ = fs::remove_dir_all(&temp_dir);
     }
@@ -475,6 +677,9 @@ mod tests {
             jpeg_quality: 90,
             synthesize_exif_dates: true,
             is_sequential: true,
+            apply_rapidraw_edits: false,
+            keep_metadata: false,
+            rapidraw_binary: None,
         };
 
         let count = run_collection_export(
@@ -485,7 +690,7 @@ mod tests {
             &opts,
             Arc::new(AtomicBool::new(false)),
             |_| {},
-        ).unwrap();
+        ).unwrap().exported;
 
         assert_eq!(count, 2);
 

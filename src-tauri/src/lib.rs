@@ -390,6 +390,7 @@ pub fn run() {
             commands::prune_from_all_collections,
             commands::prune_collections_by_library,
             commands::export_collection,
+            commands::get_rapidraw_export_support,
             commands::cancel_collection_export,
             commands::warm_thumbnail_cache,
             commands::cancel_warmup_cache,

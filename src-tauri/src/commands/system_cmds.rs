@@ -1,5 +1,6 @@
 use super::archive_cmds::get_archive_catalog;
 pub use rapidready_core::metadata_resolver::is_network_or_remote_path;
+use rapidready_core::rapidraw_cli::find_rapidraw_binary;
 use rapidready_core::collections::{
     load_collections as core_load_collections,
     prune_folder_from_all_collections as core_prune_folder_from_all_collections,
@@ -517,36 +518,6 @@ fn find_first_image_in_path(path_str: &str) -> String {
     path_str.to_string()
 }
 
-#[cfg(target_os = "macos")]
-fn find_rapidraw_binary() -> Option<std::path::PathBuf> {
-    let p1 = std::path::PathBuf::from("/Applications/RapidRAW.app/Contents/MacOS/RapidRAW");
-    if p1.exists() {
-        return Some(p1);
-    }
-    if let Ok(home) = std::env::var("HOME") {
-        let p2 = std::path::PathBuf::from(home).join("Applications/RapidRAW.app/Contents/MacOS/RapidRAW");
-        if p2.exists() {
-            return Some(p2);
-        }
-    }
-    if let Ok(out) = std::process::Command::new("mdfind")
-        .arg("kMDItemCFBundleIdentifier == 'io.github.CyberTimon.RapidRAW'")
-        .output()
-    {
-        let stdout = String::from_utf8_lossy(&out.stdout);
-        for line in stdout.lines() {
-            let trimmed = line.trim();
-            if !trimmed.is_empty() {
-                let bin = std::path::PathBuf::from(trimmed).join("Contents/MacOS/RapidRAW");
-                if bin.exists() {
-                    return Some(bin);
-                }
-            }
-        }
-    }
-    None
-}
-
 fn open_system_default(file_path: &str) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
@@ -732,22 +703,11 @@ pub fn open_in_rapidraw(
             }
             #[cfg(target_os = "windows")]
             {
-                let candidate_paths = [
-                    // User-Installation (Standard bei Tauri / Squirrel / NSIS)
-                    std::env::var("LOCALAPPDATA").map(|p| format!("{}\\Programs\\RapidRaw\\RapidRaw.exe", p)).ok(),
-                    std::env::var("LOCALAPPDATA").map(|p| format!("{}\\RapidRaw\\RapidRaw.exe", p)).ok(),
-                    // Systemweite Installation
-                    std::env::var("ProgramFiles").map(|p| format!("{}\\RapidRaw\\RapidRaw.exe", p)).ok(),
-                    std::env::var("ProgramFiles(x86)").map(|p| format!("{}\\RapidRaw\\RapidRaw.exe", p)).ok(),
-                ];
-
-                for candidate in candidate_paths.into_iter().flatten() {
-                    if std::path::Path::new(&candidate).exists() {
-                        let _ = std::process::Command::new(&candidate)
-                            .arg(&file_to_open)
-                            .spawn();
-                        return Ok(());
-                    }
+                if let Some(bin_path) = find_rapidraw_binary() {
+                    let _ = std::process::Command::new(&bin_path)
+                        .arg(&file_to_open)
+                        .spawn();
+                    return Ok(());
                 }
 
                 // Fallback: systemweites Öffnen
@@ -755,6 +715,11 @@ pub fn open_in_rapidraw(
             }
             #[cfg(not(any(target_os = "macos", target_os = "windows")))]
             {
+                if let Some(bin_path) = find_rapidraw_binary() {
+                    if std::process::Command::new(&bin_path).arg(&file_to_open).spawn().is_ok() {
+                        return Ok(());
+                    }
+                }
                 open_system_default(&file_to_open)
             }
         }
