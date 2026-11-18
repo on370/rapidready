@@ -390,6 +390,7 @@ pub fn run() {
             commands::prune_from_all_collections,
             commands::prune_collections_by_library,
             commands::export_collection,
+            commands::export_photos,
             commands::cancel_collection_export,
             commands::warm_thumbnail_cache,
             commands::cancel_warmup_cache,

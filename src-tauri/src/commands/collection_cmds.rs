@@ -167,6 +167,30 @@ pub async fn export_collection(
     let images = find_album_images(&tree, &options.album_id)
         .ok_or_else(|| format!("Collection with id '{}' not found", options.album_id))?;
 
+    spawn_export(app, &state, images, options).await
+}
+
+/// Exports an explicit, already-ordered list of photo paths (e.g. the current
+/// library selection) through the same pipeline as `export_collection`.
+#[tauri::command]
+pub async fn export_photos(
+    app: AppHandle,
+    state: tauri::State<'_, CollectionExportState>,
+    paths: Vec<String>,
+    options: CollectionExportOptions,
+) -> Result<usize, String> {
+    if paths.is_empty() {
+        return Err("No photos selected for export".to_string());
+    }
+    spawn_export(app, &state, paths, options).await
+}
+
+async fn spawn_export(
+    app: AppHandle,
+    state: &tauri::State<'_, CollectionExportState>,
+    images: Vec<String>,
+    options: CollectionExportOptions,
+) -> Result<usize, String> {
     state.0.store(false, Ordering::Relaxed);
     let is_cancelled = Arc::clone(&state.0);
     let app_clone = app.clone();

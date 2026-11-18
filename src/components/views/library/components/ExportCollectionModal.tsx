@@ -8,12 +8,13 @@ import {
   CollectionExportOptions,
   ExportResizeMode,
   ExportProgress,
+  getExportTargetPaths,
 } from '../../../../stores/collectionsStore';
 import { useToastStore } from '../../../../stores/toastStore';
 
 export function ExportCollectionModal() {
   const { t } = useTranslation('library');
-  const { isExportModalOpen, exportTarget, closeExportModal, exportCollection, cancelExport } =
+  const { isExportModalOpen, exportTarget, closeExportModal, runExport, cancelExport } =
     useCollectionsStore();
 
   const [destinationDir, setDestinationDir] = useState('');
@@ -38,19 +39,28 @@ export function ExportCollectionModal() {
     setCanScrollDown(hasMore);
   }, [scrollEl]);
 
-  // Auto-calculated zero-padding digits based on collection size (min 3 digits)
-  const autoDigits = exportTarget ? Math.max(3, String(exportTarget.images.length).length) : 3;
+  const isSelectionExport = exportTarget?.kind === 'selection';
+  const photoCount = exportTarget ? getExportTargetPaths(exportTarget).length : 0;
+
+  // Auto-calculated zero-padding digits based on export size (min 3 digits)
+  const autoDigits = Math.max(3, String(photoCount).length);
 
   // Initialize defaults when modal opens
   useEffect(() => {
     if (exportTarget) {
-      const sanitized = exportTarget.name
-        .replace(/[^a-zA-Z0-9_\-äöüÄÖÜß]/g, '_')
-        .replace(/_+/g, '_');
-      setFilenamePrefix(`${sanitized}_`);
+      if (exportTarget.kind === 'collection') {
+        const sanitized = exportTarget.album.name
+          .replace(/[^a-zA-Z0-9_\-äöüÄÖÜß]/g, '_')
+          .replace(/_+/g, '_');
+        setFilenamePrefix(`${sanitized}_`);
+        setIsSequential(true);
+      } else {
+        // Ad-hoc selection: no name to derive a prefix from, so default to plain copies.
+        setFilenamePrefix('');
+        setIsSequential(false);
+      }
       setProgress(null);
       setIsExporting(false);
-      setIsSequential(true);
     }
   }, [exportTarget]);
 
@@ -169,8 +179,7 @@ export function ExportCollectionModal() {
         break;
     }
 
-    const options: CollectionExportOptions = {
-      albumId: exportTarget.id,
+    const options: Omit<CollectionExportOptions, 'albumId'> = {
       destinationDir,
       filenamePrefix,
       digits: autoDigits,
@@ -183,8 +192,8 @@ export function ExportCollectionModal() {
 
     try {
       setIsExporting(true);
-      setProgress({ current: 0, total: exportTarget.images.length, filename: '' });
-      const exportedCount = await exportCollection(options);
+      setProgress({ current: 0, total: photoCount, filename: '' });
+      const exportedCount = await runExport(options);
       setIsExporting(false);
       useToastStore.getState().showSuccess(
         t('exportModal.exportSuccess', {
@@ -230,9 +239,15 @@ export function ExportCollectionModal() {
               <Download className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-sm font-semibold">{t('exportModal.title', 'Sammlung exportieren')}</h2>
+              <h2 className="text-sm font-semibold">
+                {isSelectionExport
+                  ? t('exportModal.titleSelection', { count: photoCount })
+                  : t('exportModal.title', 'Sammlung exportieren')}
+              </h2>
               <p className="text-xs text-txt-tertiary">
-                {exportTarget.name} ({exportTarget.images.length} {t('exportModal.photosCount', 'Fotos')})
+                {exportTarget.kind === 'collection'
+                  ? `${exportTarget.album.name} (${photoCount} ${t('exportModal.photosCount', 'Fotos')})`
+                  : t('exportModal.selectionSubtitle')}
               </p>
             </div>
           </div>
@@ -297,7 +312,9 @@ export function ExportCollectionModal() {
               />
               <div className="flex flex-col">
                 <span className="font-semibold text-txt-primary text-xs">
-                  {t('exportModal.sequentialTitle', 'Manuelle Reihenfolge als Sequenz erzwingen (Fotobuch & Web)')}
+                  {isSelectionExport
+                    ? t('exportModal.sequentialTitleSelection')
+                    : t('exportModal.sequentialTitle', 'Manuelle Reihenfolge als Sequenz erzwingen (Fotobuch & Web)')}
                 </span>
                 <span className="text-[11px] text-txt-secondary leading-relaxed mt-0.5">
                   {t(
@@ -544,7 +561,7 @@ export function ExportCollectionModal() {
         {/* Pinned Footer */}
         <div className="px-5 py-3.5 border-t border-app-border bg-app-panel flex items-center justify-between flex-shrink-0">
           <div className="text-[11px] text-txt-tertiary truncate mr-2">
-            {exportTarget.images.length} {t('exportModal.photosCount', 'Fotos')}
+            {photoCount} {t('exportModal.photosCount', 'Fotos')}
             <span className="mx-1.5">•</span>
             {sizePreset === 'original'
               ? t('exportModal.presetOriginalBadge', 'Originalgröße')

@@ -84,7 +84,10 @@
     "pick": "Set as Pick",
     "reject": "Set as Rejected",
     "unrated": "Unflag",
-    "rating": "Rating:"
+    "rating": "Rating:",
+    "exportSelected": "Export selected…",
+    "exportSelectedCount_one": "Export {{count}} selected photo…",
+    "exportSelectedCount_other": "Export {{count}} selected photos…"
   },
   "filters": {
     "label": "Filters:",
@@ -504,7 +507,11 @@
     "qualityLabel": "JPEG Quality:",
     "exporting": "Exporting...",
     "startExport": "Start Export",
-    "exportSuccess": "{{count}} photos successfully exported!"
+    "exportSuccess": "{{count}} photos successfully exported!",
+    "titleSelection_one": "Export {{count}} selected photo",
+    "titleSelection_other": "Export {{count}} selected photos",
+    "selectionSubtitle": "In the order shown in the grid",
+    "sequentialTitleSelection": "Enforce grid order as sequence (Photobook & Web)"
   },
   "scanMenu": {
     "refreshFolder": "Refresh current folder",
