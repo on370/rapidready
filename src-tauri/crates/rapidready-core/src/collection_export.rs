@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{mpsc, Arc};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use anyhow::{Context, Result};
 use chrono::{Duration, NaiveDateTime};
 use image::imageops::FilterType;
@@ -42,9 +42,6 @@ pub struct CollectionExportOptions {
     pub rapidraw_binary: Option<PathBuf>,
 }
 
-/// Maximum number of RapidRAW processes rendering at the same time.
-pub const MAX_PARALLEL_RAPIDRAW: usize = 2;
-
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportSummary {
@@ -52,6 +49,9 @@ pub struct ExportSummary {
     pub failed: usize,
     /// Error of the first failed photo, if any
     pub first_error: Option<String>,
+    /// RapidRAW's GPU processing failed and the export was stopped to avoid black images
+    #[serde(default)]
+    pub gpu_failure: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -267,7 +267,6 @@ struct ExportContext<'a> {
     base_date: NaiveDateTime,
     /// RapidRAW binary and temporary folder when rendering with RapidRAW edits
     render: Option<(PathBuf, PathBuf)>,
-    is_cancelled: &'a AtomicBool,
 }
 
 /// Exports one photo from its embedded preview or original file.
@@ -345,7 +344,6 @@ fn export_rendered(
         &temp_path,
         render_quality,
         options.keep_metadata,
-        ctx.is_cancelled,
     )?;
 
     let result = (|| {
@@ -376,8 +374,9 @@ fn export_rendered(
 
 /// Runs the export for a collection of image paths.
 /// Produces genuine file copies only with sequential naming, optional resizing, and optional synthetic linear EXIF timestamps.
-/// With `apply_rapidraw_edits`, each photo is rendered by RapidRAW (up to two processes in parallel).
+/// With `apply_rapidraw_edits`, each photo is rendered by RapidRAW, one at a time.
 /// A failing photo does not abort the batch; failures are counted in the returned summary.
+/// Only a RapidRAW GPU failure stops the export, since all following photos would fail too.
 pub fn run_collection_export<F>(
     image_paths: &[String],
     options: &CollectionExportOptions,
@@ -420,7 +419,7 @@ where
         chrono::Local::now().naive_local()
     };
 
-    // Resolve all target filenames up front and in order, so parallel workers never race for a name.
+    // Resolve all target filenames up front and in order
     // Collision protection: ensure unique target filename if file already exists
     let mut reserved = HashSet::new();
     let mut jobs: Vec<(usize, &Path, PathBuf)> = Vec::new();
@@ -449,65 +448,55 @@ where
         should_synthesize,
         base_date,
         render,
-        is_cancelled: &is_cancelled,
     };
-    let workers = if ctx.render.is_some() { MAX_PARALLEL_RAPIDRAW } else { 1 };
-    let next_job = AtomicUsize::new(0);
     let mut summary = ExportSummary::default();
 
-    std::thread::scope(|scope| {
-        let (tx, rx) = mpsc::channel::<(&PathBuf, Result<()>)>();
-        for _ in 0..workers {
-            let tx = tx.clone();
-            let (ctx, jobs, next_job) = (&ctx, &jobs, &next_job);
-            scope.spawn(move || {
-                while !ctx.is_cancelled.load(Ordering::Relaxed) {
-                    let Some((index, src_path, target_path)) = jobs.get(next_job.fetch_add(1, Ordering::Relaxed)) else {
-                        break;
-                    };
-                    // Synthetic timestamp for this index: base + index * 10 seconds
-                    let current_date = ctx.base_date + Duration::seconds((*index as i64) * 10);
-                    let result = match &ctx.render {
-                        Some((binary, temp_dir)) => export_rendered(
-                            src_path,
-                            target_path,
-                            *index,
-                            current_date,
-                            (binary.as_path(), temp_dir.as_path()),
-                            ctx,
-                        ),
-                        None => export_from_source(src_path, target_path, current_date, ctx),
-                    };
-                    let result = result.with_context(|| src_path.display().to_string());
-                    if tx.send((target_path, result)).is_err() {
-                        break;
-                    }
-                }
-            });
+    // Photos are exported strictly one after another. RapidRAW must never run twice at the same
+    // time: a second process sees the first one's GPU init crash flag and permanently switches
+    // RapidRAW to its OpenGL fallback backend, which can render black images.
+    for (index, src_path, target_path) in &jobs {
+        // A cancel only stops new photos; a running RapidRAW render is left to finish, since
+        // killing it during GPU init can leave its crash flag behind as well
+        if is_cancelled.load(Ordering::Relaxed) {
+            break;
         }
-        drop(tx);
-
-        for (target_path, result) in rx {
-            match result {
-                Ok(()) => summary.exported += 1,
-                // Photos interrupted by a cancel count as neither exported nor failed
-                Err(_) if is_cancelled.load(Ordering::Relaxed) => continue,
-                Err(e) => {
-                    summary.failed += 1;
-                    summary.first_error.get_or_insert_with(|| format!("{:#}", e));
+        // Synthetic timestamp for this index: base + index * 10 seconds
+        let current_date = ctx.base_date + Duration::seconds((*index as i64) * 10);
+        let result = match &ctx.render {
+            Some((binary, temp_dir)) => export_rendered(
+                src_path,
+                target_path,
+                *index,
+                current_date,
+                (binary.as_path(), temp_dir.as_path()),
+                &ctx,
+            ),
+            None => export_from_source(src_path, target_path, current_date, &ctx),
+        };
+        match result {
+            Ok(()) => summary.exported += 1,
+            Err(e) => {
+                summary.failed += 1;
+                summary
+                    .first_error
+                    .get_or_insert_with(|| format!("{}: {:#}", src_path.display(), e));
+                if e.downcast_ref::<crate::rapidraw_cli::RapidRawGpuFailure>().is_some() {
+                    // Every following photo would fail the same way
+                    summary.gpu_failure = true;
+                    break;
                 }
             }
-            on_progress(ExportProgress {
-                current: summary.exported + summary.failed,
-                total,
-                filename: target_path
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or_default()
-                    .to_string(),
-            });
         }
-    });
+        on_progress(ExportProgress {
+            current: summary.exported + summary.failed,
+            total,
+            filename: target_path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or_default()
+                .to_string(),
+        });
+    }
 
     if let Some((_, temp_dir)) = &ctx.render {
         let _ = fs::remove_dir_all(temp_dir);

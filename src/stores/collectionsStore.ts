@@ -47,6 +47,8 @@ export interface ExportSummary {
   exported: number;
   failed: number;
   firstError: string | null;
+  /** RapidRAW's GPU processing failed and the export was stopped to avoid black images */
+  gpuFailure: boolean;
 }
 
 export interface ExportProgress {

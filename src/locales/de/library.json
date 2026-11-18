@@ -506,9 +506,11 @@
     "startExport": "Exportieren starten",
     "exportSuccess": "{{count}} Fotos erfolgreich exportiert!",
     "rapidrawEditsTitle": "RapidRAW-Bearbeitungen übernehmen",
-    "rapidrawEditsDesc": "RapidRAW rendert jedes Foto mit Deinen Bearbeitungen (bei RAW+JPEG-Stapeln das RAW). Langsamer als der Export der Vorschaubilder, RapidRAW läuft dabei unsichtbar im Hintergrund.",
+    "rapidrawEditsDesc": "RapidRAW rendert die Fotos nacheinander mit Deinen Bearbeitungen (bei RAW+JPEG-Stapeln das RAW). Langsamer als der Export der Vorschaubilder, RapidRAW läuft dabei unsichtbar im Hintergrund.",
     "keepMetadata": "Metadaten beibehalten (EXIF, z. B. Kamera und Aufnahmedatum)",
-    "exportPartial": "{{exported}} Fotos exportiert, {{failed}} fehlgeschlagen. Erster Fehler: {{error}}"
+    "exportPartial": "{{exported}} Fotos exportiert, {{failed}} fehlgeschlagen. Erster Fehler: {{error}}",
+    "finishingCurrent": "Aktuelles Foto wird fertiggestellt…",
+    "gpuFailure": "RapidRAWs GPU-Verarbeitung ist fehlgeschlagen, daher wurde der Export gestoppt, um schwarze Bilder zu vermeiden. Öffne in RapidRAW die Einstellungen, setze das Verarbeitungs-Backend auf „Auto“, starte RapidRAW neu und exportiere erneut."
   },
   "scanMenu": {
     "refreshFolder": "Aktuellen Ordner aktualisieren",

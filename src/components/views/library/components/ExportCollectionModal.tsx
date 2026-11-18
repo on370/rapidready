@@ -36,6 +36,7 @@ export function ExportCollectionModal() {
   const renderEdits = rapidrawAvailable && applyRapidrawEdits;
 
   const [isExporting, setIsExporting] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
   const [progress, setProgress] = useState<ExportProgress | null>(null);
 
   const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
@@ -59,6 +60,7 @@ export function ExportCollectionModal() {
       setFilenamePrefix(`${sanitized}_`);
       setProgress(null);
       setIsExporting(false);
+      setIsCancelling(false);
       setIsSequential(true);
     }
   }, [exportTarget]);
@@ -205,10 +207,18 @@ export function ExportCollectionModal() {
 
     try {
       setIsExporting(true);
+      setIsCancelling(false);
       setProgress({ current: 0, total: exportTarget.images.length, filename: '' });
       const summary = await exportCollection(options);
       setIsExporting(false);
-      if (summary.failed > 0) {
+      if (summary.gpuFailure) {
+        useToastStore.getState().showError(
+          t(
+            'exportModal.gpuFailure',
+            'RapidRAWs GPU-Verarbeitung ist fehlgeschlagen, daher wurde der Export gestoppt, um schwarze Bilder zu vermeiden. Öffne in RapidRAW die Einstellungen, setze das Verarbeitungs-Backend auf „Auto“, starte RapidRAW neu und exportiere erneut.'
+          )
+        );
+      } else if (summary.failed > 0) {
         useToastStore.getState().showError(
           t('exportModal.exportPartial', {
             exported: summary.exported,
@@ -337,7 +347,7 @@ export function ExportCollectionModal() {
                   <span className="text-[11px] text-txt-secondary leading-relaxed mt-0.5">
                     {t(
                       'exportModal.rapidrawEditsDesc',
-                      'RapidRAW rendert jedes Foto mit Deinen Bearbeitungen (bei RAW+JPEG-Stapeln das RAW). Langsamer als der Export der Vorschaubilder, RapidRAW läuft dabei unsichtbar im Hintergrund.'
+                      'RapidRAW rendert die Fotos nacheinander mit Deinen Bearbeitungen (bei RAW+JPEG-Stapeln das RAW). Langsamer als der Export der Vorschaubilder, RapidRAW läuft dabei unsichtbar im Hintergrund.'
                     )}
                   </span>
                 </div>
@@ -630,10 +640,17 @@ export function ExportCollectionModal() {
             {isExporting ? (
               <button
                 type="button"
-                onClick={cancelExport}
-                className="px-4 py-2 bg-red-500/20 text-red-300 hover:bg-red-500/30 rounded-lg font-medium text-xs transition-colors cursor-pointer"
+                onClick={() => {
+                  setIsCancelling(true);
+                  cancelExport();
+                }}
+                disabled={isCancelling}
+                className="px-4 py-2 bg-red-500/20 text-red-300 hover:bg-red-500/30 rounded-lg font-medium text-xs transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1.5"
               >
-                {t('common.cancel', 'Abbrechen')}
+                {isCancelling && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {isCancelling
+                  ? t('exportModal.finishingCurrent', 'Aktuelles Foto wird fertiggestellt…')
+                  : t('common.cancel', 'Abbrechen')}
               </button>
             ) : (
               <>

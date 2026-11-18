@@ -506,9 +506,11 @@
     "startExport": "Start Export",
     "exportSuccess": "{{count}} photos successfully exported!",
     "rapidrawEditsTitle": "Apply RapidRAW edits",
-    "rapidrawEditsDesc": "RapidRAW renders every photo with your edits (the RAW for RAW+JPEG stacks). Slower than exporting the previews; RapidRAW runs invisibly in the background.",
+    "rapidrawEditsDesc": "RapidRAW renders the photos one at a time with your edits (the RAW for RAW+JPEG stacks). Slower than exporting the previews; RapidRAW runs invisibly in the background.",
     "keepMetadata": "Keep metadata (EXIF, e.g. camera and capture date)",
-    "exportPartial": "{{exported}} photos exported, {{failed}} failed. First error: {{error}}"
+    "exportPartial": "{{exported}} photos exported, {{failed}} failed. First error: {{error}}",
+    "finishingCurrent": "Finishing current photo…",
+    "gpuFailure": "RapidRAW's GPU processing failed, so the export was stopped to avoid black images. In RapidRAW open Settings, set the processing backend to Auto, restart RapidRAW, and export again."
   },
   "scanMenu": {
     "refreshFolder": "Refresh current folder",

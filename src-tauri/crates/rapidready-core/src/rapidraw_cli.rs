@@ -6,9 +6,37 @@ use std::ffi::OsString;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
 use anyhow::{anyhow, bail, Context, Result};
+
+/// RapidRAW's GPU processing failed (typically after it fell back to its OpenGL backend).
+/// Its output is unusable, often a black image, and every following render would fail the same way.
+#[derive(Debug)]
+pub struct RapidRawGpuFailure(pub String);
+
+impl std::fmt::Display for RapidRawGpuFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "RapidRAW GPU processing failed: {}", self.0)
+    }
+}
+
+impl std::error::Error for RapidRawGpuFailure {}
+
+/// Log lines that show RapidRAW's GPU processing broke, even when it still exits with code 0.
+const GPU_FAILURE_MARKERS: [&str; 4] = [
+    "is invalid",
+    "error C1068",
+    "Could not lock adapter context",
+    "Falling back to OpenGL backend",
+];
+
+/// Returns the first stderr line that shows a RapidRAW GPU failure, if any.
+pub fn detect_gpu_failure(stderr: &str) -> Option<String> {
+    stderr
+        .lines()
+        .map(str::trim)
+        .find(|line| GPU_FAILURE_MARKERS.iter().any(|m| line.contains(m)))
+        .map(str::to_string)
+}
 
 /// Candidate RapidRAW executable locations on Windows (user and system-wide installs).
 pub fn windows_binary_candidates(env: impl Fn(&str) -> Option<String>) -> Vec<PathBuf> {
@@ -141,15 +169,25 @@ pub fn summarize_rapidraw_stderr(stderr: &str) -> Option<String> {
 }
 
 /// Renders `source` with its RapidRAW edits into the JPEG file `output`.
-/// Polls `is_cancelled` while RapidRAW runs and kills the process when it is set.
+/// Waits for RapidRAW to finish: the process is never killed, since killing it during GPU init
+/// leaves RapidRAW's crash flag behind and makes it switch to its OpenGL fallback backend.
+/// Returns a [`RapidRawGpuFailure`] error if RapidRAW's log shows broken GPU processing.
+/// No output file is left behind when the render fails.
 pub fn render_with_rapidraw(
     binary: &Path,
     source: &Path,
     output: &Path,
     quality: u8,
     keep_metadata: bool,
-    is_cancelled: &AtomicBool,
 ) -> Result<()> {
+    let result = run_headless_export(binary, source, output, quality, keep_metadata);
+    if result.is_err() {
+        let _ = std::fs::remove_file(output);
+    }
+    result
+}
+
+fn run_headless_export(binary: &Path, source: &Path, output: &Path, quality: u8, keep_metadata: bool) -> Result<()> {
     let mut command = Command::new(binary);
     command
         .args(build_headless_export_args(source, output, quality, keep_metadata))
@@ -173,20 +211,13 @@ pub fn render_with_rapidraw(
             buf
         })
     });
-
-    let status = loop {
-        if is_cancelled.load(Ordering::Relaxed) {
-            let _ = child.kill();
-            let _ = child.wait();
-            bail!("Export cancelled");
-        }
-        match child.try_wait().context("Failed to wait for RapidRAW")? {
-            Some(status) => break status,
-            None => std::thread::sleep(Duration::from_millis(100)),
-        }
-    };
-
+    let status = child.wait().context("Failed to wait for RapidRAW")?;
     let stderr = stderr_reader.and_then(|h| h.join().ok()).unwrap_or_default();
+
+    // Checked first: with a broken GPU backend RapidRAW may still exit 0 and write a black image
+    if let Some(line) = detect_gpu_failure(&stderr) {
+        return Err(RapidRawGpuFailure(line).into());
+    }
     if !status.success() {
         let detail = summarize_rapidraw_stderr(&stderr).unwrap_or_else(|| status.to_string());
         return Err(anyhow!("RapidRAW: {}", detail));
@@ -249,6 +280,29 @@ mod tests {
         );
         let args = build_headless_export_args(Path::new("a"), Path::new("b"), 90, false);
         assert_eq!(args.len(), 8);
+    }
+
+    #[test]
+    fn test_detect_gpu_failure() {
+        let fixtures = [
+            "2026-11-17 02:10:11 [ERROR] Shader compile failed: 0(57) : error C1068: array index out of bounds",
+            "2026-11-17 02:10:11 [ERROR] wgpu error: ComputePipeline with 'Compute Pipeline' label is invalid",
+            "thread 'tokio-runtime-worker' panicked: Could not lock adapter context. This is most-likely a deadlock.",
+            "2026-11-17 02:10:09 [WARN] GPU Driver crash detected on last run! Falling back to OpenGL backend.",
+        ];
+        for line in fixtures {
+            let stderr = format!("2026 [INFO] Logger initialized
+{}
+Headless export completed successfully.
+", line);
+            assert_eq!(detect_gpu_failure(&stderr).as_deref(), Some(line));
+        }
+
+        let healthy = "2026 [INFO] Using GPU adapter: NVIDIA GeForce RTX 3080 Ti (Vulkan, DiscreteGpu)
+                       2026 [INFO] [process_image_for_export] 6000x4000 processed on GPU in 209ms
+                       Headless export completed successfully.
+";
+        assert_eq!(detect_gpu_failure(healthy), None);
     }
 
     #[test]

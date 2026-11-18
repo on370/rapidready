@@ -85,18 +85,21 @@ export function HelpExport() {
         >
           {isEn ? (
             <>
-              With <strong>Apply RapidRAW edits</strong>, RapidRAW renders each photo with its edits in the
-              background (for RAW+JPEG stacks, the RAW). Destination, size, JPEG quality and naming work as
-              usual; you can choose whether to keep the metadata. The option only appears when RapidRAW
-              (1.6.0 or newer) is set as your RAW developer and installed.
+              With <strong>Apply RapidRAW edits</strong>, RapidRAW renders the photos with their edits in the
+              background, one photo at a time (for RAW+JPEG stacks, the RAW). Destination, size, JPEG quality
+              and naming work as usual; you can choose whether to keep the metadata. The option only appears
+              when RapidRAW (1.6.0 or newer) is set as your RAW developer and installed. If the export stops
+              because of a GPU error, set the processing backend in RapidRAW&apos;s settings to Auto and
+              restart RapidRAW.
             </>
           ) : (
             <>
-              Mit <strong>„RapidRAW-Bearbeitungen übernehmen“</strong> rendert RapidRAW jedes Foto im
-              Hintergrund mit Deinen Bearbeitungen (bei RAW+JPEG-Stapeln das RAW). Zielordner, Größe,
-              JPEG-Qualität und Benennung funktionieren wie gewohnt, die Metadaten kannst Du wahlweise
+              Mit <strong>„RapidRAW-Bearbeitungen übernehmen“</strong> rendert RapidRAW die Fotos im
+              Hintergrund nacheinander mit Deinen Bearbeitungen (bei RAW+JPEG-Stapeln das RAW). Zielordner,
+              Größe, JPEG-Qualität und Benennung funktionieren wie gewohnt, die Metadaten kannst Du wahlweise
               behalten. Die Option erscheint nur, wenn RapidRAW (ab 1.6.0) als RAW-Entwickler eingestellt
-              und installiert ist.
+              und installiert ist. Bricht der Export wegen eines GPU-Fehlers ab, stelle in den
+              RapidRAW-Einstellungen das Verarbeitungs-Backend auf „Auto“ und starte RapidRAW neu.
             </>
           )}
         </FeatureCard>
