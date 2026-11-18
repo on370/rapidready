@@ -1,4 +1,4 @@
-import { buildRapidRawList, buildRapidRawListTitle, isListEligible } from './rapidrawList.ts';
+import { buildRapidRawList, buildRapidRawListTitle, isListEligible, isRapidRawDeveloper } from './rapidrawList.ts';
 
 function assert(condition: boolean, msg?: string) {
   if (!condition) throw new Error(msg || 'Assertion failed');
@@ -93,6 +93,21 @@ const visible = [
   assert.strictEqual(isListEligible({ path: '/a/b.ARW' }), true);
   assert.strictEqual(isListEligible({ path: '/a/b.MOV' }), false);
   assert.strictEqual(isListEligible({ path: '/a/b.jpg', is_video: true }), false);
+}
+
+console.log('Testing RapidRAW developer detection...');
+{
+  assert.strictEqual(isRapidRawDeveloper('rapidraw', null), true);
+  assert.strictEqual(isRapidRawDeveloper('rapidraw', 'C:\\x\\darktable.exe'), true);
+  assert.strictEqual(isRapidRawDeveloper('custom', 'C:\\dev\\RapidRAW\\target\\release\\RapidRAW.exe'), true);
+  assert.strictEqual(isRapidRawDeveloper('custom', 'C:\\Apps\\RapidRaw.exe'), true);
+  assert.strictEqual(isRapidRawDeveloper('custom', '/Applications/RapidRAW.app'), true);
+  assert.strictEqual(isRapidRawDeveloper('custom', '/usr/local/bin/rapidraw'), true);
+  assert.strictEqual(isRapidRawDeveloper('custom', 'C:\\Apps\\RapidRAW-old.exe'), false);
+  assert.strictEqual(isRapidRawDeveloper('custom', 'C:\\RapidRAW\\darktable.exe'), false);
+  assert.strictEqual(isRapidRawDeveloper('custom', null), false);
+  assert.strictEqual(isRapidRawDeveloper('custom', ''), false);
+  assert.strictEqual(isRapidRawDeveloper('darktable', 'C:\\Apps\\RapidRAW.exe'), false);
 }
 
 console.log('Testing RapidRAW list title...');

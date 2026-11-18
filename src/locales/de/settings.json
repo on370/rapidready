@@ -154,7 +154,8 @@
     "syncErrorTitle": "Fehler beim Sidecar-Abgleich",
     "sendListToRapidRaw": {
       "title": "Aktuelle Liste an RapidRAW senden (experimentell)",
-      "desc": "Beim Öffnen eines Fotos in RapidRAW werden zusätzlich die aktuell im Raster angezeigten Fotos (inkl. Filter und Sortierung) übergeben, damit Filmstreifen und Pfeiltasten-Navigation in RapidRAW übereinstimmen. Sind mehrere Fotos ausgewählt, wird nur die Auswahl gesendet. Benötigt eine RapidRAW-Version mit Listen-Unterstützung; bei älteren Versionen bitte ausgeschaltet lassen."
+      "desc": "Beim Öffnen eines Fotos in RapidRAW werden zusätzlich die aktuell im Raster angezeigten Fotos (inkl. Filter und Sortierung) übergeben, damit Filmstreifen und Pfeiltasten-Navigation in RapidRAW übereinstimmen. Sind mehrere Fotos ausgewählt, wird nur die Auswahl gesendet. Benötigt eine RapidRAW-Version mit Listen-Unterstützung; bei älteren Versionen bitte ausgeschaltet lassen.",
+      "customHint": "Funktioniert auch mit einem RapidRAW an einem eigenen Speicherort, wenn es als eigene App ausgewählt ist."
     }
   },
   "editorial": {

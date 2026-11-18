@@ -1,6 +1,20 @@
 // Pure helpers for the experimental "send the current list to RapidRAW" feature.
 // No Tauri / React imports here so this can be unit-tested with plain `node`.
 
+/**
+ * True when the configured editor is RapidRAW: either the RapidRAW preset, or a custom
+ * developer whose executable is named RapidRAW (e.g. a dev build at a custom location).
+ * Mirrors `is_rapidraw_developer` in rapidready-core.
+ */
+export function isRapidRawDeveloper(rawDeveloper: string, customPath: string | null | undefined): boolean {
+  if (rawDeveloper === 'rapidraw') return true;
+  if (rawDeveloper !== 'custom' || !customPath) return false;
+  const file = customPath.trim().replace(/[\\/]+$/, '').split(/[\\/]/).pop() || '';
+  const dot = file.lastIndexOf('.');
+  const stem = dot > 0 ? file.slice(0, dot) : file;
+  return stem.toLowerCase() === 'rapidraw';
+}
+
 export interface RapidRawListItem {
   path: string;
   name?: string;

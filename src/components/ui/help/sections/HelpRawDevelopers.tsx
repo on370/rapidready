@@ -242,6 +242,7 @@ export function HelpRawDevelopers() {
         <p>{t('rawDevelopers.listMode.desc')}</p>
         <p>{t('rawDevelopers.listMode.selection')}</p>
         <p>{t('rawDevelopers.listMode.requirement')}</p>
+        <p>{t('rawDevelopers.listMode.customLocation')}</p>
       </InfoBox>
 
       {/* darktable library.db sync note */}

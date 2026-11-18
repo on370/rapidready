@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { normalizePath } from '../utils/image';
 import { useLibraryStore } from './libraryStore';
 import { resolveRapidRawList } from '../utils/rapidrawListSource';
+import { isRapidRawDeveloper } from '../utils/rapidrawList';
 
 export type RawDeveloperId = 'rapidraw' | 'darktable' | 'lightroom' | 'system' | 'custom';
 
@@ -39,11 +40,17 @@ export async function openInConfiguredRawDeveloper(path: string): Promise<void> 
 
   // Experimental (opt-in): hand RapidRAW the whole visible list so its filmstrip matches the grid.
   // Falls back to the plain open below if there is no list or RapidRAW cannot be launched.
-  if (rawDeveloper === 'rapidraw' && sendListToRapidRaw) {
+  if (sendListToRapidRaw && isRapidRawDeveloper(rawDeveloper, customRawDeveloperPath)) {
     const list = resolveRapidRawList(path);
     if (list) {
       try {
-        await invoke('open_list_in_rapidraw', { paths: list.paths, active: list.active, title: list.title });
+        await invoke('open_list_in_rapidraw', {
+          paths: list.paths,
+          active: list.active,
+          title: list.title,
+          developer: rawDeveloper,
+          customPath: customRawDeveloperPath,
+        });
         return;
       } catch (err) {
         console.warn('[RapidRAW list] Falling back to single-file open:', err);

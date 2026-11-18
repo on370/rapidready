@@ -31,6 +31,54 @@ struct OpenListPayload<'a> {
     active: &'a str,
 }
 
+/// True if the executable / app bundle at `path` is named RapidRAW (file stem `rapidraw`,
+/// case-insensitive), e.g. `RapidRAW.exe`, `RapidRaw.exe`, `RapidRAW.app`, `rapidraw`.
+pub fn is_rapidraw_executable_path(path: &str) -> bool {
+    let trimmed = path.trim().trim_end_matches(['/', '\\']);
+    let file = trimmed.rsplit(['/', '\\']).next().unwrap_or("");
+    let stem = match file.rfind('.') {
+        Some(i) if i > 0 => &file[..i],
+        _ => file,
+    };
+    stem.eq_ignore_ascii_case("rapidraw")
+}
+
+/// True when the configured editor is RapidRAW: the `rapidraw` preset (also the default when no
+/// developer is given), or the `custom` developer pointing at a RapidRAW executable.
+/// Mirrors `isRapidRawDeveloper` in `src/utils/rapidrawList.ts`.
+pub fn is_rapidraw_developer(developer: Option<&str>, custom_path: Option<&str>) -> bool {
+    match developer.map(|d| d.to_ascii_lowercase()).as_deref() {
+        None | Some("rapidraw") => true,
+        Some("custom") => custom_path.is_some_and(is_rapidraw_executable_path),
+        _ => false,
+    }
+}
+
+/// The custom RapidRAW executable to launch, if the custom developer is a RapidRAW build that
+/// exists on disk. macOS `.app` bundles are resolved to their inner binary.
+pub fn custom_rapidraw_executable(developer: Option<&str>, custom_path: Option<&str>) -> Option<PathBuf> {
+    if !developer.is_some_and(|d| d.eq_ignore_ascii_case("custom")) {
+        return None;
+    }
+    let cp = custom_path.map(str::trim).filter(|s| !s.is_empty())?;
+    if !is_rapidraw_executable_path(cp) {
+        return None;
+    }
+    let p = PathBuf::from(cp);
+    if p.is_dir() {
+        // App bundle: <X>.app/Contents/MacOS/<binary>
+        let macos = p.join("Contents").join("MacOS");
+        for name in ["RapidRAW", "RapidRaw", "rapidraw"] {
+            let bin = macos.join(name);
+            if bin.is_file() {
+                return Some(bin);
+            }
+        }
+        return None;
+    }
+    if p.is_file() { Some(p) } else { None }
+}
+
 /// Default directory for list files: `<temp>/RapidReady`.
 pub fn default_open_list_dir() -> PathBuf {
     std::env::temp_dir().join("RapidReady")
@@ -203,6 +251,56 @@ mod tests {
         // The oldest ones are gone, the most recent from the loop survives
         assert!(!written[0].exists());
         assert!(written[7].exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn detects_rapidraw_executables() {
+        assert!(is_rapidraw_executable_path("C:\\dev\\RapidRAW-integration\\src-tauri\\target\\release\\RapidRAW.exe"));
+        assert!(is_rapidraw_executable_path("C:\\Apps\\RapidRaw.exe"));
+        assert!(is_rapidraw_executable_path("/Applications/RapidRAW.app"));
+        assert!(is_rapidraw_executable_path("/Applications/RapidRAW.app/"));
+        assert!(is_rapidraw_executable_path("/usr/local/bin/rapidraw"));
+        assert!(!is_rapidraw_executable_path("C:\\Apps\\RapidRAW-old.exe"));
+        assert!(!is_rapidraw_executable_path("C:\\RapidRAW\\darktable.exe"));
+        assert!(!is_rapidraw_executable_path(""));
+
+        assert!(is_rapidraw_developer(None, None));
+        assert!(is_rapidraw_developer(Some("rapidraw"), None));
+        assert!(is_rapidraw_developer(Some("RapidRAW"), Some("C:\\x\\darktable.exe")));
+        assert!(is_rapidraw_developer(Some("custom"), Some("D:\\RapidRAW.exe")));
+        assert!(!is_rapidraw_developer(Some("custom"), Some("D:\\Lightroom.exe")));
+        assert!(!is_rapidraw_developer(Some("custom"), None));
+        assert!(!is_rapidraw_developer(Some("darktable"), Some("D:\\RapidRAW.exe")));
+    }
+
+    #[test]
+    fn resolves_custom_rapidraw_executable() {
+        let dir = test_dir("custom_exe");
+        std::fs::create_dir_all(&dir).unwrap();
+        let exe = dir.join("RapidRAW.exe");
+        std::fs::write(&exe, b"").unwrap();
+        let other = dir.join("darktable.exe");
+        std::fs::write(&other, b"").unwrap();
+        let exe_s = exe.to_string_lossy().to_string();
+
+        assert_eq!(custom_rapidraw_executable(Some("custom"), Some(&exe_s)), Some(exe.clone()));
+        // Not the custom developer, not RapidRAW, or missing -> None (caller uses normal discovery)
+        assert_eq!(custom_rapidraw_executable(Some("rapidraw"), Some(&exe_s)), None);
+        assert_eq!(custom_rapidraw_executable(Some("custom"), Some(&other.to_string_lossy())), None);
+        let missing = dir.join("missing").join("RapidRAW.exe");
+        assert_eq!(custom_rapidraw_executable(Some("custom"), Some(&missing.to_string_lossy())), None);
+        assert_eq!(custom_rapidraw_executable(Some("custom"), None), None);
+
+        // macOS-style app bundle resolves to the inner binary
+        let bundle = dir.join("RapidRAW.app");
+        std::fs::create_dir_all(bundle.join("Contents").join("MacOS")).unwrap();
+        let inner = bundle.join("Contents").join("MacOS").join("RapidRAW");
+        std::fs::write(&inner, b"").unwrap();
+        assert_eq!(
+            custom_rapidraw_executable(Some("custom"), Some(&bundle.to_string_lossy())),
+            Some(inner)
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

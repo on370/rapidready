@@ -800,14 +800,27 @@ fn find_rapidraw_executable() -> Option<std::path::PathBuf> {
 /// Experimental: hands the whole visible list to RapidRAW via `--open-list <json>`.
 /// Writing the JSON and spawning happen on a blocking worker thread, never on the UI thread.
 /// Returns an error if RapidRAW cannot be found, so the frontend can fall back to a plain open.
+///
+/// `developer` / `custom_path` are the same settings `open_in_rapidraw` receives: a custom
+/// developer whose executable is named RapidRAW (e.g. a dev build) is launched directly,
+/// otherwise the standard install locations are searched.
 #[tauri::command]
 pub async fn open_list_in_rapidraw(
     paths: Vec<String>,
     active: String,
     title: String,
+    developer: Option<String>,
+    custom_path: Option<String>,
 ) -> Result<(), String> {
+    use rapidready_core::rapidraw_list::{custom_rapidraw_executable, is_rapidraw_developer};
+
+    if !is_rapidraw_developer(developer.as_deref(), custom_path.as_deref()) {
+        return Err("Configured editor is not RapidRAW".to_string());
+    }
+
     tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
-        let bin = find_rapidraw_executable()
+        let bin = custom_rapidraw_executable(developer.as_deref(), custom_path.as_deref())
+            .or_else(find_rapidraw_executable)
             .ok_or_else(|| "RapidRAW executable not found".to_string())?;
         let list_file = rapidready_core::rapidraw_list::write_open_list(
             &rapidready_core::rapidraw_list::default_open_list_dir(),

@@ -61,7 +61,8 @@
       "title": "Send the current list to RapidRAW (experimental)",
       "desc": "With RapidRAW as your editor you can turn on \"Send the current list to RapidRAW\" in Settings under the RAW developer choice. Opening a photo (R) then hands RapidRAW the whole list as the grid shows it right now, after filters, stacking and sorting, so RapidRAW's filmstrip and ←/→ follow the same order. RAW+JPG stacks are sent as the RAW file; videos are skipped.",
       "selection": "If several photos are selected, only the selection is sent (in grid order), with the focused photo opened first. Handy for: select your picks, press R, then select all in RapidRAW and use its export panel.",
-      "requirement": "This needs a RapidRAW version that understands list hand-off. If RapidRAW cannot be found, RapidReady falls back to opening just the single photo."
+      "requirement": "This needs a RapidRAW version that understands list hand-off. If RapidRAW cannot be found, RapidReady falls back to opening just the single photo.",
+      "customLocation": "A RapidRAW installed somewhere else (for example a development build) works too: choose \"Custom…\" as the RAW developer and select its RapidRAW executable. The toggle then appears there as well."
     }
   }
 }

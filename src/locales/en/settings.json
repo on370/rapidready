@@ -154,7 +154,8 @@
     "syncErrorTitle": "Error During Sidecar Sync",
     "sendListToRapidRaw": {
       "title": "Send the current list to RapidRAW (experimental)",
-      "desc": "When opening a photo in RapidRAW, also send the photos currently shown in the grid (filters and sort order included) so RapidRAW's filmstrip and arrow-key navigation match. With several photos selected, only the selection is sent. Needs a RapidRAW version with list support; older versions should leave this off."
+      "desc": "When opening a photo in RapidRAW, also send the photos currently shown in the grid (filters and sort order included) so RapidRAW's filmstrip and arrow-key navigation match. With several photos selected, only the selection is sent. Needs a RapidRAW version with list support; older versions should leave this off.",
+      "customHint": "Also works with a RapidRAW at a custom location selected as the custom app."
     }
   },
   "editorial": {
