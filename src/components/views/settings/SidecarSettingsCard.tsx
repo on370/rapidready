@@ -41,6 +41,8 @@ export function SidecarSettingsCard() {
     setRawDeveloper,
     customRawDeveloperPath,
     setCustomRawDeveloperPath,
+    sendListToRapidRaw,
+    setSendListToRapidRaw,
   } = useSettingsStore();
   const images = useLibraryStore((s) => s.images);
 
@@ -261,6 +263,29 @@ export function SidecarSettingsCard() {
                 : 'Startet die unten ausgewählte eigene Anwendung mit dem Foto als Übergabeparameter.'
             )}
           </p>
+
+          {/* Experimental: send the visible list to RapidRAW (only when RapidRAW is the editor) */}
+          {rawDeveloper === 'rapidraw' && (
+            <div className="pt-2 border-t border-app-border/40 flex items-center justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-txt-primary">
+                  {t('sidecar.sendListToRapidRaw.title')}
+                </p>
+                <p className="text-[11px] text-txt-tertiary leading-relaxed mt-0.5">
+                  {t('sidecar.sendListToRapidRaw.desc')}
+                </p>
+              </div>
+              <div
+                role="switch"
+                aria-checked={sendListToRapidRaw}
+                aria-label={t('sidecar.sendListToRapidRaw.title')}
+                className={`toggle-track cursor-pointer shrink-0 ${sendListToRapidRaw ? 'on' : ''}`}
+                onClick={() => setSendListToRapidRaw(!sendListToRapidRaw)}
+              >
+                <div className="toggle-knob"></div>
+              </div>
+            </div>
+          )}
 
           {/* Custom App Path row when 'custom' is selected */}
           {rawDeveloper === 'custom' && (

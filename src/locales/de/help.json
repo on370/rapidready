@@ -55,5 +55,13 @@
       "quit": "RapidReady beenden"
     },
     "footer": "RapidReady Hilfe & Tastaturkürzel"
+  },
+  "rawDevelopers": {
+    "listMode": {
+      "title": "Aktuelle Liste an RapidRAW senden (experimentell)",
+      "desc": "Ist RapidRAW als Entwickler eingestellt, kannst Du in den Einstellungen bei der Wahl des RAW-Entwicklers „Aktuelle Liste an RapidRAW senden“ aktivieren. Beim Öffnen eines Fotos (R) bekommt RapidRAW dann die komplette Liste so, wie das Raster sie gerade zeigt – nach Filtern, Stapeln und Sortierung –, sodass Filmstreifen und ←/→ in RapidRAW derselben Reihenfolge folgen. RAW+JPG-Stapel werden als RAW-Datei übergeben, Videos werden ausgelassen.",
+      "selection": "Sind mehrere Fotos ausgewählt, wird nur die Auswahl gesendet (in Raster-Reihenfolge); das fokussierte Foto wird zuerst geöffnet. Praktisch z. B. so: Picks auswählen, R drücken, in RapidRAW alles auswählen und dort über das Export-Panel exportieren.",
+      "requirement": "Dafür ist eine RapidRAW-Version nötig, die die Listen-Übergabe versteht. Wird RapidRAW nicht gefunden, öffnet RapidReady wie bisher nur das einzelne Foto."
+    }
   }
 }

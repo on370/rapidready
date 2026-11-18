@@ -550,5 +550,10 @@
     "ratingFeedback": "{{count}} stars",
     "colorFeedback": "Color label: {{color}}",
     "noColorFeedback": "No color label"
+  },
+  "rapidrawList": {
+    "selection": "{{count}} selected",
+    "minStars": "≥ {{count}} ★",
+    "sortedBy": "sorted by {{field}}"
   }
 }

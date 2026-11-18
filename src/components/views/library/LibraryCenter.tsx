@@ -13,6 +13,7 @@ import { LibraryGrid } from "./components/LibraryGrid";
 import { LoupeViewer } from "./components/LoupeViewer";
 import { FullscreenViewer } from "./components/FullscreenViewer";
 import { useLibraryShortcuts } from "./hooks/useLibraryShortcuts";
+import { useRapidRawListSource } from "./hooks/useRapidRawListSource";
 import { AppErrorBoundary } from "../../ui/AppErrorBoundary";
 
 import { useLibraryUIStore } from "../../../stores/libraryUIStore";
@@ -1393,6 +1394,9 @@ export function LibraryCenter({
     handleSetColor,
     handleRotate,
   });
+
+  // Experimental: lets "open in RapidRAW" send the visible list (opt-in setting)
+  useRapidRawListSource(displayedImages, selectedPaths);
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden min-w-0">

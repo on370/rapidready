@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 
 export function HelpRawDevelopers() {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation('help');
   const isEn = i18n.language?.startsWith('en');
   const { rawDeveloper, customRawDeveloperPath, shortcutPreset, sidecarMode, xmpNaming } = useSettingsStore();
 
@@ -236,6 +236,13 @@ export function HelpRawDevelopers() {
           </div>
         </div>
       </div>
+
+      {/* Experimental: send the visible list to RapidRAW */}
+      <InfoBox title={t('rawDevelopers.listMode.title')}>
+        <p>{t('rawDevelopers.listMode.desc')}</p>
+        <p>{t('rawDevelopers.listMode.selection')}</p>
+        <p>{t('rawDevelopers.listMode.requirement')}</p>
+      </InfoBox>
 
       {/* darktable library.db sync note */}
       <InfoBox

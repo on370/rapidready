@@ -368,6 +368,7 @@ pub fn run() {
             commands::is_network_path,
             commands::are_any_network_paths,
             commands::open_in_rapidraw,
+            commands::open_list_in_rapidraw,
             commands::show_in_finder,
             commands::show_in_finder_batch,
             commands::check_path_exists,
