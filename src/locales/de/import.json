@@ -35,7 +35,10 @@
     "cancel": "Abbrechen",
     "cancelTooltip": "Import abbrechen und Quellenauswahl zurücksetzen",
     "scanProgress": "{{current}} von {{total}} Dateien",
-    "pairStatsDetail": "{{photos}} Fotos ({{files}} Dateien · {{pairs}} Paare)"
+    "pairStatsDetail": "{{photos}} Fotos ({{files}} Dateien · {{pairs}} Paare)",
+    "remaining_one": "{{count}} verbleibend",
+    "remaining_other": "{{count}} verbleibend",
+    "noDates": "Keine Aufnahmedaten gefunden"
   },
   "destination": {
     "title": "Ziel & Struktur",
@@ -142,7 +145,8 @@
     "disableOverrides": "Überschreibung abschalten",
     "targetCollection": "Sammlung:",
     "dismissWarning": "Warnung dauerhaft ausblenden",
-    "datePlaceholder": "z. B. 1985-07-15, 1985-07 oder 1985"
+    "datePlaceholder": "z. B. 1985-07-15, 1985-07 oder 1985",
+    "photographerLabel": "Fotograf"
   },
   "execute": {
     "importing": "Dateien importieren",

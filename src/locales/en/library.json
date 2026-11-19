@@ -388,7 +388,8 @@
       "latitudeOutOfRange": "Latitude out of range ({{value}}° is not between -90° and +90°).",
       "longitudeOutOfRange": "Longitude out of range ({{value}}° is not between -180° and +180°).",
       "unrecognized": "Format not recognized. Enter a map link or coordinates (DMS, DD, DMM)."
-    }
+    },
+    "copyrightPlaceholder": "e.g. © {year} Jane Doe"
   },
   "colors": {
     "none": "No Color",
@@ -562,7 +563,10 @@
     "presetOriginalBadge": "Original size",
     "readyToExport": "Ready to export",
     "maxWidth": "Max. width (px)",
-    "maxHeight": "Max. height (px)"
+    "maxHeight": "Max. height (px)",
+    "prefixExample": "e.g. Photobook_",
+    "digitsLabel": "{{digits}} digits",
+    "jpegConversion": "JPEG conversion"
   },
   "scanMenu": {
     "refreshFolder": "Refresh current folder",

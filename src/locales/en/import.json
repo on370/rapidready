@@ -35,7 +35,10 @@
     "cancel": "Cancel",
     "cancelTooltip": "Cancel import and reset source selection",
     "scanProgress": "{{current}} of {{total}} files",
-    "pairStatsDetail": "{{photos}} photos ({{files}} files · {{pairs}} pairs)"
+    "pairStatsDetail": "{{photos}} photos ({{files}} files · {{pairs}} pairs)",
+    "remaining_one": "{{count}} remaining",
+    "remaining_other": "{{count}} remaining",
+    "noDates": "No capture dates found"
   },
   "destination": {
     "title": "Destination",
@@ -142,7 +145,8 @@
     "disableOverrides": "Disable Overrides",
     "targetCollection": "Collection:",
     "dismissWarning": "Hide this warning permanently",
-    "datePlaceholder": "e.g. 1985-07-15, 1985-07 or 1985"
+    "datePlaceholder": "e.g. 1985-07-15, 1985-07 or 1985",
+    "photographerLabel": "Photographer"
   },
   "execute": {
     "importing": "Importing Files",

@@ -388,7 +388,8 @@
       "latitudeOutOfRange": "Breitengrad außerhalb des gültigen Bereichs ({{value}}° liegt nicht zwischen -90° und +90°).",
       "longitudeOutOfRange": "Längengrad außerhalb des gültigen Bereichs ({{value}}° liegt nicht zwischen -180° und +180°).",
       "unrecognized": "Format nicht erkannt. Bitte einen Karten-Link oder Koordinaten (DMS, DD, DMM) eingeben."
-    }
+    },
+    "copyrightPlaceholder": "z. B. © {year} Max Mustermann"
   },
   "colors": {
     "none": "Keine Farbe",
@@ -562,7 +563,10 @@
     "presetOriginalBadge": "Originalgröße",
     "readyToExport": "Bereit zum Export",
     "maxWidth": "Max. Breite (px)",
-    "maxHeight": "Max. Höhe (px)"
+    "maxHeight": "Max. Höhe (px)",
+    "prefixExample": "z. B. Fotobuch_",
+    "digitsLabel": "{{digits}}-stellig",
+    "jpegConversion": "JPEG-Konvertierung"
   },
   "scanMenu": {
     "refreshFolder": "Aktuellen Ordner aktualisieren",

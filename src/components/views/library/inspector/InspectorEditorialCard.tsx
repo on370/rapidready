@@ -381,7 +381,7 @@ export function InspectorEditorialCard({
                   type="text"
                   value={copyrightVal}
                   onChange={(e) => handleFieldChange('copyright', e.target.value, setCopyrightVal)}
-                  placeholder={conflicts['copyright'] ? t('inspector.variousValues', '<verschiedene Werte>') : 'z. B. © {year} Max Mustermann'}
+                  placeholder={conflicts['copyright'] ? t('inspector.variousValues', '<verschiedene Werte>') : t('inspector.copyrightPlaceholder', 'z. B. © {year} Max Mustermann')}
                   className="w-full px-2 py-1 bg-app-panel border border-app-border rounded text-txt-primary text-[11px] placeholder:text-txt-tertiary/60 focus:outline-none focus:border-accent font-mono"
                 />
               </div>

@@ -81,7 +81,7 @@ export function ImportMetadataOverrideBar() {
           ) : isSettingsDefaultActive ? (
             <span 
               className="text-[10px] px-2 py-0.5 rounded-full bg-accent/15 border border-accent/30 text-accent font-medium truncate max-w-[240px]"
-              title={`${defaultArtist ? `Fotograf: ${defaultArtist}` : ''} ${defaultCopyright ? `· ${defaultCopyright}` : ''}`}
+              title={`${defaultArtist ? `${t('preview.photographerLabel', 'Fotograf')}: ${defaultArtist}` : ''} ${defaultCopyright ? `· ${defaultCopyright}` : ''}`}
             >
               {t('preview.defaultMetadataActive', 'Stammdaten aktiv')}
               {defaultArtist ? ` (${defaultArtist})` : ''}

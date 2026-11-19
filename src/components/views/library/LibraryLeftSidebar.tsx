@@ -336,7 +336,7 @@ function TreeView({
 }
 
 export function LibraryLeftSidebar() {
-  const { t } = useTranslation('library');
+  const { t, i18n } = useTranslation('library');
   const { lastLibraryPath, setLastLibraryPath, locations, addLocation } = useSettingsStore();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [collectionsOpen, setCollectionsOpen] = useState(true);
@@ -494,7 +494,7 @@ export function LibraryLeftSidebar() {
       const currentName = rootPath ? (normalizeSlash(rootPath).split('/').pop() || rootPath) : '';
       const newName = normalizeSlash(newPath).split('/').pop() || newPath;
       const count = scanProgress?.files_found ?? images.length;
-      const formattedCount = count.toLocaleString();
+      const formattedCount = count.toLocaleString(i18n.language);
 
       const confirmed = await ask(
         t('dialog.switchFolderMessage', {
@@ -1836,8 +1836,8 @@ export function LibraryLeftSidebar() {
                 </h3>
                 <p className="text-xs text-txt-secondary mt-1.5 leading-relaxed">
                   {t("scanMenu.rebuildConfirmMessage", {
-                    count: imageCount.toLocaleString(),
-                    defaultValue: `Möchtest du alle ${imageCount.toLocaleString()} Fotos auf diesem Speicherort wirklich vollständig neu einlesen? Dieser Vorgang kann auf langsamen Medien längere Zeit in Anspruch nehmen.`
+                    count: imageCount.toLocaleString(i18n.language),
+                    defaultValue: `Möchtest du alle ${imageCount.toLocaleString(i18n.language)} Fotos auf diesem Speicherort wirklich vollständig neu einlesen? Dieser Vorgang kann auf langsamen Medien längere Zeit in Anspruch nehmen.`
                   })}
                 </p>
               </div>
