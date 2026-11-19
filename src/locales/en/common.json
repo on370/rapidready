@@ -31,5 +31,13 @@
     "copy": "Copy",
     "paste": "Paste",
     "selectAll": "Select All"
+  },
+  "errorBoundary": {
+    "title": "An unexpected display error occurred",
+    "desc": "The interface was protected from crashing.",
+    "recover": "Restore interface"
+  },
+  "confirm": {
+    "deletePermanently": "Delete permanently"
   }
 }

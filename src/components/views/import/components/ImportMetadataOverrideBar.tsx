@@ -81,7 +81,7 @@ export function ImportMetadataOverrideBar() {
           ) : isSettingsDefaultActive ? (
             <span 
               className="text-[10px] px-2 py-0.5 rounded-full bg-accent/15 border border-accent/30 text-accent font-medium truncate max-w-[240px]"
-              title={`${defaultArtist ? `Fotograf: ${defaultArtist}` : ''} ${defaultCopyright ? `· ${defaultCopyright}` : ''}`}
+              title={`${defaultArtist ? `${t('preview.photographerLabel', 'Fotograf')}: ${defaultArtist}` : ''} ${defaultCopyright ? `· ${defaultCopyright}` : ''}`}
             >
               {t('preview.defaultMetadataActive', 'Stammdaten aktiv')}
               {defaultArtist ? ` (${defaultArtist})` : ''}
@@ -139,7 +139,7 @@ export function ImportMetadataOverrideBar() {
                   type="text"
                   value={importDateOverride}
                   onChange={(e) => setImportDateOverride(e.target.value)}
-                  placeholder="z. B. 1985-07-15, 1985-07 oder 1985"
+                  placeholder={t('preview.datePlaceholder')}
                   className="w-full px-2.5 py-1.5 bg-app-panel border border-app-border rounded-md text-txt-primary text-xs font-mono placeholder:text-txt-tertiary/60 focus:outline-none focus:border-accent"
                 />
               </div>

@@ -7,10 +7,15 @@ export interface ParsedGpsCoordinates {
   sourceType: 'url_google' | 'url_apple' | 'url_osm' | 'geo_uri' | 'dms' | 'dmm' | 'dd';
 }
 
+/** Why coordinates could not be parsed; translated as `inspector.gpsErrors.<code>`. */
+export type GpsErrorCode = 'empty' | 'invalidNumbers' | 'latitudeOutOfRange' | 'longitudeOutOfRange' | 'unrecognized';
+
 export interface ParseGpsResult {
   success: boolean;
   coords?: ParsedGpsCoordinates;
-  error?: string;
+  error?: GpsErrorCode;
+  /** The out-of-range value for the range errors. */
+  errorValue?: number;
 }
 
 /**
@@ -48,21 +53,18 @@ export function formatDd(lat: number, lon: number): string {
  * -90 <= lat <= 90
  * -180 <= lon <= 180
  */
-export function validateCoordinates(lat: number, lon: number): { valid: boolean; error?: string } {
+export function validateCoordinates(
+  lat: number,
+  lon: number
+): { valid: boolean; error?: GpsErrorCode; value?: number } {
   if (isNaN(lat) || isNaN(lon)) {
-    return { valid: false, error: 'Ungültige Zahlenwerte für Koordinaten.' };
+    return { valid: false, error: 'invalidNumbers' };
   }
   if (lat < -90 || lat > 90) {
-    return {
-      valid: false,
-      error: `Breitengrad außerhalb des gültigen Bereichs (${lat.toFixed(4)}° liegt nicht zwischen -90° und +90°).`
-    };
+    return { valid: false, error: 'latitudeOutOfRange', value: lat };
   }
   if (lon < -180 || lon > 180) {
-    return {
-      valid: false,
-      error: `Längengrad außerhalb des gültigen Bereichs (${lon.toFixed(4)}° liegt nicht zwischen -180° und +180°).`
-    };
+    return { valid: false, error: 'longitudeOutOfRange', value: lon };
   }
   return { valid: true };
 }
@@ -102,7 +104,7 @@ function getCardinalMultiplier(cardinal: string): number {
 export function parseCoordinates(rawInput: string): ParseGpsResult {
   const trimmed = rawInput.trim();
   if (!trimmed) {
-    return { success: false, error: 'Keine Eingabe vorhanden.' };
+    return { success: false, error: 'empty' };
   }
 
   // Decode URL encoding if present (e.g. %2C, %20, %C2%B0, +)
@@ -123,7 +125,7 @@ export function parseCoordinates(rawInput: string): ParseGpsResult {
       const lat = parseFloat(atMatch[1]);
       const lon = parseFloat(atMatch[2]);
       const val = validateCoordinates(lat, lon);
-      if (!val.valid) return { success: false, error: val.error };
+      if (!val.valid) return { success: false, error: val.error, errorValue: val.value };
       return {
         success: true,
         coords: {
@@ -142,7 +144,7 @@ export function parseCoordinates(rawInput: string): ParseGpsResult {
       const lat = parseFloat(qMatch[1]);
       const lon = parseFloat(qMatch[2]);
       const val = validateCoordinates(lat, lon);
-      if (!val.valid) return { success: false, error: val.error };
+      if (!val.valid) return { success: false, error: val.error, errorValue: val.value };
       return {
         success: true,
         coords: {
@@ -163,7 +165,7 @@ export function parseCoordinates(rawInput: string): ParseGpsResult {
       const lat = parseFloat(appleMatch[1]);
       const lon = parseFloat(appleMatch[2]);
       const val = validateCoordinates(lat, lon);
-      if (!val.valid) return { success: false, error: val.error };
+      if (!val.valid) return { success: false, error: val.error, errorValue: val.value };
       return {
         success: true,
         coords: {
@@ -186,7 +188,7 @@ export function parseCoordinates(rawInput: string): ParseGpsResult {
       const lat = parseFloat(mlatMatch[1]);
       const lon = parseFloat(mlonMatch[1]);
       const val = validateCoordinates(lat, lon);
-      if (!val.valid) return { success: false, error: val.error };
+      if (!val.valid) return { success: false, error: val.error, errorValue: val.value };
       return {
         success: true,
         coords: {
@@ -205,7 +207,7 @@ export function parseCoordinates(rawInput: string): ParseGpsResult {
       const lat = parseFloat(mapHashMatch[1]);
       const lon = parseFloat(mapHashMatch[2]);
       const val = validateCoordinates(lat, lon);
-      if (!val.valid) return { success: false, error: val.error };
+      if (!val.valid) return { success: false, error: val.error, errorValue: val.value };
       return {
         success: true,
         coords: {
@@ -227,7 +229,7 @@ export function parseCoordinates(rawInput: string): ParseGpsResult {
       const lon = parseFloat(geoMatch[2]);
       const alt = geoMatch[3] ? parseFloat(geoMatch[3]) : undefined;
       const val = validateCoordinates(lat, lon);
-      if (!val.valid) return { success: false, error: val.error };
+      if (!val.valid) return { success: false, error: val.error, errorValue: val.value };
       return {
         success: true,
         coords: {
@@ -284,7 +286,7 @@ export function parseCoordinates(rawInput: string): ParseGpsResult {
     }
 
     const val = validateCoordinates(lat, lon);
-    if (!val.valid) return { success: false, error: val.error };
+    if (!val.valid) return { success: false, error: val.error, errorValue: val.value };
     return {
       success: true,
       coords: {
@@ -328,7 +330,7 @@ export function parseCoordinates(rawInput: string): ParseGpsResult {
     }
 
     const val = validateCoordinates(lat, lon);
-    if (!val.valid) return { success: false, error: val.error };
+    if (!val.valid) return { success: false, error: val.error, errorValue: val.value };
     return {
       success: true,
       coords: {
@@ -369,7 +371,7 @@ export function parseCoordinates(rawInput: string): ParseGpsResult {
     }
 
     const val = validateCoordinates(lat, lon);
-    if (!val.valid) return { success: false, error: val.error };
+    if (!val.valid) return { success: false, error: val.error, errorValue: val.value };
     return {
       success: true,
       coords: {
@@ -401,7 +403,7 @@ export function parseCoordinates(rawInput: string): ParseGpsResult {
     }
 
     const val = validateCoordinates(lat, lon);
-    if (!val.valid) return { success: false, error: val.error };
+    if (!val.valid) return { success: false, error: val.error, errorValue: val.value };
     return {
       success: true,
       coords: {
@@ -435,7 +437,7 @@ export function parseCoordinates(rawInput: string): ParseGpsResult {
     }
 
     const val = validateCoordinates(lat, lon);
-    if (!val.valid) return { success: false, error: val.error };
+    if (!val.valid) return { success: false, error: val.error, errorValue: val.value };
     return {
       success: true,
       coords: {
@@ -450,7 +452,7 @@ export function parseCoordinates(rawInput: string): ParseGpsResult {
 
   return {
     success: false,
-    error: 'Format nicht erkannt. Bitte einen Karten-Link oder Koordinaten (DMS, DD, DMM) eingeben.'
+    error: 'unrecognized'
   };
 }
 

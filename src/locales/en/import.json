@@ -33,7 +33,12 @@
     "pairStats": "{{total}} photos ({{pairs}} pairs)",
     "baseLabel": "Base:",
     "cancel": "Cancel",
-    "cancelTooltip": "Cancel import and reset source selection"
+    "cancelTooltip": "Cancel import and reset source selection",
+    "scanProgress": "{{current}} of {{total}} files",
+    "pairStatsDetail": "{{photos}} photos ({{files}} files · {{pairs}} pairs)",
+    "remaining_one": "{{count}} remaining",
+    "remaining_other": "{{count}} remaining",
+    "noDates": "No capture dates found"
   },
   "destination": {
     "title": "Destination",
@@ -80,7 +85,10 @@
     "newAlbumLabel": "New album name:",
     "newAlbumPlaceholder": "e.g. Vacation 2026",
     "moreOptions": "More Settings",
-    "scrollDownHint": "Scroll down for more settings"
+    "scrollDownHint": "Scroll down for more settings",
+    "collectionNoExisting": "Existing album (none yet)",
+    "collectionNewOption": "+ Create new album...",
+    "photosCount": "photos"
   },
   "preview": {
     "fileInspector": "File Inspector",
@@ -134,7 +142,11 @@
     "warningDate": "Capture Date",
     "warningTitle": "Title",
     "warningEditorial": "Shoot metadata active",
-    "disableOverrides": "Disable Overrides"
+    "disableOverrides": "Disable Overrides",
+    "targetCollection": "Collection:",
+    "dismissWarning": "Hide this warning permanently",
+    "datePlaceholder": "e.g. 1985-07-15, 1985-07 or 1985",
+    "photographerLabel": "Photographer"
   },
   "execute": {
     "importing": "Importing Files",
@@ -156,5 +168,20 @@
     "starting": "Starting...",
     "filesProgress": "{{current}} of {{total}} files",
     "bytesProgress": "{{current}} of {{total}} GB"
+  },
+  "editorial": {
+    "artistPlaceholder": "e.g. Jane Doe",
+    "usageTermsPlaceholder": "CC-BY 4.0"
+  },
+  "lightbox": {
+    "close": "Close",
+    "prevImage": "Previous image (Left arrow)",
+    "nextImage": "Next image (Right arrow)",
+    "loadingFullRes": "Loading full resolution...",
+    "monoSensor": "Monochrome sensor",
+    "monoSensorTooltip": "Hardware monochrome sensor. The RAW contains native black & white sensor data without a color filter.",
+    "monoPreview": "B&W preview (RAW is color)",
+    "monoPreviewTooltip": "The camera was set to a black & white picture style. The preview is monochrome, but the RAW file contains the full color information from the sensor.",
+    "toggleSelection": "Select"
   }
 }

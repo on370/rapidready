@@ -1101,6 +1101,7 @@ export function LibraryCenter({
             t('delete.partialFailed', {
               failed: result.failed.length,
               total: remainingRejectedImages.length,
+              error: firstErr,
               defaultValue: `${result.failed.length} von ${remainingRejectedImages.length} Datei(en) konnten nicht gelöscht werden: ${firstErr}`
             })
           );
@@ -1230,7 +1231,7 @@ export function LibraryCenter({
     try {
       await removeFromCollection(albumId, targetPaths);
       const targetAlbum = findAlbumById(collectionsTree, albumId);
-      const albumName = targetAlbum?.name || 'Sammlung';
+      const albumName = targetAlbum?.name || t('collections.fallbackName');
 
       const total = totalSelected ?? targetPaths.length;
       const count = matchCount ?? targetPaths.length;
@@ -1324,7 +1325,7 @@ export function LibraryCenter({
     try {
       await addToCollection(albumId, targetPaths);
       const targetAlbum = findAlbumById(collectionsTree, albumId);
-      const albumName = targetAlbum?.name || 'Sammlung';
+      const albumName = targetAlbum?.name || t('collections.fallbackName');
       useToastStore.getState().showSuccess(
         t('collections.addedToCollection', {
           count: targetPaths.length,
@@ -1494,7 +1495,7 @@ export function LibraryCenter({
         {/* LoupeViewer: mounted on-demand when viewMode === 'loupe' */}
         {viewMode === 'loupe' && (
           <div className="absolute inset-0 z-10 flex flex-col">
-            <AppErrorBoundary fallbackTitle="Fehler in der Lupenansicht">
+            <AppErrorBoundary fallbackTitle={t('loupe.errorTitle')}>
               <LoupeViewer
                 activeImage={activeImage}
                 activeImageIndex={safeActiveIndex}

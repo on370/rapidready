@@ -491,7 +491,7 @@ export function SidecarSettingsCard() {
                       : t('sidecar.syncRunning', 'Synchronisiere...')}
                   </span>
                   <span className="text-[11px] text-txt-tertiary">
-                    ({syncProgress.processed} / {syncProgress.total} Fotos geprüft • {syncProgress.synced_count} Sidecars aktualisiert)
+                    {t('sidecar.syncProgressDetail', { processed: syncProgress.processed, total: syncProgress.total, synced: syncProgress.synced_count })}
                   </span>
                 </div>
 

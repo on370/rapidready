@@ -114,7 +114,7 @@ function useSmoothedEta(
 }
 
 export function ArchiveScanBanner({ onRestartScan }: ArchiveScanBannerProps) {
-  const { t } = useTranslation('library');
+  const { t, i18n } = useTranslation('library');
   const scanState = useLibraryStore((s) => s.scanState);
   const scanProgress = useLibraryStore((s) => s.scanProgress);
   const activeScanId = useLibraryStore((s) => s.activeScanId);
@@ -166,8 +166,8 @@ export function ArchiveScanBanner({ onRestartScan }: ArchiveScanBannerProps) {
   // Only show banner if there are images in the grid and a scan is active, paused, stopped, or completed
   if (images.length === 0 || scanState === 'idle') return null;
 
-  const formattedDone = donePhotos.toLocaleString();
-  const formattedMax = totalPhotos.toLocaleString();
+  const formattedDone = donePhotos.toLocaleString(i18n.language);
+  const formattedMax = totalPhotos.toLocaleString(i18n.language);
   const percent = hasKnownTotal && totalPhotos > 0
     ? (donePhotos >= totalPhotos ? 100 : Math.min(99, Math.floor((donePhotos / totalPhotos) * 100)))
     : null;

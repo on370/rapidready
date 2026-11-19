@@ -59,7 +59,7 @@ export const NewFolderModal: React.FC<NewFolderModalProps> = ({
       return;
     }
     if (trimmed.includes('/') || trimmed.includes('\\')) {
-      setError('Der Ordnername darf keine Schrägstriche (/ oder \\) enthalten.');
+      setError(t('folderMenu.slashNotAllowed'));
       return;
     }
 
@@ -69,7 +69,7 @@ export const NewFolderModal: React.FC<NewFolderModalProps> = ({
       await onCreate(trimmed);
       onClose();
     } catch (err: any) {
-      setError(String(err?.message || err || 'Fehler beim Erstellen des Ordners'));
+      setError(String(err?.message || err || t('folderMenu.createFolderFailed')));
     } finally {
       setIsSubmitting(false);
     }

@@ -262,7 +262,7 @@ export function ExportCollectionModal() {
                 {t('exportModal.destDirLabel', 'Zielordner (Echte Kopien)')}
               </label>
               {destinationDir && (
-                <span className="text-[10px] text-emerald-400/90 font-medium">Bereit zum Export</span>
+                <span className="text-[10px] text-emerald-400/90 font-medium">{t('exportModal.readyToExport')}</span>
               )}
             </div>
             <div className="flex gap-2">
@@ -321,7 +321,7 @@ export function ExportCollectionModal() {
                       value={filenamePrefix}
                       onChange={(e) => setFilenamePrefix(e.target.value)}
                       disabled={isExporting}
-                      placeholder="z. B. Fotobuch_"
+                      placeholder={t('exportModal.prefixExample', 'z. B. Fotobuch_')}
                       className="w-full px-3 py-1.5 bg-app-panel border border-app-border rounded-lg text-txt-primary focus:outline-none focus:border-accent text-xs font-mono disabled:opacity-60 disabled:cursor-not-allowed"
                     />
                   </div>
@@ -330,7 +330,7 @@ export function ExportCollectionModal() {
                       {t('exportModal.numberingLabel', 'Nummerierung:')}
                     </span>
                     <div className="px-3 py-1.5 bg-app-panel border border-app-border/60 rounded-lg text-accent font-mono text-xs flex items-center justify-between">
-                      <span>{autoDigits}-stellig</span>
+                      <span>{t('exportModal.digitsLabel', { digits: autoDigits, defaultValue: '{{digits}}-stellig' })}</span>
                       <span className="text-txt-tertiary text-[10px]">
                         {autoDigits === 3 ? '001 – 999' : '0001 – 9999'}
                       </span>
@@ -431,7 +431,7 @@ export function ExportCollectionModal() {
                   {t('exportModal.sizingLabel', 'Bildgröße & Auflösung')}
                 </label>
                 {sizePreset !== 'original' && (
-                  <span className="text-[10px] text-accent font-medium">JPEG-Konvertierung</span>
+                  <span className="text-[10px] text-accent font-medium">{t('exportModal.jpegConversion', 'JPEG-Konvertierung')}</span>
                 )}
               </div>
               <select
@@ -454,7 +454,7 @@ export function ExportCollectionModal() {
                 {sizePreset === 'custom' && (
                   <div className="grid grid-cols-2 gap-2.5">
                     <div className="flex flex-col gap-1">
-                      <label className="text-[10px] text-txt-secondary font-semibold">Max. Breite (px)</label>
+                      <label className="text-[10px] text-txt-secondary font-semibold">{t('exportModal.maxWidth')}</label>
                       <input
                         type="number"
                         disabled={isExporting}
@@ -464,7 +464,7 @@ export function ExportCollectionModal() {
                       />
                     </div>
                     <div className="flex flex-col gap-1">
-                      <label className="text-[10px] text-txt-secondary font-semibold">Max. Höhe (px)</label>
+                      <label className="text-[10px] text-txt-secondary font-semibold">{t('exportModal.maxHeight')}</label>
                       <input
                         type="number"
                         disabled={isExporting}

@@ -435,10 +435,10 @@ export const FullscreenViewer = React.memo(function FullscreenViewer({
         const c = currentImage.culling.color;
         if (c) {
           const colorMap: Record<string, { label: string; dot: string }> = {
-            red: { label: 'Rot (6)', dot: 'bg-red-500' },
-            yellow: { label: 'Gelb (7)', dot: 'bg-yellow-400' },
-            green: { label: 'Grün (8)', dot: 'bg-emerald-500' },
-            blue: { label: 'Blau (9)', dot: 'bg-blue-500' },
+            red: { label: `${t('colors.red')} (6)`, dot: 'bg-red-500' },
+            yellow: { label: `${t('colors.yellow')} (7)`, dot: 'bg-yellow-400' },
+            green: { label: `${t('colors.green')} (8)`, dot: 'bg-emerald-500' },
+            blue: { label: `${t('colors.blue')} (9)`, dot: 'bg-blue-500' },
           };
           const cfg = colorMap[c] || { label: c, dot: 'bg-white' };
           badge = {

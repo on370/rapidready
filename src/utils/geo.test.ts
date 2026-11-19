@@ -166,11 +166,12 @@ console.log('Testing geo parser...');
 {
   const r1 = parseCoordinates('95.123456, 11.575421');
   assert.strictEqual(r1.success, false);
-  assert(!!r1.error?.includes('Breitengrad'));
+  assert.strictEqual(r1.error, 'latitudeOutOfRange');
+  assert.strictEqual(r1.errorValue, 95.123456);
 
   const r2 = parseCoordinates('48.137154, 195.575421');
   assert.strictEqual(r2.success, false);
-  assert(!!r2.error?.includes('Längengrad'));
+  assert.strictEqual(r2.error, 'longitudeOutOfRange');
 
   const r3 = parseCoordinates('abc, def');
   assert.strictEqual(r3.success, false);

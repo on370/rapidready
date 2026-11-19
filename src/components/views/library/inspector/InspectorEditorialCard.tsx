@@ -372,7 +372,7 @@ export function InspectorEditorialCard({
                     type="button"
                     onClick={handleInsertYearMacro}
                     className="text-[9px] px-1.5 py-0.5 rounded bg-accent/15 text-accent hover:bg-accent/25 transition-colors font-mono cursor-pointer"
-                    title="Fügt © {year} ein (wird pro Bild mit dem jeweiligen Aufnahmejahr ersetzt)"
+                    title={t('inspector.yearChipTooltip')}
                   >
                     + © {'{year}'}
                   </button>
@@ -381,7 +381,7 @@ export function InspectorEditorialCard({
                   type="text"
                   value={copyrightVal}
                   onChange={(e) => handleFieldChange('copyright', e.target.value, setCopyrightVal)}
-                  placeholder={conflicts['copyright'] ? t('inspector.variousValues', '<verschiedene Werte>') : 'z. B. © {year} Max Mustermann'}
+                  placeholder={conflicts['copyright'] ? t('inspector.variousValues', '<verschiedene Werte>') : t('inspector.copyrightPlaceholder', 'z. B. © {year} Max Mustermann')}
                   className="w-full px-2 py-1 bg-app-panel border border-app-border rounded text-txt-primary text-[11px] placeholder:text-txt-tertiary/60 focus:outline-none focus:border-accent font-mono"
                 />
               </div>

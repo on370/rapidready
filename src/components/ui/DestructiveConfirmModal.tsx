@@ -1,9 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import { AlertTriangle, X } from 'lucide-react';
 import { useDialogStore } from '../../stores/dialogStore';
 
 export const DestructiveConfirmModal: React.FC = () => {
+  const { t } = useTranslation();
   const { isOpen, options, close } = useDialogStore();
   const cancelBtnRef = useRef<HTMLButtonElement>(null);
   const [selectedChoice, setSelectedChoice] = useState<string>(
@@ -65,7 +67,7 @@ export const DestructiveConfirmModal: React.FC = () => {
           <button
             onClick={() => close(false)}
             className="w-7 h-7 rounded-lg hover:bg-white/10 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors flex-shrink-0 cursor-pointer"
-            title="Abbrechen"
+            title={t('cancel')}
           >
             <X className="w-4 h-4" />
           </button>
@@ -116,7 +118,7 @@ export const DestructiveConfirmModal: React.FC = () => {
             onClick={() => close(true, selectedChoice)}
             className="px-4 py-2 rounded-xl text-xs font-semibold text-danger hover:text-white bg-danger/10 hover:bg-danger border border-danger/30 hover:border-danger transition-all cursor-pointer mr-auto"
           >
-            {options.confirmLabel || 'Unwiderruflich löschen'}
+            {options.confirmLabel || t('confirm.deletePermanently')}
           </button>
 
           {/* Cancel button (DEFAULT PRIMARY BUTTON, auto-focused) */}
@@ -126,7 +128,7 @@ export const DestructiveConfirmModal: React.FC = () => {
             onClick={() => close(false)}
             className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-white/15 hover:bg-white/25 border border-white/25 ring-2 ring-white/30 hover:ring-white/50 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-accent"
           >
-            {options.cancelLabel || 'Abbrechen'}
+            {options.cancelLabel || t('cancel')}
           </button>
         </div>
       </div>

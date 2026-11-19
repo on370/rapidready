@@ -1,5 +1,6 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RotateCcw } from 'lucide-react';
+import i18next from 'i18next';
 import { useLibraryUIStore } from '../../stores/libraryUIStore';
 import { useLibraryStore } from '../../stores/libraryStore';
 
@@ -49,10 +50,10 @@ export class AppErrorBoundary extends Component<Props, State> {
               </div>
               <div className="flex-1 min-w-0">
                 <h2 className="text-sm font-bold text-red-400">
-                  {this.props.fallbackTitle || 'Ein unerwarteter Anzeigefehler ist aufgetreten'}
+                  {this.props.fallbackTitle || i18next.t('common:errorBoundary.title')}
                 </h2>
                 <p className="text-xs text-txt-tertiary">
-                  Die Benutzeroberfläche wurde vor einem Absturz geschützt.
+                  {i18next.t('common:errorBoundary.desc')}
                 </p>
               </div>
             </div>
@@ -73,7 +74,7 @@ export class AppErrorBoundary extends Component<Props, State> {
                 className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-accent hover:bg-accent/90 transition-all flex items-center gap-2 cursor-pointer shadow-lg"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
-                Oberfläche wiederherstellen
+                {i18next.t('common:errorBoundary.recover')}
               </button>
             </div>
           </div>

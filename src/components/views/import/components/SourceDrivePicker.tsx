@@ -241,7 +241,7 @@ export const SourceDrivePicker = React.memo(function SourceDrivePicker() {
                       <RefreshCw className="w-3.5 h-3.5 animate-spin flex-shrink-0" />
                       <span>
                         {scanProgress && scanProgress.total > 0
-                          ? `${scanProgress.current} von ${scanProgress.total} Dateien`
+                          ? t('source.scanProgress', { current: scanProgress.current, total: scanProgress.total })
                           : t('source.readingCard')}
                       </span>
                     </div>
@@ -266,7 +266,7 @@ export const SourceDrivePicker = React.memo(function SourceDrivePicker() {
                     </span>
                     {scanProgress && scanProgress.total > 0 && (
                       <span className="flex-shrink-0 text-[10px] opacity-75">
-                        {scanProgress.total - scanProgress.current} verbleibend
+                        {t('source.remaining', { count: scanProgress.total - scanProgress.current, defaultValue: '{{count}} verbleibend' })}
                       </span>
                     )}
                   </div>
@@ -278,7 +278,7 @@ export const SourceDrivePicker = React.memo(function SourceDrivePicker() {
                       <File className="w-3 h-3 text-accent" /> 
                       {pairStats.pairs > 0 ? (
                         <span>
-                          {pairStats.totalPhotos} Fotos ({newFiles.length} Dateien · {pairStats.pairs} Paare)
+                          {t('source.pairStatsDetail', { photos: pairStats.totalPhotos, files: newFiles.length, pairs: pairStats.pairs })}
                         </span>
                       ) : (
                         <span>
@@ -296,7 +296,7 @@ export const SourceDrivePicker = React.memo(function SourceDrivePicker() {
                     <Calendar className="w-3 h-3" />
                     {newFiles.length > 0
                       ? `${newFiles[0]?.formatted_date?.split(' ')[0] || ''} – ${newFiles[newFiles.length - 1]?.formatted_date?.split(' ')[0] || ''}`
-                      : 'No dates found'}
+                      : t('source.noDates', 'Keine Aufnahmedaten gefunden')}
                   </div>
                 </>
               )}

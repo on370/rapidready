@@ -106,7 +106,7 @@ export const FolderContextMenu: React.FC<FolderContextMenuProps> = ({
       <div className="px-3 py-1.5 text-[11px] font-semibold text-txt-tertiary border-b border-app-border mb-1 flex items-center justify-between">
         <span className="truncate max-w-[170px]" title={headerTitle}>{headerTitle}</span>
         <span className="font-mono text-[10px] text-txt-tertiary flex-shrink-0">
-          ({fileCount} {fileCount === 1 ? 'Foto' : 'Fotos'})
+          ({t('collections.photoCount', { count: fileCount })})
         </span>
       </div>
 

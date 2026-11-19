@@ -58,7 +58,7 @@ export const RenameFolderModal: React.FC<RenameFolderModalProps> = ({
       return;
     }
     if (trimmed.includes('/') || trimmed.includes('\\')) {
-      setError('Der Ordnername darf keine Schrägstriche (/ oder \\) enthalten.');
+      setError(t('folderMenu.slashNotAllowed'));
       return;
     }
     if (trimmed === currentName) {
@@ -72,7 +72,7 @@ export const RenameFolderModal: React.FC<RenameFolderModalProps> = ({
       await onRename(trimmed);
       onClose();
     } catch (err: any) {
-      setError(String(err?.message || err || 'Fehler beim Umbenennen des Ordners'));
+      setError(String(err?.message || err || t('folderMenu.renameFolderFailed')));
     } finally {
       setIsSubmitting(false);
     }

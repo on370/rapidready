@@ -33,7 +33,12 @@
     "pairStats": "{{total}} Fotos ({{pairs}} Paare)",
     "baseLabel": "Basis:",
     "cancel": "Abbrechen",
-    "cancelTooltip": "Import abbrechen und Quellenauswahl zurücksetzen"
+    "cancelTooltip": "Import abbrechen und Quellenauswahl zurücksetzen",
+    "scanProgress": "{{current}} von {{total}} Dateien",
+    "pairStatsDetail": "{{photos}} Fotos ({{files}} Dateien · {{pairs}} Paare)",
+    "remaining_one": "{{count}} verbleibend",
+    "remaining_other": "{{count}} verbleibend",
+    "noDates": "Keine Aufnahmedaten gefunden"
   },
   "destination": {
     "title": "Ziel & Struktur",
@@ -80,7 +85,10 @@
     "newAlbumLabel": "Name des neuen Albums:",
     "newAlbumPlaceholder": "z. B. Urlaub 2026",
     "moreOptions": "Weitere Einstellungen",
-    "scrollDownHint": "Nach unten scrollen (weitere Optionen)"
+    "scrollDownHint": "Nach unten scrollen (weitere Optionen)",
+    "collectionNoExisting": "Bestehendes Album (keine vorhanden)",
+    "collectionNewOption": "+ Neues Album anlegen...",
+    "photosCount": "Fotos"
   },
   "preview": {
     "fileInspector": "Datei-Inspektor",
@@ -134,7 +142,11 @@
     "warningDate": "Aufnahmedatum",
     "warningTitle": "Titel",
     "warningEditorial": "Shoot-Metadaten aktiv",
-    "disableOverrides": "Überschreibung abschalten"
+    "disableOverrides": "Überschreibung abschalten",
+    "targetCollection": "Sammlung:",
+    "dismissWarning": "Warnung dauerhaft ausblenden",
+    "datePlaceholder": "z. B. 1985-07-15, 1985-07 oder 1985",
+    "photographerLabel": "Fotograf"
   },
   "execute": {
     "importing": "Dateien importieren",
@@ -156,5 +168,20 @@
     "starting": "Wird gestartet...",
     "filesProgress": "{{current}} von {{total}} Dateien",
     "bytesProgress": "{{current}} von {{total}} GB"
+  },
+  "editorial": {
+    "artistPlaceholder": "Max Mustermann",
+    "usageTermsPlaceholder": "CC-BY 4.0"
+  },
+  "lightbox": {
+    "close": "Schließen",
+    "prevImage": "Vorheriges Bild (Pfeiltaste links)",
+    "nextImage": "Nächstes Bild (Pfeiltaste rechts)",
+    "loadingFullRes": "Lade Sensor-Schärfe...",
+    "monoSensor": "Monochrom-Sensor",
+    "monoSensorTooltip": "Hardware-Monochromsensor. Das RAW enthält native Schwarz-Weiß-Sensordaten ohne Farbfilter.",
+    "monoPreview": "S/W-Vorschau (RAW ist Farbe)",
+    "monoPreviewTooltip": "Die Kamera war auf einen Schwarz-Weiß-Bildstil eingestellt. Das Vorschaubild ist monochrom, die RAW-Datei enthält jedoch die vollen Farbinformationen des Sensors.",
+    "toggleSelection": "Auswahl"
   }
 }

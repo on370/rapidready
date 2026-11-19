@@ -18,11 +18,15 @@
     "entireArchiveTooltip": "Show entire archive (Esc)",
     "fullyCachedTooltip": "Archive is fully cached in local high-speed storage (100% offline-ready, 60 FPS)",
     "cachingInProgressTooltip": "Archive cache is building in the background...",
-    "notFullyCachedTooltip": "Archive is not fully cached yet (previews generated on demand)"
+    "notFullyCachedTooltip": "Archive is not fully cached yet (previews generated on demand)",
+    "lastImportCount_one": "Last import (1 photo)",
+    "lastImportCount_other": "Last import ({{count}} photos)"
   },
   "header": {
     "lastImport": "Latest Import",
-    "allImages": "All Images"
+    "allImages": "All Images",
+    "multipleFolders_one": "1 folder",
+    "multipleFolders_other": "{{count}} folders"
   },
   "toolbar": {
     "showInFinder": "Open in Finder",
@@ -84,7 +88,10 @@
     "pick": "Set as Pick",
     "reject": "Set as Rejected",
     "unrated": "Unflag",
-    "rating": "Rating:"
+    "rating": "Rating:",
+    "stars_one": "1 star",
+    "stars_other": "{{count}} stars",
+    "matchOfSelected": "{{matched}} of {{selected}}"
   },
   "filters": {
     "label": "Filters:",
@@ -151,7 +158,8 @@
     "choiceOnlyRawDesc": "Preserves JPEGs and resets their rejected status.",
     "choiceOnlyJpeg": "Delete only JPEG files from stacks ({{count}})",
     "choiceOnlyJpegDesc": "Preserves RAW files and resets their rejected status.",
-    "failedError": "Failed to delete: "
+    "failedError": "Failed to delete: ",
+    "partialFailed": "{{failed}} of {{total}} file(s) could not be deleted: {{error}}"
   },
   "empty": "No images found",
   "loading": {
@@ -367,7 +375,21 @@
     "editorialSaveFailed": "Failed to save editorial metadata",
     "variousValues": "<different values>",
     "editorialBatchBadge": "Will be applied to all {{count}} selected images",
-    "resetEditorial": "Reset (restore EXIF)"
+    "resetEditorial": "Reset (restore EXIF)",
+    "shadowClipping": "Shadows",
+    "histogramTitle": "RGB + Luma",
+    "highlightClipping": "Highlights",
+    "histogramTooltip": "Toggle histogram: Off / Overlay / Full (H)",
+    "videoMediaDesc": "Native preview keyframe",
+    "yearChipTooltip": "Inserts © {year} (replaced with each photo's capture year)",
+    "gpsErrors": {
+      "empty": "Nothing entered.",
+      "invalidNumbers": "Invalid coordinate values.",
+      "latitudeOutOfRange": "Latitude out of range ({{value}}° is not between -90° and +90°).",
+      "longitudeOutOfRange": "Longitude out of range ({{value}}° is not between -180° and +180°).",
+      "unrecognized": "Format not recognized. Enter a map link or coordinates (DMS, DD, DMM)."
+    },
+    "copyrightPlaceholder": "e.g. © {year} Jane Doe"
   },
   "colors": {
     "none": "No Color",
@@ -382,7 +404,8 @@
     "cullingSaveFailedDesc": "Could not write sidecar file (.rrdata). The storage medium may be write-protected (Read-Only) or permission is denied.",
     "batchSaveFailed": "Failed to save {{failed}} of {{total}} files.",
     "watcherErrorTitle": "File system watcher interrupted",
-    "watcherErrorDesc": "Automatic sidecar updates have been paused (e.g. network share disconnected)."
+    "watcherErrorDesc": "Automatic sidecar updates have been paused (e.g. network share disconnected).",
+    "sortFailed": "Sorting failed"
   },
   "folderMenu": {
     "showInFinder": "Reveal in Finder",
@@ -418,7 +441,16 @@
     "expandSelectedSubfolders": "Expand Selected Folders",
     "collapseSelectedSubfolders": "Collapse Selected Folders",
     "deleteRejectedInMultiFolders": "Delete Only Rejected (X) Images in Selection...",
-    "deleteMultiFolders": "Delete {{count}} Selected Folders..."
+    "deleteMultiFolders": "Delete {{count}} Selected Folders...",
+    "unstageMultiFolders_one": "Unstage 1 folder from deletion",
+    "unstageMultiFolders_other": "Unstage {{count}} folders from deletion",
+    "stageMultiFolders_one": "Stage 1 folder for deletion (X)",
+    "stageMultiFolders_other": "Stage {{count}} folders for deletion (X)",
+    "stagedBadge": "Staged for deletion",
+    "noRootPath": "No active archive selected.",
+    "slashNotAllowed": "Folder names can't contain slashes (/ or \\).",
+    "createFolderFailed": "Couldn't create the folder",
+    "renameFolderFailed": "Couldn't rename the folder"
   },
   "folderDelete": {
     "localTitle": "Move Folder to Trash?",
@@ -438,7 +470,12 @@
     "stagedSuccess": "{{count}} folder(s) staged for deletion (X)",
     "unstagedSuccess": "Unstaged {{count}} folder(s) from deletion",
     "cancel": "Cancel",
-    "error": "Failed to delete folder: "
+    "error": "Failed to delete folder: ",
+    "nasSuccessToast_one": "Permanently deleted 1 folder from the network drive.",
+    "nasSuccessToast_other": "Permanently deleted {{count}} folders from the network drive.",
+    "localSuccessToast_one": "Moved 1 folder to the trash.",
+    "localSuccessToast_other": "Moved {{count}} folders to the trash.",
+    "scanActiveWarning": "Folders can't be deleted while an archive scan is running."
   },
   "collections": {
     "title": "Collections",
@@ -473,7 +510,23 @@
     "tempLocationModalDesc_other": "You created {{count}} collections in the temporary folder \"{{name}}\". Would you like to save this folder as a library location so your collections are preserved permanently?",
     "saveAsLocation": "Save as Library",
     "discardCollections": "Discard Collections",
-    "savedAsLocationSuccess": "\"{{name}}\" saved as library location."
+    "savedAsLocationSuccess": "\"{{name}}\" saved as library location.",
+    "noCollectionsYet": "No collections yet",
+    "newAlbum": "New collection...",
+    "newGroup": "New group (folder)...",
+    "rename": "Rename...",
+    "confirmDeleteGroup": "Delete this group and everything in it?",
+    "confirmDeleteAlbum": "Delete this collection? The original files are not affected.",
+    "delete": "Delete",
+    "createAlbumTitle": "New collection",
+    "createGroupTitle": "New group",
+    "renameTitle": "Rename",
+    "namePlaceholder": "Enter a name...",
+    "addedCount_one": "Added 1 photo to \"{{name}}\".",
+    "addedCount_other": "Added {{count}} photos to \"{{name}}\".",
+    "collectionCount_one": "1 collection",
+    "collectionCount_other": "{{count}} collections",
+    "fallbackName": "Collection"
   },
   "exportModal": {
     "title": "Export Collection",
@@ -504,7 +557,16 @@
     "qualityLabel": "JPEG Quality:",
     "exporting": "Exporting...",
     "startExport": "Start Export",
-    "exportSuccess": "{{count}} photos successfully exported!"
+    "exportSuccess": "{{count}} photos successfully exported!",
+    "scrollDownHint": "Scroll down (more settings)",
+    "moreOptions": "More settings",
+    "presetOriginalBadge": "Original size",
+    "readyToExport": "Ready to export",
+    "maxWidth": "Max. width (px)",
+    "maxHeight": "Max. height (px)",
+    "prefixExample": "e.g. Photobook_",
+    "digitsLabel": "{{digits}} digits",
+    "jpegConversion": "JPEG conversion"
   },
   "scanMenu": {
     "refreshFolder": "Refresh current folder",
@@ -550,5 +612,24 @@
     "ratingFeedback": "{{count}} stars",
     "colorFeedback": "Color label: {{color}}",
     "noColorFeedback": "No color label"
+  },
+  "common": {
+    "cancel": "Cancel",
+    "save": "Save",
+    "create": "Create",
+    "reset": "Reset",
+    "edit": "Edit"
+  },
+  "previewFiles": "files",
+  "grid": {
+    "ramCacheAbove_one": "1 image above in RAM cache",
+    "ramCacheAbove_other": "{{count}} images above in RAM cache",
+    "ramCacheBelow_one": "1 image below in RAM cache",
+    "ramCacheBelow_other": "{{count}} images below in RAM cache"
+  },
+  "loupe": {
+    "ramCache_one": "1 image in RAM cache",
+    "ramCache_other": "{{count}} images in RAM cache",
+    "errorTitle": "Error in loupe view"
   }
 }

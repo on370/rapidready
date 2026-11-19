@@ -238,7 +238,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
         >
           <button
             onClick={() => { onCulling(undefined, 0); onClose(); }}
-            title="0 Sterne"
+            title={t('contextMenu.stars', { count: 0 })}
             className={`w-5 h-5 rounded flex items-center justify-center text-[10px] transition-colors cursor-pointer ${
               currentRating === 0
                 ? 'text-white bg-white/10 font-bold'
@@ -257,7 +257,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                   onClose();
                 }}
                 onMouseEnter={() => setHoverRating(s)}
-                title={`${s} Sterne`}
+                title={t('contextMenu.stars', { count: s })}
                 className="w-5 h-5 rounded flex items-center justify-center hover:bg-warning/20 hover:scale-110 transition-all cursor-pointer"
               >
                 <Star
@@ -472,7 +472,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                           ? 'bg-warning/15 text-warning font-semibold group-hover:bg-danger/20 group-hover:text-danger'
                           : 'text-txt-tertiary group-hover:text-danger/90'
                       }`}>
-                        {selectedCount > 1 ? `${album.matchCount} von ${selectedCount}` : album.count}
+                        {selectedCount > 1 ? t('contextMenu.matchOfSelected', { matched: album.matchCount, selected: selectedCount }) : album.count}
                       </span>
                     </button>
                   );

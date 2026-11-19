@@ -405,7 +405,7 @@ export const LoupeViewer = React.memo(function LoupeViewer({
         {leftCount > 0 && activeImageIndex > 0 && (
           <div 
             className="absolute bottom-3 left-6 z-30 pointer-events-none flex items-center gap-1 px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-md border border-white/15 text-[11px] font-mono text-white/90 shadow-lg select-none transition-opacity duration-200"
-            title={`${leftCount} ${leftCount === 1 ? 'Bild' : 'Bilder'} im RAM-Cache`}
+            title={t('loupe.ramCache', { count: leftCount })}
           >
             <span className="text-[9px] text-accent">◀</span>
             <span>{leftCount}</span>
@@ -416,7 +416,7 @@ export const LoupeViewer = React.memo(function LoupeViewer({
           <div 
             className="absolute bottom-3 z-30 pointer-events-none flex items-center gap-1 px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-md border border-white/15 text-[11px] font-mono text-white/90 shadow-lg select-none transition-all duration-200"
             style={{ right: isZoomed ? '11.5rem' : '1.5rem' }}
-            title={`${rightCount} ${rightCount === 1 ? 'Bild' : 'Bilder'} im RAM-Cache`}
+            title={t('loupe.ramCache', { count: rightCount })}
           >
             <span>{rightCount}</span>
             <span className="text-[9px] text-accent">▶</span>
