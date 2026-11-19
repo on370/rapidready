@@ -782,8 +782,7 @@ pub fn show_in_finder(path: String) -> Result<(), String> {
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
-        let _ = path;
-        Ok(())
+        reveal_in_file_manager_linux(&[path])
     }
 }
 
@@ -815,9 +814,85 @@ pub fn show_in_finder_batch(paths: Vec<String>) -> Result<(), String> {
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
-        let _ = paths;
-        Ok(())
+        reveal_in_file_manager_linux(&paths)
     }
+}
+
+/// Converts an absolute filesystem path into a percent-encoded `file://` URI.
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn path_to_file_uri(path: &str) -> String {
+    let encoded: Vec<String> = path
+        .split('/')
+        .map(|segment| urlencoding::encode(segment).into_owned())
+        .collect();
+    format!("file://{}", encoded.join("/"))
+}
+
+/// Reveals (selects) the given files in the user's file manager on Linux.
+///
+/// Uses the freedesktop `org.freedesktop.FileManager1.ShowItems` D-Bus interface
+/// (implemented by Nautilus, Dolphin, Nemo, Caja, Thunar, PCManFM-Qt, ...), invoked
+/// via `gdbus`, which ships with GLib and is therefore always present next to WebKitGTK.
+/// If no file manager answers on D-Bus, falls back to opening the parent folder(s)
+/// with the system default handler (`xdg-open`).
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn reveal_in_file_manager_linux(paths: &[String]) -> Result<(), String> {
+    let uris: Vec<String> = paths
+        .iter()
+        .filter(|p| !p.is_empty())
+        .map(|p| path_to_file_uri(p))
+        .collect();
+    if uris.is_empty() {
+        return Ok(());
+    }
+
+    // GVariant text format for an array of strings: ['file:///a', 'file:///b']
+    // Percent-encoding guarantees the URIs contain no quotes or backslashes.
+    let uri_array = format!(
+        "[{}]",
+        uris.iter().map(|u| format!("'{}'", u)).collect::<Vec<_>>().join(", ")
+    );
+
+    let dbus_ok = std::process::Command::new("gdbus")
+        .args([
+            "call",
+            "--session",
+            "--timeout",
+            "3",
+            "--dest",
+            "org.freedesktop.FileManager1",
+            "--object-path",
+            "/org/freedesktop/FileManager1",
+            "--method",
+            "org.freedesktop.FileManager1.ShowItems",
+            &uri_array,
+            "",
+        ])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+
+    if dbus_ok {
+        return Ok(());
+    }
+
+    // Fallback: open each distinct parent folder (or the folder itself).
+    let mut opened = std::collections::HashSet::new();
+    for p in paths.iter().filter(|p| !p.is_empty()) {
+        let path = Path::new(p);
+        let target = if path.is_dir() {
+            path.to_path_buf()
+        } else {
+            path.parent().map(Path::to_path_buf).unwrap_or_else(|| path.to_path_buf())
+        };
+        if opened.insert(target.clone()) {
+            open::that_detached(&target)
+                .map_err(|e| format!("Failed to open file manager: {}", e))?;
+        }
+    }
+    Ok(())
 }
 
 #[tauri::command]
