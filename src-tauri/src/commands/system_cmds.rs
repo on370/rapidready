@@ -581,12 +581,18 @@ pub fn open_in_rapidraw(
                         if cp.ends_with(".app") {
                             let _ = std::process::Command::new("open")
                                 .args(["-a", cp, &file_to_open])
+                                .stdin(std::process::Stdio::null())
+                                .stdout(std::process::Stdio::null())
+                                .stderr(std::process::Stdio::null())
                                 .spawn()
                                 .map_err(|e| format!("Failed to open custom app: {}", e))?;
                             return Ok(());
                         } else {
                             let _ = std::process::Command::new(cp)
                                 .arg(&file_to_open)
+                                .stdin(std::process::Stdio::null())
+                                .stdout(std::process::Stdio::null())
+                                .stderr(std::process::Stdio::null())
                                 .spawn()
                                 .map_err(|e| format!("Failed to launch custom binary: {}", e))?;
                             return Ok(());
@@ -596,6 +602,9 @@ pub fn open_in_rapidraw(
                     {
                         let _ = std::process::Command::new(cp)
                             .arg(&file_to_open)
+                            .stdin(std::process::Stdio::null())
+                            .stdout(std::process::Stdio::null())
+                            .stderr(std::process::Stdio::null())
                             .spawn()
                             .map_err(|e| format!("Failed to launch custom binary: {}", e))?;
                         return Ok(());
@@ -615,6 +624,9 @@ pub fn open_in_rapidraw(
                     if cand.exists() {
                         let _ = std::process::Command::new("open")
                             .args(["-a", &cand.to_string_lossy(), &file_to_open])
+                            .stdin(std::process::Stdio::null())
+                            .stdout(std::process::Stdio::null())
+                            .stderr(std::process::Stdio::null())
                             .spawn();
                         return Ok(());
                     }
@@ -640,6 +652,9 @@ pub fn open_in_rapidraw(
                     if std::path::Path::new(&candidate).exists() {
                         let _ = std::process::Command::new(&candidate)
                             .arg(&file_to_open)
+                            .stdin(std::process::Stdio::null())
+                            .stdout(std::process::Stdio::null())
+                            .stderr(std::process::Stdio::null())
                             .spawn();
                         return Ok(());
                     }
@@ -648,7 +663,13 @@ pub fn open_in_rapidraw(
             }
             #[cfg(not(any(target_os = "macos", target_os = "windows")))]
             {
-                if let Ok(_child) = std::process::Command::new("darktable").arg(&file_to_open).spawn() {
+                if let Ok(_child) = std::process::Command::new("darktable")
+                    .arg(&file_to_open)
+                    .stdin(std::process::Stdio::null())
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .spawn()
+                {
                     return Ok(());
                 }
                 open_system_default(&file_to_open)
@@ -661,6 +682,9 @@ pub fn open_in_rapidraw(
                 if lr_app.exists() {
                     let _ = std::process::Command::new("open")
                         .args(["-a", "/Applications/Adobe Lightroom Classic/Adobe Lightroom Classic.app", &file_to_open])
+                        .stdin(std::process::Stdio::null())
+                        .stdout(std::process::Stdio::null())
+                        .stderr(std::process::Stdio::null())
                         .spawn();
                     return Ok(());
                 }
@@ -684,6 +708,9 @@ pub fn open_in_rapidraw(
                     if std::path::Path::new(&candidate).exists() {
                         let _ = std::process::Command::new(&candidate)
                             .arg(&file_to_open)
+                            .stdin(std::process::Stdio::null())
+                            .stdout(std::process::Stdio::null())
+                            .stderr(std::process::Stdio::null())
                             .spawn();
                         return Ok(());
                     }
@@ -706,11 +733,17 @@ pub fn open_in_rapidraw(
                 if let Some(bin_path) = find_rapidraw_binary() {
                     let _ = std::process::Command::new(&bin_path)
                         .arg(&file_to_open)
+                        .stdin(std::process::Stdio::null())
+                        .stdout(std::process::Stdio::null())
+                        .stderr(std::process::Stdio::null())
                         .spawn();
 
                     // Bring RapidRAW to the foreground
                     let _ = std::process::Command::new("osascript")
                         .args(["-e", "tell application id \"io.github.CyberTimon.RapidRAW\" to activate"])
+                        .stdin(std::process::Stdio::null())
+                        .stdout(std::process::Stdio::null())
+                        .stderr(std::process::Stdio::null())
                         .spawn();
 
                     return Ok(());
@@ -745,6 +778,9 @@ pub fn open_in_rapidraw(
                     if std::path::Path::new(&candidate).exists() {
                         let _ = std::process::Command::new(&candidate)
                             .arg(&file_to_open)
+                            .stdin(std::process::Stdio::null())
+                            .stdout(std::process::Stdio::null())
+                            .stderr(std::process::Stdio::null())
                             .spawn();
                         return Ok(());
                     }

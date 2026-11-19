@@ -418,24 +418,6 @@ export function SettingsView() {
                 {t('gps.openStreetMap')}
               </span>
             </label>
-
-            <label className="flex items-center gap-3 cursor-not-allowed opacity-40 select-none">
-              <input
-                type="radio"
-                name="gpsMapProvider"
-                value="internal"
-                disabled
-                className="w-4 h-4 text-accent border-app-border bg-transparent cursor-not-allowed"
-              />
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-txt-tertiary">
-                  {t('gps.internalViewer')}
-                </span>
-                <span className="text-[10px] uppercase font-semibold tracking-wider text-txt-tertiary border border-app-border px-1.5 py-0.2 rounded">
-                  {t('gps.comingSoon')}
-                </span>
-              </div>
-            </label>
           </div>
         </div>
 

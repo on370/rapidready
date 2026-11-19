@@ -39,12 +39,10 @@
     }
   },
   "gps": {
-    "title": "View GPS Location in",
-    "subtitle": "Wähle den bevorzugten Dienst zum Öffnen von Geokoordinaten",
+    "title": "Externe Karte öffnen in",
+    "subtitle": "Wähle den bevorzugten Dienst für den externen Karten-Link",
     "googleMaps": "Google Maps im Browser",
-    "openStreetMap": "OpenStreetMap im Browser",
-    "internalViewer": "Integrierter Viewer",
-    "comingSoon": "Demnächst"
+    "openStreetMap": "OpenStreetMap im Browser"
   },
   "fileOps": {
     "title": "Datensicherheit & Dateioperationen",

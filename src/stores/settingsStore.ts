@@ -67,7 +67,7 @@ interface SettingsState {
   openRapidRaw: boolean;
   startupView: 'import' | 'library';
   lastLibraryPath: string | null;
-  gpsMapProvider: 'google' | 'osm' | 'internal';
+  gpsMapProvider: 'google' | 'osm';
   locations: ArchiveLocation[];
   recentPaths: string[];
   presets: ImportPreset[];
@@ -105,7 +105,7 @@ interface SettingsState {
   setOpenRapidRaw: (val: boolean) => void;
   setStartupView: (val: 'import' | 'library') => void;
   setLastLibraryPath: (val: string | null) => void;
-  setGpsMapProvider: (val: 'google' | 'osm' | 'internal') => void;
+  setGpsMapProvider: (val: 'google' | 'osm') => void;
   setShortcutPreset: (val: 'lightroom' | 'darktable') => void;
   setEnableFolderDeletion: (val: boolean) => void;
   setAllowDirectFolderDeletion: (val: boolean) => void;

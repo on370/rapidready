@@ -39,12 +39,10 @@
     }
   },
   "gps": {
-    "title": "View GPS Location in",
-    "subtitle": "Choose your preferred service to open geotagged coordinates",
+    "title": "Open external map in",
+    "subtitle": "Choose your preferred service for external map links",
     "googleMaps": "Google Maps in Browser",
-    "openStreetMap": "OpenStreetMap in Browser",
-    "internalViewer": "Internal Viewer",
-    "comingSoon": "Coming Soon"
+    "openStreetMap": "OpenStreetMap in Browser"
   },
   "fileOps": {
     "title": "Data Safety & File Operations",
