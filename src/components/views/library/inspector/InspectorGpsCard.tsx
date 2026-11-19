@@ -126,7 +126,6 @@ export function InspectorGpsCard({
           t("errors.batchSaveFailed", {
             failed: res.failed,
             total: res.total,
-            defaultValue: `Fehler beim Speichern von ${res.failed} von ${res.total} Dateien.`,
           }),
           t("inspector.gpsSaveFailed")
         );
@@ -162,7 +161,6 @@ export function InspectorGpsCard({
           t("errors.batchSaveFailed", {
             failed: res.failed,
             total: res.total,
-            defaultValue: `Fehler beim Speichern von ${res.failed} von ${res.total} Dateien.`,
           }),
           t("inspector.gpsSaveFailed")
         );

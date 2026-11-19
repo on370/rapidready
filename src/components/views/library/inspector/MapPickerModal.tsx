@@ -540,7 +540,7 @@ export function MapPickerModal({
               <h2 className="text-xs font-semibold text-txt-primary truncate">
                 {mode === "view" ? t("inspector.mapViewerTitle") : t("inspector.mapPickerTitle")}
               </h2>
-              <p className="text-[11px] text-txt-tertiary truncate font-mono">
+              <p className={`text-[11px] text-txt-tertiary truncate ${mode === "view" ? "font-mono" : ""}`}>
                 {mode === "view"
                   ? picked
                     ? formatDms(picked.lat, picked.lng)
@@ -724,7 +724,7 @@ export function MapPickerModal({
                   </div>
                 )}
 
-                {initialLatitude != null && onClear && (
+                {(initialLatitude != null || candidateLocations.length > 0) && onClear && (
                   <button
                     type="button"
                     onClick={handleClear}
