@@ -348,6 +348,8 @@
     "gpsInputHint": "Füge einen Link aus Google/Apple Maps oder Koordinaten (DMS, DD, DMM) ein",
     "gpsBatchBadge": "Wird auf alle {{count}} ausgewählten Bilder angewendet",
     "gpsApply": "Übernehmen",
+    "gpsSaving": "Speichere...",
+    "gpsSavingBatch": "Speichere GPS-Daten für {{count}} Bild(er)...",
     "gpsCancel": "Abbrechen",
     "gpsAppliedToast": "GPS-Koordinaten für {{count}} Bild(er) gespeichert.",
     "gpsRemovedToast": "GPS-Koordinaten für {{count}} Bild(er) entfernt.",

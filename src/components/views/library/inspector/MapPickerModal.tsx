@@ -196,12 +196,14 @@ export function MapPickerModal({
   const [searchResults, setSearchResults] = useState<PlaceSearchResult[]>([]);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [searchStatusMessage, setSearchStatusMessage] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (!isOpen) {
       abortControllerRef.current?.abort();
       abortControllerRef.current = null;
       setIsSearching(false);
+      setIsSaving(false);
       setSearchResults([]);
       setIsDropdownOpen(false);
       setSearchStatusMessage(null);
@@ -239,6 +241,7 @@ export function MapPickerModal({
       if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
+        if (isSaving) return;
         if (isDropdownOpen) {
           setIsDropdownOpen(false);
         } else {
@@ -248,7 +251,7 @@ export function MapPickerModal({
     };
     window.addEventListener("keydown", handleKeyDown, true);
     return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [isOpen, isDropdownOpen, onClose]);
+  }, [isOpen, isSaving, isDropdownOpen, onClose]);
 
   const placeOrMoveMarker = useCallback((lat: number, lng: number) => {
     const map = mapInstanceRef.current;
@@ -510,24 +513,36 @@ export function MapPickerModal({
   };
 
   const handleApply = async () => {
-    if (!picked) return;
-    await onSave(picked.lat, picked.lng, parsedAltitude);
-    onClose();
+    if (!picked || isSaving) return;
+    setIsSaving(true);
+    try {
+      await onSave(picked.lat, picked.lng, parsedAltitude);
+      onClose();
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleClear = async () => {
-    if (!onClear) return;
-    await onClear();
-    onClose();
+    if (!onClear || isSaving) return;
+    setIsSaving(true);
+    try {
+      await onClear();
+      onClose();
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
-      onClick={onClose}
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 ${isSaving ? "cursor-wait" : ""}`}
+      onClick={() => {
+        if (!isSaving) onClose();
+      }}
     >
       <div
-        className="w-[92vw] max-w-3xl h-[76vh] max-h-[680px] flex flex-col bg-app-panel border border-app-border rounded-2xl shadow-2xl overflow-hidden"
+        className={`w-[92vw] max-w-3xl h-[76vh] max-h-[680px] flex flex-col bg-app-panel border border-app-border rounded-2xl shadow-2xl overflow-hidden ${isSaving ? "cursor-wait" : ""}`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -576,8 +591,9 @@ export function MapPickerModal({
 
             <button
               type="button"
+              disabled={isSaving}
               onClick={onClose}
-              className="p-1.5 rounded-lg text-txt-tertiary hover:text-txt-primary hover:bg-app-hover transition-colors flex-shrink-0"
+              className="p-1.5 rounded-lg text-txt-tertiary hover:text-txt-primary hover:bg-app-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
               title={t("inspector.mapClose")}
             >
               <X className="w-4 h-4" />
@@ -664,11 +680,21 @@ export function MapPickerModal({
         )}
 
         {/* Map Body */}
-        <div className="flex-1 relative min-h-0">
-          <div
-            ref={mapContainerRef}
-            className="w-full h-full bg-app-deepest [&_.leaflet-tile-pane]:brightness-[0.88] [&_.leaflet-tile-pane]:contrast-[1.04]"
-          />
+        <div
+          className={`flex-1 relative min-h-0 bg-app-deepest [&_.leaflet-tile-pane]:brightness-[0.88] [&_.leaflet-tile-pane]:contrast-[1.04] ${
+            mode === "edit" && !isSaving ? "rr-map-edit" : ""
+          }`}
+        >
+          <div ref={mapContainerRef} className="w-full h-full" />
+
+          {isSaving && (
+            <div className="absolute inset-0 z-[1100] bg-black/45 backdrop-blur-[2px] flex items-center justify-center cursor-wait">
+              <div className="bg-app-panel/95 border border-app-border rounded-xl px-4 py-2.5 shadow-2xl flex items-center gap-2.5 text-xs text-txt-primary">
+                <Loader2 className="w-4 h-4 animate-spin text-accent flex-shrink-0" />
+                <span>{t("inspector.gpsSavingBatch", { count: selectedCount })}</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
@@ -727,8 +753,9 @@ export function MapPickerModal({
                 {(initialLatitude != null || candidateLocations.length > 0) && onClear && (
                   <button
                     type="button"
+                    disabled={isSaving}
                     onClick={handleClear}
-                    className="flex items-center gap-1 text-[11px] text-red-400 hover:text-red-300 hover:bg-red-500/10 px-2 py-1 rounded-md transition-colors flex-shrink-0"
+                    className="flex items-center gap-1 text-[11px] text-red-400 hover:text-red-300 hover:bg-red-500/10 disabled:opacity-40 disabled:cursor-not-allowed px-2 py-1 rounded-md transition-colors flex-shrink-0"
                     title={t("inspector.removeGps")}
                   >
                     <Trash2 className="w-3 h-3" />
@@ -740,19 +767,29 @@ export function MapPickerModal({
               <div className="flex items-center gap-2 flex-shrink-0">
                 <button
                   type="button"
+                  disabled={isSaving}
                   onClick={onClose}
-                  className="px-3 py-1.5 text-xs text-txt-secondary hover:text-txt-primary hover:bg-app-hover rounded-lg transition-colors"
+                  className="px-3 py-1.5 text-xs text-txt-secondary hover:text-txt-primary hover:bg-app-hover disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors"
                 >
                   {t("inspector.gpsCancel")}
                 </button>
                 <button
                   type="button"
-                  disabled={!picked}
+                  disabled={!picked || isSaving}
                   onClick={handleApply}
                   className="px-3.5 py-1.5 text-xs font-medium bg-accent hover:bg-accent-hover text-app-deepest disabled:opacity-40 disabled:cursor-not-allowed rounded-lg shadow transition-colors flex items-center gap-1.5"
                 >
-                  <Check className="w-3.5 h-3.5" />
-                  <span>{t("inspector.gpsApply")}</span>
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>{t("inspector.gpsSaving")}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-3.5 h-3.5" />
+                      <span>{t("inspector.gpsApply")}</span>
+                    </>
+                  )}
                 </button>
               </div>
             </>

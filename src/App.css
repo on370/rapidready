@@ -336,3 +336,22 @@ input[type="range"].zoom-slider::-webkit-slider-thumb:active {
   border-color: var(--color-accent-hover);
   transform: scale(1.15);
 }
+
+/* ── Leaflet Map Picker Edit Cursor ────────────────────── */
+.rr-map-edit .leaflet-grab {
+  cursor: crosshair !important;
+}
+
+.leaflet-dragging .rr-map-edit .leaflet-grab,
+.leaflet-dragging .rr-map-edit .leaflet-grab .leaflet-interactive,
+.rr-map-edit .leaflet-dragging.leaflet-grab {
+  cursor: grabbing !important;
+}
+
+.rr-map-edit .leaflet-marker-draggable {
+  cursor: grab !important;
+}
+
+.leaflet-dragging .rr-map-edit .leaflet-marker-draggable {
+  cursor: grabbing !important;
+}
