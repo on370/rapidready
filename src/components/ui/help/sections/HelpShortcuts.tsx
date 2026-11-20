@@ -27,8 +27,10 @@ export function HelpShortcuts() {
           items: [
             { desc: 'Next Image', keys: ['→', '|', 'J', '|', 'Space'] },
             { desc: 'Previous Image', keys: ['←', '|', 'K', '|', 'Shift', 'Space'] },
+            { desc: 'Previous / Next Folder (in Loupe)', keys: ['↑', '/', '↓'] },
             { desc: 'Detail View (Loupe)', keys: ['E', '|', 'Enter'] },
             { desc: 'Grid View', keys: ['G'] },
+            { desc: 'Toggle RAW + JPEG Stacking', keys: ['Alt', 'S'] },
             { desc: 'Toggle Full Window & Slideshow', keys: ['F'] },
             { desc: 'Play / Pause Slideshow (in Full Window)', keys: ['Space'] },
             { desc: 'Toggle Live-Histogram', keys: ['H'] },
@@ -82,8 +84,10 @@ export function HelpShortcuts() {
           items: [
             { desc: 'Nächstes Bild', keys: ['→', '|', 'J', '|', 'Space'] },
             { desc: 'Vorheriges Bild', keys: ['←', '|', 'K', '|', 'Shift', 'Space'] },
+            { desc: 'Vorheriger / Nächster Ordner (in Lupe)', keys: ['↑', '/', '↓'] },
             { desc: 'Detailansicht (Lupe)', keys: ['E', '|', 'Enter'] },
             { desc: 'Rasteransicht (Grid)', keys: ['G'] },
+            { desc: 'RAW + JPG stapeln umschalten', keys: ['Alt', 'S'] },
             { desc: 'Vollfenster & Diashow umschalten', keys: ['F'] },
             { desc: 'Diashow Start / Pause (im Vollfenster)', keys: ['Space'] },
             { desc: 'Live-Histogramm umschalten', keys: ['H'] },
