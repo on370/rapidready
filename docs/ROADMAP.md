@@ -17,6 +17,15 @@
 
 ## 🚀 Released Milestones
 
+### Released in `v0.6.3` (Build `0196`)
+- [x] **Interactive OpenStreetMap Location Preview, Viewer & Editor (`OsmMiniMap.tsx`, `MapPickerModal.tsx`):**
+  - Separately collapsible OSM mini-map in the Inspector with zoom controls, debounce, and offline fallback.
+  - Unified internal Leaflet viewer/editor with seamless `view` ↔ `edit` switching, OSM place search (Photon + Nominatim fallback), instant coordinate/URL detection, multi-selection candidate pins, and 1-click Copy Location.
+- [x] **`Folder & Date` Grid Sort Mode (`folder_date`):**
+  - Hierarchical folder path sorting combined with chronological capture-date sorting per folder.
+- [x] **Experimental Linux Support & Compatibility Fixes:**
+  - Experimental Linux support (PR #14), RapidRAW 1.6.9+ `.rrdata` `"flag"` & `"user:"` tag-prefix support, universal RAW + derivative stacking suffixes/format badges, fullres `orientation = 1` override fix, detached external app stdio, and Inspector preview/date-sorting stability.
+
 ### Released in `v0.6.2` (Build `018A`)
 - [x] **Intelligent RAW + JPEG Stacking & Loupe Variant Comparison (`1:N` Virtual Stacks):**
   - Same-folder and direct subfolder (`./LR/`, `./Export/`, `./JPG/`) grouping with responsive badge truncation and $0\%$ CTSP overhead.

@@ -5,6 +5,31 @@ All notable changes to RapidReady will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.3] - 2026-11-20
+
+Feature and polish release introducing an integrated interactive OpenStreetMap location preview, viewer, and editor with place search and multi-selection candidate pins, a new `Folder & Date` grid sort mode, experimental Linux support, RapidRAW 1.6.9+ `.rrdata` compatibility, universal RAW + derivative stacking suffixes/badges, and inspector/orientation stability fixes.
+
+### Added & Improved
+- **Interactive OpenStreetMap Location Preview, Viewer & Editor (`OsmMiniMap.tsx`, `MapPickerModal.tsx`, `InspectorGpsCard.tsx`, `tauri.conf.json`):**
+  - **Separately Collapsible OSM Mini-Map:** Embedded 3×3 OpenStreetMap tile preview directly inside the Inspector GPS card with zoom controls (`4`–`17`), `280 ms` culling debounce, and an offline fallback state.
+  - **Unified Internal Map Viewer & Location Editor (`leaflet`):** Click the mini-map to inspect locations in the internal viewer (with 1-click switch to Edit mode or external Google Maps / OpenStreetMap), or click the pencil icon to place/drag a custom accent pin.
+  - **Smart Place Search & Instant Coordinate Bar:** Combined search input supporting OpenStreetMap place queries (Photon with Nominatim fallback) alongside instant 0 ms parsing of pasted Google/Apple Maps links and DMS/DD/DMM coordinates.
+  - **Multi-Selection Candidate Pins:** When editing GPS on a multi-photo selection, existing coordinates across selected photos are grouped and displayed as clickable count-badge pins for effortless 1-click transfer.
+  - **1-Click Copy Location & Busy Feedback:** Copy formatted coordinates directly from the Inspector GPS card, plus a saving overlay and context-aware crosshair/grabbing cursors in the map editor.
+- **`Folder & Date` Grid Sort Mode (`libraryUIStore.ts`, `LibraryCenter.tsx`, `CullingToolbar.tsx`):**
+  - Added `folder_date` sorting to group photos by folder tree path order and sort chronologically by capture date within each folder.
+- **Experimental Linux Support (PR #14) (`PLATFORM_LINUX.md`, `tauri.conf.json`):**
+  - Added experimental Linux build/runtime support and AppImage bundling configuration.
+- **Updated In-App Help Documentation (`HelpMetadata.tsx`, `HelpModal.tsx`, `HelpShortcuts.tsx`):**
+  - Expanded bilingual (DE & EN) Help sections for interactive geotagging, editorial metadata/rights, capture date honesty, and recent keyboard shortcuts (<kbd>↑</kbd>/<kbd>↓</kbd> folder switching, <kbd>Alt</kbd>+<kbd>S</kbd> stacking).
+
+### Fixed
+- **Universal RAW + Derivative Stacking & Format Badges (`LibraryCenter.tsx`):** Replaced rigid suffix word-list matching with universal separator-prefix matching (`-`, `_`, space, `.`, `(`) and displayed accurate derivative format badges (`PNG`, `TIF`, `HEIC`, `WEBP`, `AVIF`, `JPG`).
+- **RapidRAW 1.6.9+ `.rrdata` Compatibility (`culling.rs`):** Added support for the native top-level `"flag"` field (`"pick"` / `"reject"` / `null`) and bidirectional `"user:"` tag prefixes with automatic sync migration.
+- **Fullres & Embedded Preview Orientation Override (`lib.rs`, `jpeg_extract.rs`):** Ensured explicit sidecar `orientation = 1` overrides embedded `EXIF Orientation != 1` (e.g. `8`) in full-resolution JPEGs and extracted RAW previews.
+- **External RAW Developer Console Isolation (`system_cmds.rs`):** Detached `stdin`/`stdout`/`stderr` (`Stdio::null()`) when spawning external RAW developers so child GPU/WGPU logs no longer flood RapidReady's terminal.
+- **Inspector Preview & Date Sorting Consistency (`InspectorPreviewCard.tsx`, `LibraryInspector.tsx`, `archive.rs`, `date_resolver.rs`, `metadata_resolver/mod.rs`):** Eliminated preview height shifts across RAW/Video/JPG with compact bottom-right overlay badges and `scrollbar-gutter: stable`, resolved real EXIF dates during local archive scans, and aligned `fs_modified` to local time.
+
 ## [0.6.2] - 2026-11-09
 
 Feature release introducing intelligent 1:N RAW + JPEG stacking with instant variant switching, non-destructive editorial metadata management and rights attribution in companion sidecars (`.rrdata` & `.xmp`), capture date honesty with 1-click archive relocation, an expandable navigation sidebar for improved onboarding, and subfolder grid sorting.
