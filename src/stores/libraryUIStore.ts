@@ -91,7 +91,7 @@ interface LibraryUIStore {
   setActiveStackVariantIndex: (idx: number) => void;
 }
 
-export type LibrarySortBy = 'filename' | 'date' | 'rating' | 'size';
+export type LibrarySortBy = 'filename' | 'date' | 'folder_date' | 'rating' | 'size';
 export type LibrarySortDirection = 'asc' | 'desc';
 export type FocusPeakingColor = 'green' | 'red' | 'cyan' | 'yellow';
 export type InspectorHistogramMode = 'off' | 'overlay' | 'full';
@@ -190,7 +190,7 @@ const getSavedSlideshowCrossfade = (): boolean => {
 const getSavedSortBy = (): LibrarySortBy => {
   try {
     const val = localStorage.getItem('rapidready_sort_by_v2');
-    if (val === 'filename' || val === 'date' || val === 'rating' || val === 'size') {
+    if (val === 'filename' || val === 'date' || val === 'folder_date' || val === 'rating' || val === 'size') {
       return val;
     }
   } catch (_) {}

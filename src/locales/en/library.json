@@ -104,6 +104,7 @@
     "label": "Sort by",
     "filename": "Filename",
     "date": "Capture Date",
+    "folderDate": "Folder & Date",
     "rating": "Rating",
     "size": "File Size",
     "asc": "Ascending",

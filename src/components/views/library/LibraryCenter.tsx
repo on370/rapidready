@@ -261,10 +261,21 @@ export function LibraryCenter({
 
     // Pre-cache date mappings for O(N) lookup instead of O(N log N) during sort
     let dateMap: Map<string, number | null> | null = null;
-    if (sortBy === 'date') {
+    if (sortBy === 'date' || sortBy === 'folder_date') {
       dateMap = new Map<string, number | null>();
       for (const img of list) {
         dateMap.set(img.path, getDateKey(img));
+      }
+    }
+
+    let dirSegmentsMap: Map<string, string[]> | null = null;
+    if (sortBy === 'folder_date') {
+      dirSegmentsMap = new Map<string, string[]>();
+      for (const img of list) {
+        const norm = normalizePath(img.path);
+        const lastSlash = norm.lastIndexOf('/');
+        const dir = lastSlash > 0 ? norm.substring(0, lastSlash) : '';
+        dirSegmentsMap.set(img.path, dir ? dir.split('/') : []);
       }
     }
 
@@ -276,6 +287,32 @@ export function LibraryCenter({
         const cmp = numericCollator.compare(a.name, b.name);
         if (cmp !== 0) return cmp * dirMul;
       } else if (sortBy === 'date') {
+        const dateKeyA = dateMap ? (dateMap.get(a.path) ?? null) : getDateKey(a);
+        const dateKeyB = dateMap ? (dateMap.get(b.path) ?? null) : getDateKey(b);
+        if (dateKeyA == null && dateKeyB != null) return 1;
+        if (dateKeyA != null && dateKeyB == null) return -1;
+        if (dateKeyA != null && dateKeyB != null && dateKeyA !== dateKeyB) {
+          return (dateKeyA < dateKeyB ? -1 : 1) * dirMul;
+        }
+      } else if (sortBy === 'folder_date') {
+        const segA = dirSegmentsMap?.get(a.path) ?? [];
+        const segB = dirSegmentsMap?.get(b.path) ?? [];
+        const minLen = Math.min(segA.length, segB.length);
+        let folderCmp = 0;
+        for (let i = 0; i < minLen; i++) {
+          const c = numericCollator.compare(segA[i], segB[i]);
+          if (c !== 0) {
+            folderCmp = c;
+            break;
+          }
+        }
+        if (folderCmp === 0 && segA.length !== segB.length) {
+          folderCmp = segA.length - segB.length;
+        }
+        if (folderCmp !== 0) {
+          return folderCmp * dirMul;
+        }
+
         const dateKeyA = dateMap ? (dateMap.get(a.path) ?? null) : getDateKey(a);
         const dateKeyB = dateMap ? (dateMap.get(b.path) ?? null) : getDateKey(b);
         if (dateKeyA == null && dateKeyB != null) return 1;

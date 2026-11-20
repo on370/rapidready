@@ -6,7 +6,7 @@ import {
   Maximize2,
   GalleryThumbnails,
   ArrowDownAZ, Calendar, HardDrive, ArrowUpNarrowWide, ArrowDownWideNarrow,
-  Layers
+  Layers, FolderTree
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
@@ -745,11 +745,13 @@ export const CullingToolbar = React.memo(function CullingToolbar({
               >
                 {sortBy === 'filename' && <ArrowDownAZ className="w-3.5 h-3.5 text-accent" />}
                 {sortBy === 'date' && <Calendar className="w-3.5 h-3.5 text-accent" />}
+                {sortBy === 'folder_date' && <FolderTree className="w-3.5 h-3.5 text-accent" />}
                 {sortBy === 'rating' && <Star className="w-3.5 h-3.5 text-accent fill-accent" />}
                 {sortBy === 'size' && <HardDrive className="w-3.5 h-3.5 text-accent" />}
                 <span>
                   {sortBy === 'filename' && t('sort.filename', 'Dateiname')}
                   {sortBy === 'date' && t('sort.date', 'Aufnahmedatum')}
+                  {sortBy === 'folder_date' && t('sort.folderDate', 'Ordner & Datum')}
                   {sortBy === 'rating' && t('sort.rating', 'Bewertung')}
                   {sortBy === 'size' && t('sort.size', 'Dateigröße')}
                 </span>
@@ -805,6 +807,28 @@ export const CullingToolbar = React.memo(function CullingToolbar({
                       <span>{t('sort.date', 'Aufnahmedatum')}</span>
                     </div>
                     {sortBy === 'date' && <Check className="w-3.5 h-3.5 text-accent" />}
+                  </button>
+
+                  {/* 3. Ordner & Datum */}
+                  <button
+                    onClick={() => {
+                      if (sortBy === 'folder_date') {
+                        toggleSortDirection();
+                      } else {
+                        setSortBy('folder_date');
+                        setSortDirection('asc');
+                      }
+                      setIsSortMenuOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-1.5 text-xs text-left transition-colors hover:bg-white/5 cursor-pointer ${
+                      sortBy === 'folder_date' ? 'text-accent font-medium bg-accent/10' : 'text-txt-secondary'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <FolderTree className="w-3.5 h-3.5 opacity-60" />
+                      <span>{t('sort.folderDate', 'Ordner & Datum')}</span>
+                    </div>
+                    {sortBy === 'folder_date' && <Check className="w-3.5 h-3.5 text-accent" />}
                   </button>
 
                   {/* 3. Bewertung */}
