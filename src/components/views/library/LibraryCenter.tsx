@@ -17,6 +17,7 @@ import { AppErrorBoundary } from "../../ui/AppErrorBoundary";
 
 import { useLibraryUIStore } from "../../../stores/libraryUIStore";
 import { useToastStore } from "../../../stores/toastStore";
+import { recordCullingUndo, recordRotationUndo, trackCullingWrite } from "../../../stores/undoStore";
 import { useDialogStore } from "../../../stores/dialogStore";
 import { useCollectionsStore, findAlbumById } from "../../../stores/collectionsStore";
 import { openInConfiguredRawDeveloper } from "../../../stores/settingsStore";
@@ -759,6 +760,7 @@ export function LibraryCenter({
       });
       if (res && res.length > 0) {
         updateImageCullings(res);
+        recordRotationUndo(res.map(r => r.path), direction);
       }
     } catch (err) {
       console.error('Failed to rotate images:', err);
@@ -777,15 +779,16 @@ export function LibraryCenter({
       : [activeImage.path];
 
     const targetPaths = expandWithStackMembers(initialPaths);
+    recordCullingUndo(targetPaths, { flag, rating });
 
     if (targetPaths.length > 1) {
       updateBatchCullingState(targetPaths, { flag, rating });
-      invoke<{ total: number; succeeded: number; failed: number }>('set_culling_state_batch', {
+      trackCullingWrite(invoke<{ total: number; succeeded: number; failed: number }>('set_culling_state_batch', {
         paths: targetPaths,
         flag: flag === null ? 0 : flag,
         rating,
         color: null,
-      }).then((res) => {
+      })).then((res) => {
         if (res && res.failed > 0) {
           useToastStore.getState().showWarning(
             t('errors.batchSaveFailed', { failed: res.failed, total: res.total, defaultValue: `Fehler beim Speichern von ${res.failed} von ${res.total} Dateien.` }),
@@ -803,13 +806,13 @@ export function LibraryCenter({
       const globalIndex = images.findIndex(img => img.path === activeImage.path);
       if (globalIndex !== -1) updateCullingState(globalIndex, { flag, rating });
       
-      invoke('set_culling_state', { 
+      trackCullingWrite(invoke('set_culling_state', { 
         path: activeImage.path,
         flag,
         rating,
         color: activeImage.culling.color,
         tags: activeImage.culling.tags,
-      }).catch((err) => {
+      })).catch((err) => {
         console.error('Failed to save culling state:', err);
         useToastStore.getState().showError(
           t('errors.cullingSaveFailedDesc', { defaultValue: 'Die Sidecar-Datei (.rrdata) konnte nicht geschrieben werden.' }),
@@ -836,13 +839,14 @@ export function LibraryCenter({
       : [activeImage.path];
 
     const targetPaths = expandWithStackMembers(initialPaths);
+    recordCullingUndo(targetPaths, { color: newColor });
 
     if (targetPaths.length > 1) {
       updateBatchCullingState(targetPaths, { color: newColor });
-      invoke<{ total: number; succeeded: number; failed: number }>('set_culling_state_batch', {
+      trackCullingWrite(invoke<{ total: number; succeeded: number; failed: number }>('set_culling_state_batch', {
         paths: targetPaths,
         color: newColor || 'none',
-      }).then((res) => {
+      })).then((res) => {
         if (res && res.failed > 0) {
           useToastStore.getState().showWarning(
             t('errors.batchSaveFailed', { failed: res.failed, total: res.total, defaultValue: `Fehler beim Speichern von ${res.failed} von ${res.total} Dateien.` }),
@@ -860,13 +864,13 @@ export function LibraryCenter({
       const globalIndex = images.findIndex(img => img.path === activeImage.path);
       if (globalIndex !== -1) updateCullingState(globalIndex, { color: newColor });
 
-      invoke('set_culling_state', { 
+      trackCullingWrite(invoke('set_culling_state', { 
         path: activeImage.path,
         flag: activeImage.culling.flag,
         rating: activeImage.culling.rating,
         color: newColor,
         tags: activeImage.culling.tags,
-      }).catch((err) => {
+      })).catch((err) => {
         console.error('Failed to set color:', err);
         useToastStore.getState().showError(
           t('errors.cullingSaveFailedDesc', { defaultValue: 'Die Sidecar-Datei (.rrdata) konnte nicht geschrieben werden.' }),
@@ -1059,12 +1063,12 @@ export function LibraryCenter({
     if (imagesToUnreject.length > 0) {
       const unrejectPaths = imagesToUnreject.map(i => i.path);
       updateBatchCullingState(unrejectPaths, { flag: null });
-      invoke('set_culling_state_batch', {
+      trackCullingWrite(invoke('set_culling_state_batch', {
         paths: unrejectPaths,
         flag: 0,
         rating: null,
         color: null,
-      }).catch((err) => console.error('Failed to unreject kept stack members:', err));
+      })).catch((err) => console.error('Failed to unreject kept stack members:', err));
     }
 
     try {

@@ -568,5 +568,21 @@
     "ratingFeedback": "{{count}} stars",
     "colorFeedback": "Color label: {{color}}",
     "noColorFeedback": "No color label"
+  },
+  "undo": {
+    "undid_one": "Undid: {{action}} on 1 photo",
+    "undid_other": "Undid: {{action}} on {{count}} photos",
+    "redid_one": "Redid: {{action}} on 1 photo",
+    "redid_other": "Redid: {{action}} on {{count}} photos",
+    "nothingToUndo": "Nothing to undo",
+    "nothingToRedo": "Nothing to redo",
+    "kind": {
+      "flag": "flag",
+      "rating": "rating",
+      "color": "color label",
+      "tags": "tags",
+      "culling": "culling change",
+      "rotation": "rotation"
+    }
   }
 }

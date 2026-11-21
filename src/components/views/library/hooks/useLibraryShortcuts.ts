@@ -4,6 +4,8 @@ import { useLibraryStore, LibraryImage } from '../../../../stores/libraryStore';
 import { useCollectionsStore } from '../../../../stores/collectionsStore';
 import { useDialogStore } from '../../../../stores/dialogStore';
 import { useLibraryUIStore } from '../../../../stores/libraryUIStore';
+import { useUndoStore } from '../../../../stores/undoStore';
+import { useNavigationStore } from '../../../../stores/navigationStore';
 import { useSettingsStore, openInConfiguredRawDeveloper } from '../../../../stores/settingsStore';
 
 interface UseLibraryShortcutsProps {
@@ -46,7 +48,25 @@ export function useLibraryShortcuts({
       if (document.querySelector('.fixed.inset-0, [data-context-menu]')) return;
 
       const shortcutPreset = useSettingsStore.getState().shortcutPreset;
-      
+
+      // Shortcut: Cmd/Ctrl + Z -> Undo, Cmd/Ctrl + Shift + Z or Ctrl + Y -> Redo (culling changes).
+      // Library only, since the other views stay mounted in the background.
+      const isLibraryActive = useNavigationStore.getState().activeView === 'library';
+      if (isLibraryActive && (e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault();
+        if (e.shiftKey) {
+          useUndoStore.getState().redo();
+        } else {
+          useUndoStore.getState().undo();
+        }
+        return;
+      }
+      if (isLibraryActive && e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && (e.key === 'y' || e.key === 'Y')) {
+        e.preventDefault();
+        useUndoStore.getState().redo();
+        return;
+      }
+
       // Shortcut: Cmd/Ctrl + A -> Select All
       if ((e.metaKey || e.ctrlKey) && (e.key === 'a' || e.key === 'A')) {
         e.preventDefault();

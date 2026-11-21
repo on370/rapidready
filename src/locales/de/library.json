@@ -568,5 +568,21 @@
     "ratingFeedback": "{{count}} Sterne",
     "colorFeedback": "Farbkennzeichnung: {{color}}",
     "noColorFeedback": "Keine Farbkennzeichnung"
+  },
+  "undo": {
+    "undid_one": "Rückgängig: {{action}} bei 1 Foto",
+    "undid_other": "Rückgängig: {{action}} bei {{count}} Fotos",
+    "redid_one": "Wiederhergestellt: {{action}} bei 1 Foto",
+    "redid_other": "Wiederhergestellt: {{action}} bei {{count}} Fotos",
+    "nothingToUndo": "Nichts zum Rückgängigmachen",
+    "nothingToRedo": "Nichts zum Wiederherstellen",
+    "kind": {
+      "flag": "Markierung",
+      "rating": "Bewertung",
+      "color": "Farblabel",
+      "tags": "Tags",
+      "culling": "Culling-Änderung",
+      "rotation": "Drehung"
+    }
   }
 }
