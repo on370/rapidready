@@ -3,6 +3,8 @@ import { persist } from 'zustand/middleware';
 import { invoke } from '@tauri-apps/api/core';
 import { normalizePath } from '../utils/image';
 import { useLibraryStore } from './libraryStore';
+import { resolveRapidRawList } from '../utils/rapidrawListSource';
+import { isRapidRawDeveloper } from '../utils/rapidrawList';
 
 export type RawDeveloperId = 'rapidraw' | 'darktable' | 'lightroom' | 'system' | 'custom';
 
@@ -34,7 +36,28 @@ export function getRawDeveloperDisplayName(
 }
 
 export async function openInConfiguredRawDeveloper(path: string): Promise<void> {
-  const { rawDeveloper, customRawDeveloperPath } = useSettingsStore.getState();
+  const { rawDeveloper, customRawDeveloperPath, sendListToRapidRaw } = useSettingsStore.getState();
+
+  // Experimental (opt-in): hand RapidRAW the whole visible list so its filmstrip matches the grid.
+  // Falls back to the plain open below if there is no list or RapidRAW cannot be launched.
+  if (sendListToRapidRaw && isRapidRawDeveloper(rawDeveloper, customRawDeveloperPath)) {
+    const list = resolveRapidRawList(path);
+    if (list) {
+      try {
+        await invoke('open_list_in_rapidraw', {
+          paths: list.paths,
+          active: list.active,
+          title: list.title,
+          developer: rawDeveloper,
+          customPath: customRawDeveloperPath,
+        });
+        return;
+      } catch (err) {
+        console.warn('[RapidRAW list] Falling back to single-file open:', err);
+      }
+    }
+  }
+
   await invoke('open_in_rapidraw', {
     path,
     developer: rawDeveloper,
@@ -82,6 +105,7 @@ interface SettingsState {
   xmpNaming: 'standard' | 'darktable';
   rawDeveloper: RawDeveloperId;
   customRawDeveloperPath: string | null;
+  sendListToRapidRaw: boolean;
   defaultArtist: string;
   defaultCopyright: string;
   defaultUsageTerms: string;
@@ -97,6 +121,7 @@ interface SettingsState {
   setXmpNaming: (mode: 'standard' | 'darktable') => void;
   setRawDeveloper: (dev: RawDeveloperId) => void;
   setCustomRawDeveloperPath: (path: string | null) => void;
+  setSendListToRapidRaw: (val: boolean) => void;
   setAutoDetect: (val: boolean) => void;
   setDismissDefaultPicturesWarning: (val: boolean) => void;
   setVerifyCopy: (val: boolean) => void;
@@ -144,6 +169,7 @@ export const useSettingsStore = create<SettingsState>()(
       xmpNaming: 'standard',
       rawDeveloper: 'rapidraw',
       customRawDeveloperPath: null,
+      sendListToRapidRaw: false,
       defaultArtist: '',
       defaultCopyright: '',
       defaultUsageTerms: '',
@@ -181,6 +207,7 @@ export const useSettingsStore = create<SettingsState>()(
       },
       setRawDeveloper: (rawDeveloper) => set({ rawDeveloper }),
       setCustomRawDeveloperPath: (customRawDeveloperPath) => set({ customRawDeveloperPath }),
+      setSendListToRapidRaw: (sendListToRapidRaw) => set({ sendListToRapidRaw }),
       setDefaultArtist: (defaultArtist) => set({ defaultArtist }),
       setDefaultCopyright: (defaultCopyright) => set({ defaultCopyright }),
       setDefaultUsageTerms: (defaultUsageTerms) => set({ defaultUsageTerms }),

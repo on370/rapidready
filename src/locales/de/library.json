@@ -568,5 +568,10 @@
     "ratingFeedback": "{{count}} Sterne",
     "colorFeedback": "Farbkennzeichnung: {{color}}",
     "noColorFeedback": "Keine Farbkennzeichnung"
+  },
+  "rapidrawList": {
+    "selection": "{{count}} ausgewählt",
+    "minStars": "≥ {{count}} ★",
+    "sortedBy": "sortiert nach {{field}}"
   }
 }

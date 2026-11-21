@@ -797,6 +797,94 @@ pub fn open_in_rapidraw(
     }
 }
 
+/// Locates the RapidRAW executable (same install locations as `open_in_rapidraw`), so it can be
+/// launched with extra CLI arguments such as `--open-list`.
+fn find_rapidraw_executable() -> Option<std::path::PathBuf> {
+    #[cfg(target_os = "macos")]
+    {
+        find_rapidraw_binary()
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let candidate_paths = [
+            std::env::var("LOCALAPPDATA").map(|p| format!("{}\\Programs\\RapidRaw\\RapidRaw.exe", p)).ok(),
+            std::env::var("LOCALAPPDATA").map(|p| format!("{}\\RapidRaw\\RapidRaw.exe", p)).ok(),
+            std::env::var("ProgramFiles").map(|p| format!("{}\\RapidRaw\\RapidRaw.exe", p)).ok(),
+            std::env::var("ProgramFiles(x86)").map(|p| format!("{}\\RapidRaw\\RapidRaw.exe", p)).ok(),
+        ];
+        candidate_paths
+            .into_iter()
+            .flatten()
+            .map(std::path::PathBuf::from)
+            .find(|p| p.exists())
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let path_var = std::env::var_os("PATH")?;
+        for dir in std::env::split_paths(&path_var) {
+            for name in ["rapidraw", "RapidRAW", "rapid-raw"] {
+                let cand = dir.join(name);
+                if cand.is_file() {
+                    return Some(cand);
+                }
+            }
+        }
+        None
+    }
+}
+
+/// Experimental: hands the whole visible list to RapidRAW via `--open-list <json>`.
+/// Writing the JSON and spawning happen on a blocking worker thread, never on the UI thread.
+/// Returns an error if RapidRAW cannot be found, so the frontend can fall back to a plain open.
+///
+/// `developer` / `custom_path` are the same settings `open_in_rapidraw` receives: a custom
+/// developer whose executable is named RapidRAW (e.g. a dev build) is launched directly,
+/// otherwise the standard install locations are searched.
+#[tauri::command]
+pub async fn open_list_in_rapidraw(
+    paths: Vec<String>,
+    active: String,
+    title: String,
+    developer: Option<String>,
+    custom_path: Option<String>,
+) -> Result<(), String> {
+    use rapidready_core::rapidraw_list::{custom_rapidraw_executable, is_rapidraw_developer};
+
+    if !is_rapidraw_developer(developer.as_deref(), custom_path.as_deref()) {
+        return Err("Configured editor is not RapidRAW".to_string());
+    }
+
+    tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
+        let bin = custom_rapidraw_executable(developer.as_deref(), custom_path.as_deref())
+            .or_else(find_rapidraw_executable)
+            .ok_or_else(|| "RapidRAW executable not found".to_string())?;
+        let list_file = rapidready_core::rapidraw_list::write_open_list(
+            &rapidready_core::rapidraw_list::default_open_list_dir(),
+            &title,
+            &paths,
+            &active,
+            rapidready_core::rapidraw_list::OPEN_LIST_KEEP,
+        )?;
+
+        std::process::Command::new(&bin)
+            .arg("--open-list")
+            .arg(&list_file)
+            .spawn()
+            .map_err(|e| format!("Failed to launch RapidRAW: {}", e))?;
+
+        #[cfg(target_os = "macos")]
+        {
+            let _ = std::process::Command::new("osascript")
+                .args(["-e", "tell application id \"io.github.CyberTimon.RapidRAW\" to activate"])
+                .spawn();
+        }
+
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("Open list task failed: {}", e))?
+}
+
 #[tauri::command]
 pub fn show_in_finder(path: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
