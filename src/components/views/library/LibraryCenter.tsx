@@ -9,6 +9,7 @@ import { normalizePath, normalizeSlash, isRawFilename, isVideoFilename } from ".
 import { getTopLevelSelectedPaths } from "./LibraryLeftSidebar";
 
 import { CullingToolbar } from "./components/CullingToolbar";
+import { SimilarGroupsPanel } from "./components/SimilarGroupsPanel";
 import { LibraryGrid } from "./components/LibraryGrid";
 import { LoupeViewer } from "./components/LoupeViewer";
 import { FullscreenViewer } from "./components/FullscreenViewer";
@@ -828,6 +829,36 @@ export function LibraryCenter({
     }
   }, [activeImage, selectedPaths, images, autoAdvance, activeImageIndex, displayedImages, updateBatchCullingState, updateCullingState, setActiveImageIndex, setSelectedPaths, expandWithStackMembers, t]);
 
+  // Similar photos review: pick the keeper, reject the rest (stack members included).
+  const [similarOpen, setSimilarOpen] = useState(false);
+  const handleSimilarDecision = useCallback((keep: string[], reject: string[]) => {
+    for (const [paths, flag] of [[expandWithStackMembers(keep), 1], [expandWithStackMembers(reject), -1]] as const) {
+      if (paths.length === 0) continue;
+      updateBatchCullingState(paths, { flag });
+      invoke<{ failed: number; total: number }>('set_culling_state_batch', { paths, flag, rating: null, color: null })
+        .then((res) => {
+          if (res?.failed > 0) {
+            useToastStore.getState().showWarning(
+              t('errors.batchSaveFailed', { failed: res.failed, total: res.total }),
+              t('errors.cullingSaveFailed')
+            );
+          }
+        })
+        .catch((err) => {
+          console.error('Failed to save similar-group decision:', err);
+          useToastStore.getState().showError(t('errors.cullingSaveFailedDesc'), t('errors.cullingSaveFailed'));
+        });
+    }
+  }, [expandWithStackMembers, updateBatchCullingState, t]);
+
+  const handleSimilarShowInGrid = useCallback((paths: string[]) => {
+    const first = displayedImages.findIndex((img) => img.path === paths[0]);
+    if (first !== -1) setActiveImageIndex(first);
+    setSelectedPaths(new Set(paths));
+    setViewMode('grid');
+    setSimilarOpen(false);
+  }, [displayedImages, setActiveImageIndex, setSelectedPaths, setViewMode]);
+
   const handleSetColor = useCallback((newColor: string | null) => {
     if (!activeImage) return;
 
@@ -1446,8 +1477,17 @@ export function LibraryCenter({
           handleSetColor={handleSetColor}
           handleRotate={handleRotate}
           handleDeleteRejected={handleDeleteRejected}
+          onFindSimilar={() => setSimilarOpen(true)}
           toggleInspector={toggleInspector}
         />
+        {similarOpen && (
+          <SimilarGroupsPanel
+            images={displayedImages}
+            onClose={() => setSimilarOpen(false)}
+            onDecide={handleSimilarDecision}
+            onShowInGrid={handleSimilarShowInGrid}
+          />
+        )}
       </div>
 
       {/* Active Collection Header Banner */}

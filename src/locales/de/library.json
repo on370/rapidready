@@ -568,5 +568,43 @@
     "ratingFeedback": "{{count}} Sterne",
     "colorFeedback": "Farbkennzeichnung: {{color}}",
     "noColorFeedback": "Keine Farbkennzeichnung"
+  },
+  "similar": {
+    "button": "Ähnliche",
+    "buttonTooltip": "Ähnliche Fotos (Serien, wiederholte Aufnahmen) gruppieren und je Gruppe das beste wählen",
+    "title": "Ähnliche Fotos",
+    "experimental": "Experimentell",
+    "summary_one": "{{count}} Gruppe · {{photos}} Fotos · {{singles}} ohne Treffer",
+    "summary_other": "{{count}} Gruppen · {{photos}} Fotos · {{singles}} ohne Treffer",
+    "reviewed_one": "{{count}} geprüft",
+    "reviewed_other": "{{count}} geprüft",
+    "sensitivity": "Gruppierung",
+    "sensitivities": {
+      "strict": "Streng",
+      "normal": "Normal",
+      "loose": "Locker"
+    },
+    "close": "Schließen (Esc)",
+    "cancel": "Abbrechen",
+    "analyzing": "Vorschauen werden gelesen… {{done}} / {{total}}",
+    "none": "Hier wurden keine ähnlichen Fotos gefunden. Versuche eine lockerere Gruppierung.",
+    "groupOf": "Gruppe {{index}} von {{count}}",
+    "photos_one": "{{count}} Foto",
+    "photos_other": "{{count}} Fotos",
+    "status": {
+      "decided": "Behalten gewählt",
+      "keptAll": "Alle behalten"
+    },
+    "basis": {
+      "pick": "Deine Auswahl",
+      "rating": "Höchste Bewertung",
+      "sharpness": "Schärfstes Motiv"
+    },
+    "closeCall": "Knapp — bitte selbst prüfen",
+    "scoreTooltip": "Schärfe des Motivs im Vergleich zum besten Bild dieser Gruppe",
+    "keepAll": "Alle behalten",
+    "keepOne": "Bestes behalten, Rest verwerfen",
+    "showInGrid": "Im Raster zeigen",
+    "keysHint": "1–9 wählen · ←/→ Gruppe · Esc schließen"
   }
 }

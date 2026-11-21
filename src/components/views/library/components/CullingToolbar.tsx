@@ -30,6 +30,7 @@ export interface CullingToolbarProps {
   handleSetColor: (color: string | null) => void;
   handleRotate: (direction: 'cw' | 'ccw') => void;
   handleDeleteRejected: () => void;
+  onFindSimilar: () => void;
   toggleInspector: () => void;
 }
 
@@ -44,6 +45,7 @@ export const CullingToolbar = React.memo(function CullingToolbar({
   handleSetColor,
   handleRotate,
   handleDeleteRejected,
+  onFindSimilar,
   toggleInspector,
 }: CullingToolbarProps) {
   const { t, i18n } = useTranslation('library');
@@ -932,6 +934,17 @@ export const CullingToolbar = React.memo(function CullingToolbar({
             X
           </button>
         </div>
+
+        {/* Similar photos review */}
+        <button
+          disabled={displayedImages.length < 2}
+          onClick={onFindSimilar}
+          className="flex items-center gap-1.5 px-2 h-7 rounded-md text-xs font-medium transition-all flex-shrink-0 ml-0.5 border border-app-border text-txt-secondary hover:bg-app-hover hover:text-txt-primary cursor-pointer disabled:opacity-25 disabled:cursor-not-allowed"
+          title={t('similar.buttonTooltip')}
+        >
+          <Layers className="w-3.5 h-3.5" />
+          <span className="text-[11px]">{t('similar.button')}</span>
+        </button>
 
         {/* Delete Rejected Button */}
         <button

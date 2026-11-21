@@ -568,5 +568,43 @@
     "ratingFeedback": "{{count}} stars",
     "colorFeedback": "Color label: {{color}}",
     "noColorFeedback": "No color label"
+  },
+  "similar": {
+    "button": "Similar",
+    "buttonTooltip": "Group similar photos (bursts, repeated shots) and pick the keeper of each group",
+    "title": "Similar photos",
+    "experimental": "Experimental",
+    "summary_one": "{{count}} group · {{photos}} photos · {{singles}} without a match",
+    "summary_other": "{{count}} groups · {{photos}} photos · {{singles}} without a match",
+    "reviewed_one": "{{count}} reviewed",
+    "reviewed_other": "{{count}} reviewed",
+    "sensitivity": "Grouping",
+    "sensitivities": {
+      "strict": "Strict",
+      "normal": "Normal",
+      "loose": "Loose"
+    },
+    "close": "Close (Esc)",
+    "cancel": "Cancel",
+    "analyzing": "Reading previews… {{done}} / {{total}}",
+    "none": "No similar photos found here. Try a looser grouping.",
+    "groupOf": "Group {{index}} of {{count}}",
+    "photos_one": "{{count}} photo",
+    "photos_other": "{{count}} photos",
+    "status": {
+      "decided": "Keeper picked",
+      "keptAll": "Kept all"
+    },
+    "basis": {
+      "pick": "Your pick",
+      "rating": "Highest rated",
+      "sharpness": "Sharpest subject"
+    },
+    "closeCall": "Close call — check yourself",
+    "scoreTooltip": "Subject sharpness relative to the best frame of this group",
+    "keepAll": "Keep all",
+    "keepOne": "Pick keeper, reject others",
+    "showInGrid": "Show in grid",
+    "keysHint": "1–9 choose · ←/→ group · Esc close"
   }
 }

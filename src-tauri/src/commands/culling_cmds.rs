@@ -1,5 +1,7 @@
 use super::archive_cmds::ArchiveCatalogState;
+use rapidready_core::similarity::{FrameInput, GroupingResult};
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, State};
@@ -664,4 +666,50 @@ pub async fn set_date_override_batch(
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// Id of the run that may continue; any other run stops. Ids come from the frontend so a cancel
+/// for an old run can never stop a newer one, whatever order the calls arrive in.
+static SIMILAR_RUN: AtomicU64 = AtomicU64::new(0);
+
+#[derive(Serialize, Clone)]
+struct SimilarProgress {
+    done: usize,
+    total: usize,
+}
+
+/// Groups similar frames among `frames` and suggests a keeper per group. Emits
+/// `similar-groups-progress` while previews are read.
+#[tauri::command]
+pub async fn find_similar_groups(
+    app: AppHandle,
+    frames: Vec<FrameInput>,
+    sensitivity: f32,
+    run: u64,
+) -> Result<GroupingResult, String> {
+    SIMILAR_RUN.fetch_max(run, Ordering::Relaxed);
+    tauri::async_runtime::spawn_blocking(move || {
+        let last = AtomicUsize::new(0);
+        rapidready_core::similarity::group_similar(
+            &frames,
+            sensitivity,
+            rapidready_core::similarity::load_preview,
+            || SIMILAR_RUN.load(Ordering::Relaxed) != run,
+            |done, total| {
+                // About 100 updates per run are plenty for a progress bar.
+                let step = (total / 100).max(1);
+                if done == total || done >= last.load(Ordering::Relaxed) + step {
+                    last.store(done, Ordering::Relaxed);
+                    let _ = app.emit("similar-groups-progress", SimilarProgress { done, total });
+                }
+            },
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn cancel_similar_groups(run: u64) {
+    let _ = SIMILAR_RUN.compare_exchange(run, 0, Ordering::Relaxed, Ordering::Relaxed);
 }
