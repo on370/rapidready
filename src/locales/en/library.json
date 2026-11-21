@@ -98,7 +98,30 @@
     "noColorsInFolder": "No color labels in folder",
     "allTags": "All Tags",
     "tagFilter": "Tag",
-    "noTagsInFolder": "No tags in folder"
+    "noTagsInFolder": "No tags in folder",
+    "more": {
+      "label": "More filters",
+      "active_one": "1 more filter",
+      "active_other": "{{count}} more filters",
+      "tooltip": "Filter by capture date, camera, lens, file type and location",
+      "clear": "Clear these filters",
+      "date": "Capture date",
+      "from": "From",
+      "to": "To",
+      "camera": "Camera",
+      "lens": "Lens",
+      "any": "Any",
+      "fileType": "File type",
+      "fileTypes": {
+        "raw": "RAW",
+        "jpeg": "JPEG",
+        "video": "Video",
+        "other": "Other"
+      },
+      "location": "Location",
+      "withGps": "With GPS",
+      "withoutGps": "Without GPS"
+    }
   },
   "sort": {
     "label": "Sort by",
