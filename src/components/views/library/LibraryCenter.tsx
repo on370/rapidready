@@ -20,6 +20,7 @@ import { useToastStore } from "../../../stores/toastStore";
 import { useDialogStore } from "../../../stores/dialogStore";
 import { useCollectionsStore, findAlbumById } from "../../../stores/collectionsStore";
 import { openInConfiguredRawDeveloper } from "../../../stores/settingsStore";
+import { collectSelectionForExport } from "../../../utils/exportSelection";
 import { FolderHeart, Download, ArrowDownAZ, X } from "lucide-react";
 
 const numericCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
@@ -152,6 +153,7 @@ export function LibraryCenter({
   const collectionsTree = useCollectionsStore((s) => s.collectionsTree);
   const selectCollection = useCollectionsStore((s) => s.selectCollection);
   const openExportModal = useCollectionsStore((s) => s.openExportModal);
+  const openSelectionExportModal = useCollectionsStore((s) => s.openSelectionExportModal);
   const sortCollectionByExif = useCollectionsStore((s) => s.sortCollectionByExif);
   const removeFromCollection = useCollectionsStore((s) => s.removeFromCollection);
   const reorderImages = useCollectionsStore((s) => s.reorderImages);
@@ -1402,6 +1404,16 @@ export function LibraryCenter({
     }
   }, [selectedPaths, activeImage, createCollection, addToCollection, t]);
 
+  // Export the selection (in grid order, stack members included) via the collection export modal
+  const handleExportSelected = useCallback(() => {
+    const initialPaths = selectedPaths.size > 0
+      ? Array.from(selectedPaths)
+      : (activeImage ? [activeImage.path] : []);
+    const paths = collectSelectionForExport(displayedImages, initialPaths, { expandStacks: stackRawJpeg });
+    if (paths.length === 0) return;
+    openSelectionExportModal(paths);
+  }, [selectedPaths, activeImage, displayedImages, stackRawJpeg, openSelectionExportModal]);
+
   const handleContextMenu = useCallback((e: React.MouseEvent, path: string, index: number) => {
     e.preventDefault();
     e.stopPropagation();
@@ -1591,6 +1603,7 @@ export function LibraryCenter({
           onRemoveFromAllCollections={handleRemoveFromAllCollections}
           onAddToCollection={handleAddToCollection}
           onCreateCollectionAndAdd={handleCreateCollectionAndAdd}
+          onExportSelected={selectedPaths.size > 0 || activeImage ? handleExportSelected : undefined}
           zoomOptions={viewMode === 'loupe' ? {
             currentScale: loupeScale,
             onSetScale: (scale: number) => setLoupeScale(scale),

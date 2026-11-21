@@ -28,7 +28,8 @@ export type ExportResizeMode =
   | { mode: 'custom'; value: { width: number; height: number } };
 
 export interface CollectionExportOptions {
-  albumId: string;
+  /** Required for collection exports; omitted when exporting a selection. */
+  albumId?: string;
   destinationDir: string;
   filenamePrefix: string;
   digits: number;
@@ -37,6 +38,16 @@ export interface CollectionExportOptions {
   jpegQuality: number;
   synthesizeExifDates: boolean;
   isSequential: boolean;
+}
+
+/** What the export modal is exporting: a whole collection or an ad-hoc list of photos. */
+export type ExportTarget =
+  | { kind: 'collection'; album: Album }
+  | { kind: 'selection'; paths: string[] };
+
+/** Ordered file paths that an export target will write. */
+export function getExportTargetPaths(target: ExportTarget): string[] {
+  return target.kind === 'collection' ? target.album.images : target.paths;
 }
 
 export interface ExportProgress {
@@ -58,7 +69,7 @@ interface CollectionsStore {
 
   // Export Modal state
   isExportModalOpen: boolean;
-  exportTarget: Album | null;
+  exportTarget: ExportTarget | null;
 
   // Actions
   loadCollections: () => Promise<void>;
@@ -75,8 +86,11 @@ interface CollectionsStore {
   sortCollectionByExif: (albumId: string) => Promise<void>;
 
   openExportModal: (collection: Album) => void;
+  /** Opens the export modal for an explicit, already-ordered list of photo paths. */
+  openSelectionExportModal: (paths: string[]) => void;
   closeExportModal: () => void;
-  exportCollection: (options: CollectionExportOptions) => Promise<number>;
+  /** Runs the export for the current `exportTarget`. Resolves to the number of exported files. */
+  runExport: (options: Omit<CollectionExportOptions, 'albumId'>) => Promise<number>;
   cancelExport: () => Promise<void>;
 }
 
@@ -283,15 +297,27 @@ export const useCollectionsStore = create<CollectionsStore>((set, get) => ({
   },
 
   openExportModal: (collection: Album) => {
-    set({ isExportModalOpen: true, exportTarget: collection });
+    set({ isExportModalOpen: true, exportTarget: { kind: 'collection', album: collection } });
+  },
+
+  openSelectionExportModal: (paths: string[]) => {
+    if (paths.length === 0) return;
+    set({ isExportModalOpen: true, exportTarget: { kind: 'selection', paths } });
   },
 
   closeExportModal: () => {
     set({ isExportModalOpen: false, exportTarget: null });
   },
 
-  exportCollection: async (options: CollectionExportOptions) => {
-    return await invoke<number>('export_collection', { options });
+  runExport: async (options) => {
+    const target = get().exportTarget;
+    if (!target) throw new Error('No export target');
+    if (target.kind === 'collection') {
+      return await invoke<number>('export_collection', {
+        options: { ...options, albumId: target.album.id },
+      });
+    }
+    return await invoke<number>('export_photos', { paths: target.paths, options });
   },
 
   cancelExport: async () => {

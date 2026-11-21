@@ -16,8 +16,8 @@ export function HelpExport() {
         }
         subtitle={
           isEn
-            ? 'Export collections as real files, sequentially numbered, and enforce exact order in photo book software and cloud services using synthetic linear EXIF timestamps.'
-            : 'Sammlungen als echte Dateien exportieren, fortlaufend nummerieren und dank EXIF-Zeitsynthese die exakte Reihenfolge in Fotobuch-Software und Cloud-Diensten erzwingen.'
+            ? 'Export collections or selected photos as real files, sequentially numbered, and enforce exact order in photo book software and cloud services using synthetic linear EXIF timestamps.'
+            : 'Sammlungen oder ausgewählte Fotos als echte Dateien exportieren, fortlaufend nummerieren und dank EXIF-Zeitsynthese die exakte Reihenfolge in Fotobuch-Software und Cloud-Diensten erzwingen.'
         }
       />
 
@@ -127,6 +127,25 @@ export function HelpExport() {
             : 'Ergebnis: Deine kuratierte Reihenfolge bleibt in 100% aller Programme und Cloud-Alben exakt erhalten!'}
         </div>
       </div>
+
+      <TipBox title={isEn ? 'Export Selected Photos (Without a Collection)' : 'Ausgewählte Fotos exportieren (ohne Sammlung)'}>
+        {isEn ? (
+          <>
+            You don&apos;t need to create a collection first: select one or more photos in the grid, right-click
+            and choose <strong>&quot;Export selected…&quot;</strong>. The same export dialog opens for just those
+            photos, in the order they are shown in the grid. For RAW+JPG stacks, all files of the stack are
+            exported. Sequential numbering and linear EXIF times are available here too and follow the grid order.
+          </>
+        ) : (
+          <>
+            Du musst dafür keine Sammlung anlegen: Wähle ein oder mehrere Fotos im Raster aus, klicke mit der
+            rechten Maustaste und wähle <strong>„Auswahl exportieren…“</strong>. Es öffnet sich derselbe
+            Export-Dialog nur für diese Fotos, in der Reihenfolge, in der sie im Raster angezeigt werden. Bei
+            RAW+JPG-Stapeln werden alle Dateien des Stapels exportiert. Fortlaufende Nummerierung und lineare
+            EXIF-Zeiten stehen auch hier zur Verfügung und folgen der Rasterreihenfolge.
+          </>
+        )}
+      </TipBox>
 
       <TipBox title={isEn ? 'Live Filename Preview' : 'Live-Dateinamen-Vorschau'}>
         {isEn ? (

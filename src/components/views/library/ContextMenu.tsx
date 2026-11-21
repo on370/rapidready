@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { 
   RotateCw, RotateCcw, Check, X, CircleSlash, Star, Rocket, 
-  FolderOpen, FolderMinus, Bookmark, BookmarkPlus, ChevronRight, Plus 
+  FolderOpen, FolderMinus, Bookmark, BookmarkPlus, ChevronRight, Plus, Download
 } from 'lucide-react';
 import { isMac, modSymbol, shiftSymbol } from '../../../utils/platform';
 import { COLOR_PALETTE } from '../../../constants/culling';
@@ -47,6 +47,8 @@ export interface ContextMenuProps {
   onRemoveFromAllCollections?: (albumIds: string[]) => void;
   onAddToCollection?: (albumId: string) => void;
   onCreateCollectionAndAdd?: (name: string) => void;
+  /** Opens the export modal for the current selection. Hidden when not provided. */
+  onExportSelected?: () => void;
 }
 
 export const ContextMenu: React.FC<ContextMenuProps> = ({
@@ -67,6 +69,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
   onRemoveFromAllCollections,
   onAddToCollection,
   onCreateCollectionAndAdd,
+  onExportSelected,
 }) => {
   const { t, i18n } = useTranslation('library');
   const isEn = i18n.language?.startsWith('en');
@@ -107,7 +110,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
 
   // Adjust coordinates so the menu doesn't overflow screen
   const menuWidth = 240;
-  const menuHeight = zoomOptions ? 490 : 400;
+  const menuHeight = zoomOptions ? 520 : 430;
   // If not enough room to the right, open to the left of the cursor
   const adjX = x + menuWidth > window.innerWidth - 10
     ? Math.max(10, x - menuWidth)
@@ -500,6 +503,23 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Export the current selection through the collection export pipeline */}
+      {onExportSelected && selectedCount > 0 && (
+        <div className="px-1 py-0.5">
+          <button
+            onClick={() => { onExportSelected(); onClose(); }}
+            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-accent hover:text-white transition-colors cursor-pointer group"
+          >
+            <Download className="w-3.5 h-3.5 text-accent group-hover:text-white" />
+            <span>
+              {selectedCount > 1
+                ? t('contextMenu.exportSelectedCount', { count: selectedCount })
+                : t('contextMenu.exportSelected')}
+            </span>
+          </button>
         </div>
       )}
 

@@ -84,7 +84,10 @@
     "pick": "Als Auswahl markieren",
     "reject": "Als verworfen markieren",
     "unrated": "Markierung aufheben",
-    "rating": "Bewertung:"
+    "rating": "Bewertung:",
+    "exportSelected": "Auswahl exportieren…",
+    "exportSelectedCount_one": "{{count}} ausgewähltes Foto exportieren…",
+    "exportSelectedCount_other": "{{count}} ausgewählte Fotos exportieren…"
   },
   "filters": {
     "label": "Filter:",
@@ -522,7 +525,11 @@
     "qualityLabel": "JPEG-Qualität:",
     "exporting": "Exportiere...",
     "startExport": "Exportieren starten",
-    "exportSuccess": "{{count}} Fotos erfolgreich exportiert!"
+    "exportSuccess": "{{count}} Fotos erfolgreich exportiert!",
+    "titleSelection_one": "{{count}} ausgewähltes Foto exportieren",
+    "titleSelection_other": "{{count}} ausgewählte Fotos exportieren",
+    "selectionSubtitle": "In der Reihenfolge des Rasters",
+    "sequentialTitleSelection": "Rasterreihenfolge als Sequenz erzwingen (Fotobuch & Web)"
   },
   "scanMenu": {
     "refreshFolder": "Aktuellen Ordner aktualisieren",
