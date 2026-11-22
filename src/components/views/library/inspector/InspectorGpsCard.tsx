@@ -12,6 +12,8 @@ import { GpsCandidate, MapPickerModal } from "./MapPickerModal";
 
 export type { GpsCandidate };
 
+const EMPTY_CANDIDATES: GpsCandidate[] = [];
+
 interface InspectorGpsCardProps {
   activeImage: LibraryImage;
   isCollapsed: boolean;
@@ -28,7 +30,9 @@ export function InspectorGpsCard({
   onToggleMap,
 }: InspectorGpsCardProps) {
   const { t } = useTranslation("library");
-  const { selectedPaths, images, updateBatchGps } = useLibraryStore();
+  const selectedPaths = useLibraryStore((s) => s.selectedPaths);
+  const images = useLibraryStore((s) => s.images);
+  const updateBatchGps = useLibraryStore((s) => s.updateBatchGps);
   const gpsMapProvider = useSettingsStore((s) => s.gpsMapProvider);
 
   const [isMapModalOpen, setIsMapModalOpen] = useState(false);
@@ -56,7 +60,7 @@ export function InspectorGpsCard({
 
   const candidateLocations = useMemo<GpsCandidate[]>(() => {
     if (!isMapModalOpen || !isMultiSelected) {
-      return [];
+      return EMPTY_CANDIDATES;
     }
     const groups = new Map<string, GpsCandidate>();
     for (const img of images) {
@@ -74,6 +78,9 @@ export function InspectorGpsCard({
           count: 1,
         });
       }
+    }
+    if (groups.size === 0) {
+      return EMPTY_CANDIDATES;
     }
     return Array.from(groups.values());
   }, [isMapModalOpen, isMultiSelected, images, selectedPaths]);

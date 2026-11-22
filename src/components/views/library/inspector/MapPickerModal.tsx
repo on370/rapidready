@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import L from "leaflet";
@@ -47,6 +47,7 @@ interface PlaceSearchResult {
 }
 
 const DEFAULT_MAP_CENTER = { lat: 48.137, lng: 11.575, zoom: 5 };
+const EMPTY_CANDIDATES: GpsCandidate[] = [];
 let lastMapView: { lat: number; lng: number; zoom: number } | null = null;
 
 function createPinIcon(): L.DivIcon {
@@ -169,7 +170,7 @@ export function MapPickerModal({
   initialLatitude,
   initialLongitude,
   selectedCount,
-  candidateLocations = [],
+  candidateLocations = EMPTY_CANDIDATES,
   externalMapProvider,
   onOpenExternal,
   onClose,
@@ -198,6 +199,14 @@ export function MapPickerModal({
   const [searchStatusMessage, setSearchStatusMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
+  const candidateLocationsRef = useRef(candidateLocations);
+  candidateLocationsRef.current = candidateLocations;
+
+  const candidatesKey = useMemo(
+    () => candidateLocations.map((c) => `${c.latitude},${c.longitude},${c.altitude ?? ""},${c.count}`).join("|"),
+    [candidateLocations]
+  );
+
   useEffect(() => {
     if (!isOpen) {
       abortControllerRef.current?.abort();
@@ -213,12 +222,13 @@ export function MapPickerModal({
       return;
     }
 
+    const candidates = candidateLocationsRef.current;
     setMode(initialMode);
-    if (initialMode === "edit" && candidateLocations.length === 1) {
-      const single = candidateLocations[0];
+    if (initialMode === "edit" && candidates.length === 1) {
+      const single = candidates[0];
       setPicked({ lat: single.latitude, lng: single.longitude });
       setParsedAltitude(single.altitude);
-    } else if (initialMode === "edit" && candidateLocations.length > 1) {
+    } else if (initialMode === "edit" && candidates.length > 1) {
       setPicked(null);
       setParsedAltitude(undefined);
     } else if (initialLatitude != null && initialLongitude != null) {
@@ -233,7 +243,7 @@ export function MapPickerModal({
     setSearchResults([]);
     setIsDropdownOpen(false);
     setSearchStatusMessage(null);
-  }, [isOpen, initialMode, initialLatitude, initialLongitude, candidateLocations]);
+  }, [isOpen, initialMode, initialLatitude, initialLongitude, candidatesKey]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -284,17 +294,18 @@ export function MapPickerModal({
   useEffect(() => {
     if (!isOpen || !mapContainerRef.current) return;
 
-    const isSingleCandidateEdit = initialMode === "edit" && candidateLocations.length === 1;
-    const isMultiCandidateEdit = initialMode === "edit" && candidateLocations.length > 1;
+    const candidates = candidateLocationsRef.current;
+    const isSingleCandidateEdit = initialMode === "edit" && candidates.length === 1;
+    const isMultiCandidateEdit = initialMode === "edit" && candidates.length > 1;
     const hasInitial = initialLatitude != null && initialLongitude != null;
 
     const startLat = isSingleCandidateEdit
-      ? candidateLocations[0].latitude
+      ? candidates[0].latitude
       : hasInitial
         ? initialLatitude
         : (lastMapView?.lat ?? DEFAULT_MAP_CENTER.lat);
     const startLng = isSingleCandidateEdit
-      ? candidateLocations[0].longitude
+      ? candidates[0].longitude
       : hasInitial
         ? initialLongitude
         : (lastMapView?.lng ?? DEFAULT_MAP_CENTER.lng);
@@ -315,10 +326,10 @@ export function MapPickerModal({
     }).addTo(map);
 
     if (isSingleCandidateEdit) {
-      placeOrMoveMarker(candidateLocations[0].latitude, candidateLocations[0].longitude);
+      placeOrMoveMarker(candidates[0].latitude, candidates[0].longitude);
     } else if (isMultiCandidateEdit) {
       const boundsPoints: [number, number][] = [];
-      for (const cand of candidateLocations) {
+      for (const cand of candidates) {
         boundsPoints.push([cand.latitude, cand.longitude]);
         const cMarker = L.marker([cand.latitude, cand.longitude], {
           icon: createCandidateIcon(cand.count),
@@ -364,9 +375,9 @@ export function MapPickerModal({
 
     const rafId = window.requestAnimationFrame(() => {
       map.invalidateSize();
-      if (isMultiCandidateEdit && candidateLocations.length > 1) {
+      if (isMultiCandidateEdit && candidates.length > 1) {
         map.fitBounds(
-          L.latLngBounds(candidateLocations.map((c) => [c.latitude, c.longitude] as [number, number])),
+          L.latLngBounds(candidates.map((c) => [c.latitude, c.longitude] as [number, number])),
           { padding: [48, 48], maxZoom: 14 }
         );
       }
@@ -380,7 +391,7 @@ export function MapPickerModal({
       mapInstanceRef.current = null;
       map.remove();
     };
-  }, [isOpen, initialMode, initialLatitude, initialLongitude, candidateLocations, placeOrMoveMarker]);
+  }, [isOpen, initialMode, initialLatitude, initialLongitude, candidatesKey, placeOrMoveMarker]);
 
   useEffect(() => {
     if (!isOpen) return;
