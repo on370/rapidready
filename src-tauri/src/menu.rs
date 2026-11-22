@@ -1,6 +1,110 @@
 use tauri::AppHandle;
 use tauri::menu::{Menu, Submenu, MenuItem, PredefinedMenuItem};
 
+#[cfg(target_os = "linux")]
+pub fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
+    let view_settings = MenuItem::with_id(
+        app,
+        "view_settings",
+        "Settings",
+        true,
+        Some("CmdOrCtrl+,"),
+    )?;
+
+    let file_menu = Submenu::with_items(
+        app,
+        "File",
+        true,
+        &[
+            &view_settings,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::quit(app, None)?,
+        ],
+    )?;
+
+    let view_import = MenuItem::with_id(
+        app,
+        "view_import",
+        "Import",
+        true,
+        Some("CmdOrCtrl+1"),
+    )?;
+
+    let view_library = MenuItem::with_id(
+        app,
+        "view_library",
+        "Library",
+        true,
+        Some("CmdOrCtrl+2"),
+    )?;
+
+    let view_menu = Submenu::with_items(
+        app,
+        "View",
+        true,
+        &[
+            &view_import,
+            &view_library,
+        ],
+    )?;
+
+    let help_item = MenuItem::with_id(
+        app,
+        "open_help",
+        "RapidReady Help",
+        true,
+        Some("CmdOrCtrl+Shift+?"),
+    )?;
+
+    let start_tour_item = MenuItem::with_id(
+        app,
+        "start_guided_tour",
+        "Start Guided Tour...",
+        true,
+        None::<&str>,
+    )?;
+
+    let check_updates_help_item = MenuItem::with_id(
+        app,
+        "check_updates_help",
+        "Check for Updates...",
+        true,
+        None::<&str>,
+    )?;
+
+    let about_help_item = MenuItem::with_id(
+        app,
+        "open_about_help",
+        "About RapidReady",
+        true,
+        None::<&str>,
+    )?;
+
+    let help_menu = Submenu::with_items(
+        app,
+        "Help",
+        true,
+        &[
+            &help_item,
+            &start_tour_item,
+            &PredefinedMenuItem::separator(app)?,
+            &check_updates_help_item,
+            &PredefinedMenuItem::separator(app)?,
+            &about_help_item,
+        ],
+    )?;
+
+    Menu::with_items(
+        app,
+        &[
+            &file_menu,
+            &view_menu,
+            &help_menu,
+        ],
+    )
+}
+
+#[cfg(not(target_os = "linux"))]
 pub fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let about_item = MenuItem::with_id(
         app,
