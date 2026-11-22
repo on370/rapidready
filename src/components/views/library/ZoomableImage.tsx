@@ -346,7 +346,7 @@ export function ZoomableImage({ src, previewSrc, alt, onContextMenu, resetZoomKe
               : '3/2',
           }}
         >
-          <img src={currentSrc} className="w-full h-full object-fill opacity-50 pointer-events-none" />
+          <img src={currentSrc} crossOrigin="anonymous" className="w-full h-full object-fill opacity-50 pointer-events-none" />
           <div 
             className="absolute border border-accent bg-accent/20 pointer-events-none"
             style={{

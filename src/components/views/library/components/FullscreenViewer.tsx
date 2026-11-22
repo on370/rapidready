@@ -311,6 +311,7 @@ export const FullscreenViewer = React.memo(function FullscreenViewer({
           const targetUrl = (!isItemRaw && fSrc) ? fSrc : pSrc;
           if (targetUrl) {
             const preImg = new Image();
+            preImg.crossOrigin = 'anonymous';
             preImg.src = targetUrl;
           }
         }
@@ -569,6 +570,7 @@ export const FullscreenViewer = React.memo(function FullscreenViewer({
                   alt=""
                   aria-hidden="true"
                   draggable={false}
+                  crossOrigin="anonymous"
                   className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none animate-crossfade-out z-0"
                 />
               )}
@@ -578,6 +580,7 @@ export const FullscreenViewer = React.memo(function FullscreenViewer({
                 ref={mainImgRef}
                 src={displaySrc}
                 alt={currentImage.name}
+                crossOrigin="anonymous"
                 className={`w-full h-full object-contain select-none pointer-events-none relative z-10 ${
                   prevDisplaySrc && !isZoomed ? 'animate-crossfade-in' : ''
                 }`}

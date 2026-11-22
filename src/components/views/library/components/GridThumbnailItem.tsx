@@ -149,6 +149,7 @@ export const GridThumbnailItem = React.memo(function GridThumbnailItem({
         draggable={false}
         loading="eager"
         decoding="async"
+        crossOrigin="anonymous"
         src={getRrImageUrl(img.path, false, img.culling?.orientation, scale, img.size, img.mtime)} 
         style={{ opacity: isCached ? 1 : 0 }}
         className="w-full h-full object-contain relative z-10 pointer-events-none" 

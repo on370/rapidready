@@ -51,7 +51,6 @@ export function InspectorPreviewCard({
     setLoadFailed(false);
   }, [activeImage.path]);
 
-  const needsCors = focusPeakingEnabled || inspectorHistogramMode !== 'off';
   const triggerUpdate = `${previewUrl}|${imageLoadTick}`;
 
   return (
@@ -160,11 +159,11 @@ export function InspectorPreviewCard({
             ) : (
               <>
                 <img 
-                  key={`${activeImage.path}|${needsCors ? 'cors' : 'plain'}`}
+                  key={activeImage.path}
                   ref={inspectorImageRef}
                   src={previewUrl} 
                   alt={activeImage.name} 
-                  crossOrigin={needsCors ? "anonymous" : undefined}
+                  crossOrigin="anonymous"
                   onLoad={() => {
                     setLoadFailed(false);
                     setImageLoadTick((n) => n + 1);

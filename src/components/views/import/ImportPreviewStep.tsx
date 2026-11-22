@@ -608,6 +608,7 @@ export function ImportPreviewStep({ onBack }: ImportPreviewStepProps = {}) {
                 <img 
                   src={getRrImageUrl(selectedPair.previewFile.path, false, undefined, 2)} 
                   alt={selectedPair.stem}
+                  crossOrigin="anonymous"
                   className={`w-full h-full object-contain ${selectedPair.allImported ? 'opacity-50' : ''}`}
                   loading="lazy"
                   onError={(e) => {
@@ -623,6 +624,7 @@ export function ImportPreviewStep({ onBack }: ImportPreviewStepProps = {}) {
                 <img 
                   src={getRrImageUrl(selectedPair.previewFile.path, true)} 
                   alt={selectedPair.stem}
+                  crossOrigin="anonymous"
                   onLoad={() => setFullresLoaded(true)}
                   className={`absolute inset-0 w-full h-full object-contain transition-opacity duration-300 ${
                     fullresLoaded ? (selectedPair.allImported ? 'opacity-50' : 'opacity-100') : 'opacity-0 pointer-events-none'

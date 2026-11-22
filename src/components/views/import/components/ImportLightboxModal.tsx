@@ -84,6 +84,7 @@ export function ImportLightboxModal({
     setCurrentSrc(previewSrc);
 
     const img = new Image();
+    img.crossOrigin = 'anonymous';
     img.src = fullresSrc;
     if (img.complete && img.naturalWidth > 0) {
       setCurrentSrc(fullresSrc);
@@ -506,6 +507,7 @@ export function ImportLightboxModal({
             <img
               src={currentSrc}
               alt=""
+              crossOrigin="anonymous"
               className="w-full h-full object-fill opacity-50 pointer-events-none"
             />
             <div
@@ -525,6 +527,7 @@ export function ImportLightboxModal({
           ref={imageRef}
           src={currentSrc}
           alt={pair.stem}
+          crossOrigin="anonymous"
           onMouseDown={onMouseDown}
           onClick={handleImageClick}
           className={`select-none ${!isDragging ? "transition-transform duration-150" : ""}`}

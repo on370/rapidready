@@ -78,6 +78,7 @@ export const FilmstripThumbnailItem = React.memo(function FilmstripThumbnailItem
       <img 
         loading="eager"
         decoding="async"
+        crossOrigin="anonymous"
         src={getRrImageUrl(img.path, false, img.culling?.orientation, 1, img.size, img.mtime)} 
         style={{ opacity: loaded ? 1 : 0 }}
         className="w-full h-full object-contain pointer-events-none relative z-10" 
