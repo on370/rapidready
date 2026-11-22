@@ -5,6 +5,7 @@ use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 
 mod formatters;
+mod linux_mounts;
 mod monochrome;
 
 pub use formatters::*;
@@ -166,13 +167,31 @@ pub fn is_network_or_remote_path(path: &Path) -> bool {
         use std::ffi::CString;
         use std::os::unix::ffi::OsStrExt;
 
+        // Primary: the mount table knows the real filesystem type, including SMB2/3,
+        // NFS4 and FUSE-based network mounts (gvfs, kio-fuse, sshfs, rclone).
+        if let Some(is_remote) = linux_mounts::is_remote_mount(path) {
+            return is_remote;
+        }
+
+        // Fallback (no /proc, e.g. restricted sandboxes): statfs magic numbers.
+        const NFS_SUPER_MAGIC: u32 = 0x6969;
+        const SMB_SUPER_MAGIC: u32 = 0x517B;
+        const CIFS_SUPER_MAGIC: u32 = 0xFF53_4D42;
+        const SMB2_SUPER_MAGIC: u32 = 0xFE53_4D42;
+        const CEPH_SUPER_MAGIC: u32 = 0x00C3_6400;
+
         let existing_path = path.ancestors().find(|a| a.exists()).unwrap_or(path);
 
         if let Ok(c_path) = CString::new(existing_path.as_os_str().as_bytes()) {
             let mut stat: libc::statfs = unsafe { std::mem::zeroed() };
             if unsafe { libc::statfs(c_path.as_ptr(), &mut stat) } == 0 {
-                let f_type = stat.f_type as i64;
-                if f_type == 0x6969 || f_type == 0x517B || f_type == 0xFF534D42 {
+                // f_type is a signed word whose width depends on the target; the magic
+                // numbers are 32-bit, so compare the low 32 bits (correct on 32-bit ARM too).
+                let f_type = stat.f_type as u32;
+                if matches!(
+                    f_type,
+                    NFS_SUPER_MAGIC | SMB_SUPER_MAGIC | CIFS_SUPER_MAGIC | SMB2_SUPER_MAGIC | CEPH_SUPER_MAGIC
+                ) {
                     return true;
                 }
             }

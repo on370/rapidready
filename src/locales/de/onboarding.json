@@ -52,7 +52,7 @@
     },
     "libraryFolderTree": {
       "title": "Archiv-Ordnerbaum",
-      "body": "Durchstöbere Dein gesamtes Archiv nach Ordnerstruktur. Halte **Strg/⌘** gedrückt, um mehrere Ordner gleichzeitig zu wählen, oder **Shift** für einen zusammenhängenden Bereich.\n\nRechtsklick auf einen Ordner für Optionen: Im Explorer/Finder anzeigen, Umbenennen, Unterordner erstellen oder Löschen (mit Sicherheits-Guardrails)."
+      "body": "Durchstöbere Dein gesamtes Archiv nach Ordnerstruktur. Halte **Strg/⌘** gedrückt, um mehrere Ordner gleichzeitig zu wählen, oder **Shift** für einen zusammenhängenden Bereich.\n\nRechtsklick auf einen Ordner für Optionen: Im Explorer/Finder/Dateimanager anzeigen, Umbenennen, Unterordner erstellen oder Löschen (mit Sicherheits-Guardrails)."
     },
     "libraryCollections": {
       "title": "Sammlungen & Alben",

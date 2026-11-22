@@ -6,7 +6,7 @@ import {
   FolderPlus, Trash2, XCircle, Pencil, RefreshCw 
 } from 'lucide-react';
 import { useSettingsStore } from '../../../../stores/settingsStore';
-import { isMac } from '../../../../utils/platform';
+import { revealLabel } from '../../../../utils/platform';
 
 export interface FolderContextMenuProps {
   x: number;
@@ -119,7 +119,7 @@ export const FolderContextMenu: React.FC<FolderContextMenuProps> = ({
           >
             <FolderOpen className="w-3.5 h-3.5 text-accent flex-shrink-0" />
             <span className="truncate">
-              {isMac ? t('folderMenu.showInFinder', 'Im Finder anzeigen') : t('folderMenu.showInExplorer', 'Im Explorer anzeigen')}
+              {revealLabel({ finder: t('folderMenu.showInFinder', 'Im Finder anzeigen'), explorer: t('folderMenu.showInExplorer', 'Im Explorer anzeigen'), fileManager: t('folderMenu.showInFileManager', 'Im Dateimanager anzeigen') })}
             </span>
           </button>
         )}

@@ -88,6 +88,28 @@ pub fn run() {
             if let Ok(menu) = menu::build_menu(handle) {
                 app.set_menu(menu)?;
             }
+
+            // Linux: GTK draws the menu bar inside the window, so (like on Windows) it would stay
+            // visible in fullscreen. Follow the real GDK window state instead of the Resized event:
+            // Tauri's is_fullscreen() only tracks fullscreen requested through its own API on Linux,
+            // not fullscreen toggled by the window manager (e.g. a desktop keyboard shortcut).
+            #[cfg(target_os = "linux")]
+            if let Some(main_window) = app.get_webview_window("main") {
+                if let Ok(gtk_window) = main_window.gtk_window() {
+                    use gtk::prelude::*;
+                    let menu_window = main_window.clone();
+                    gtk_window.connect_window_state_event(move |_, event| {
+                        if event.changed_mask().contains(gtk::gdk::WindowState::FULLSCREEN) {
+                            if event.new_window_state().contains(gtk::gdk::WindowState::FULLSCREEN) {
+                                let _ = menu_window.hide_menu();
+                            } else {
+                                let _ = menu_window.show_menu();
+                            }
+                        }
+                        gtk::glib::Propagation::Proceed
+                    });
+                }
+            }
             app.on_menu_event(move |app, event| {
                 if event.id() == "open_help" {
                     let _ = app.emit("toggle-help-modal", ());

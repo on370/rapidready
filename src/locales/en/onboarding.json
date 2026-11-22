@@ -52,7 +52,7 @@
     },
     "libraryFolderTree": {
       "title": "Archive Folder Tree",
-      "body": "Browse your entire archive by folder hierarchy. Hold **Ctrl/⌘** to select multiple folders at once, or **Shift** for a contiguous range.\n\nRight-click any folder for options: Reveal in Explorer/Finder, Rename, Create Subfolder, or Delete (with safety guardrails)."
+      "body": "Browse your entire archive by folder hierarchy. Hold **Ctrl/⌘** to select multiple folders at once, or **Shift** for a contiguous range.\n\nRight-click any folder for options: Reveal in Explorer/Finder/File Manager, Rename, Create Subfolder, or Delete (with safety guardrails)."
     },
     "libraryCollections": {
       "title": "Collections & Virtual Albums",

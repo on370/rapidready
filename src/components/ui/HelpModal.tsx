@@ -329,6 +329,8 @@ export function HelpModal() {
           'rapidraw',
           'explorer',
           'finder',
+          'file manager',
+          'dateimanager',
           'guardrails',
         ],
         component: HelpSafety,

@@ -17,7 +17,7 @@ import { useSettingsStore, getRawDeveloperDisplayName, openInConfiguredRawDevelo
 import { HelpPopover } from '../../../ui/HelpPopover';
 import { COLOR_PALETTE, getColorConfig } from '../../../../constants/culling';
 import { normalizeSlash } from '../../../../utils/image';
-import { isMac, modSymbol, shiftSymbol } from '../../../../utils/platform';
+import { modSymbol, shiftSymbol, revealLabel } from '../../../../utils/platform';
 
 export interface CullingToolbarProps {
   activeImage: LibraryImage | undefined;
@@ -1100,7 +1100,7 @@ export const CullingToolbar = React.memo(function CullingToolbar({
               >
                 <div className="flex items-center gap-2">
                   <FolderOpen className="w-3.5 h-3.5 text-txt-tertiary group-hover:text-txt-primary transition-colors" />
-                  <span>{isMac ? t('toolbar.showInFinder') : t('toolbar.showInExplorer')}</span>
+                  <span>{revealLabel({ finder: t('toolbar.showInFinder'), explorer: t('toolbar.showInExplorer'), fileManager: t('toolbar.showInFileManager') })}</span>
                 </div>
                 <kbd className="text-[10px] text-txt-tertiary font-mono px-1 py-0.5 rounded bg-app-panel border border-app-border">
                   {modSymbol}{shiftSymbol}F

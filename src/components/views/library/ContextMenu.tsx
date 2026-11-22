@@ -5,7 +5,7 @@ import {
   RotateCw, RotateCcw, Check, X, CircleSlash, Star, Rocket, 
   FolderOpen, FolderMinus, Bookmark, BookmarkPlus, ChevronRight, Plus 
 } from 'lucide-react';
-import { isMac, modSymbol, shiftSymbol } from '../../../utils/platform';
+import { modSymbol, shiftSymbol, revealLabel } from '../../../utils/platform';
 import { COLOR_PALETTE } from '../../../constants/culling';
 import { useCollectionsStore, AlbumItem, findAlbumsContainingPaths } from '../../../stores/collectionsStore';
 import { useSettingsStore, getRawDeveloperDisplayName } from '../../../stores/settingsStore';
@@ -526,7 +526,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
         >
           <div className="flex items-center gap-2">
             <FolderOpen className="w-3.5 h-3.5 text-txt-tertiary group-hover:text-txt-primary" />
-            <span>{isMac ? t('toolbar.showInFinder') : (t('toolbar.showInExplorer', 'Im Explorer'))}</span>
+            <span>{revealLabel({ finder: t('toolbar.showInFinder'), explorer: t('toolbar.showInExplorer', 'Im Explorer'), fileManager: t('toolbar.showInFileManager', 'Im Dateimanager') })}</span>
           </div>
           <span className="text-[10px] text-txt-tertiary font-mono">{modSymbol}{shiftSymbol}F</span>
         </button>
