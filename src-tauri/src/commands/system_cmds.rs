@@ -68,12 +68,14 @@ pub fn is_system_critical_path(path: &Path) -> bool {
         "z:",
     ];
 
-    if forbidden.contains(&trimmed) {
+    let lower = trimmed.to_lowercase();
+
+    if forbidden.contains(&lower.as_str()) {
         return true;
     }
 
     // Windows root drive check (e.g. "c:" or "c:/")
-    if (trimmed.len() == 2 && trimmed.ends_with(':')) || (trimmed.len() == 3 && trimmed.chars().nth(1) == Some(':') && trimmed.ends_with('/')) {
+    if (lower.len() == 2 && lower.ends_with(':')) || (lower.len() == 3 && lower.chars().nth(1) == Some(':') && lower.ends_with('/')) {
         return true;
     }
 
@@ -791,6 +793,21 @@ pub fn open_in_rapidraw(
             }
             #[cfg(not(any(target_os = "macos", target_os = "windows")))]
             {
+                // Try native rapidraw binary (system install or flatpak wrapper)
+                if let Ok(mut child) = std::process::Command::new("rapidraw")
+                    .arg(&file_to_open)
+                    .stdin(std::process::Stdio::null())
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .spawn()
+                {
+                    // Reap the child in the background to avoid a zombie process.
+                    std::thread::spawn(move || {
+                        let _ = child.wait();
+                    });
+                    return Ok(());
+                }
+
                 open_system_default(&file_to_open)
             }
         }
