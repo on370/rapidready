@@ -34,7 +34,7 @@ Even if you aren't heading into full RAW development right away, RapidReady is a
 - **RAW + JPEG Stacking & Seamless Variant Comparison:** Optional 1:N virtual stacking of RAWs with companion JPEGs (same folder or direct subfolders like `LR/JPG`, `Export/JPG`) into unified grid tiles with dynamic badge truncation. Zero-latency variant cycling (`J` key) in Loupe View preserves 1:1 sensor-zoom point and pan position.
 - **Editorial Metadata, Rights Management & Capture Date Honesty:** Full non-destructive metadata management via companion sidecars (`.rrdata` & `.xmp`). Features global master metadata presets in Settings, dynamic `{year}` copyright macros evaluated per image capture date, shoot-level title/description overrides during import, and an inline date editor in the Inspector with manual badges and 1-click archive folder relocation for date mismatches. See the [Metadata & Date Management Guide](docs/README_METADATA.md).
 - **Multilingual (i18n):** Full native support for English and German interfaces.
-- **Cross-Platform Foundation:** Built on [Tauri v2](https://v2.tauri.app/), [React](https://react.dev/), and [Rust](https://www.rust-lang.org/) for native OS performance on macOS, Windows, and Linux (experimental) with a beautiful, modern UI.
+- **Cross-Platform Foundation:** Built on [Tauri v2](https://v2.tauri.app/), [React](https://react.dev/), and [Rust](https://www.rust-lang.org/) for native OS performance on macOS, Windows, and Linux (AppImage) with a beautiful, modern UI.
 
 ## 📸 Supported Formats & Media
 
@@ -89,6 +89,14 @@ To cull and organize images managed by Apple Photos:
 > xattr -cr /Applications/RapidReady.app
 > ```
 > *Alternatively: Right-click (or Control-click) `RapidReady.app` in your Applications folder, select **Open**, and click **Open** in the dialog.*
+
+### Linux (AppImage)
+1. Download the latest `.AppImage` (`RapidReady_<version>_amd64.AppImage`) from the **[Releases](https://github.com/on370/rapidready/releases)** page.
+2. Make the file executable:
+   ```bash
+   chmod +x RapidReady_*.AppImage
+   ```
+3. Run the AppImage directly (`./RapidReady_*.AppImage`) or integrate it with your desktop launcher (e.g. AppImageLauncher).
 
 ## 💻 Development & Building from Source
 

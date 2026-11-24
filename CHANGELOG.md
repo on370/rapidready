@@ -5,6 +5,13 @@ All notable changes to RapidReady will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.4] - 2026-11-24
+
+Distribution release introducing official **Linux AppImage** release builds alongside macOS and Windows.
+
+### Added & Improved
+- **Linux Release Packaging (`AppImage`):** RapidReady is now officially published for Linux as a standalone `AppImage` binary (currently AppImage only).
+
 ## [0.6.3] - 2026-11-20
 
 Feature and polish release introducing an integrated interactive OpenStreetMap location preview, viewer, and editor with place search and multi-selection candidate pins, a new `Folder & Date` grid sort mode, experimental Linux support, RapidRAW 1.6.9+ `.rrdata` compatibility, universal RAW + derivative stacking suffixes/badges, and inspector/orientation stability fixes.
