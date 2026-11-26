@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useSettingsStore } from "../../../stores/settingsStore";
-import { Bookmark, ChevronDown, Plus, HardDrive, Folder, ChevronRight, FolderOpen, Sparkles, Loader2, Camera, RefreshCw, Images, Zap, AlertTriangle, Trash2 } from "lucide-react";
+import { Bookmark, ChevronDown, Plus, HardDrive, Folder, ChevronRight, FolderOpen, Sparkles, Loader2, Camera, RefreshCw, Images, Zap, AlertTriangle, Trash2, Clock } from "lucide-react";
 import { open, ask } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
 import { useLibraryStore, LibraryImage } from "../../../stores/libraryStore";
@@ -337,7 +337,7 @@ function TreeView({
 
 export function LibraryLeftSidebar() {
   const { t } = useTranslation('library');
-  const { lastLibraryPath, setLastLibraryPath, locations, addLocation } = useSettingsStore();
+  const { lastLibraryPath, setLastLibraryPath, locations, addLocation, recentPaths, addRecentPath } = useSettingsStore();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [collectionsOpen, setCollectionsOpen] = useState(true);
   const [libraryOpen, setLibraryOpen] = useState(true);
@@ -380,6 +380,26 @@ export function LibraryLeftSidebar() {
   const isFullyIndexed = useLibraryStore((s) => s.isFullyIndexed);
   const loadArchive = useLibraryStore((s) => s.loadArchive);
   const activeImageFolder = useLibraryStore((s) => s.activeImageFolder);
+
+  const isCurrentRootInLocations = useMemo(() => {
+    if (!rootPath) return true;
+    const normRoot = normalizePath(rootPath);
+    return locations.some((l) => normalizePath(l.path) === normRoot);
+  }, [rootPath, locations]);
+
+  const tempRecentPaths = useMemo(() => {
+    const locationNorms = new Set(locations.map((l) => normalizePath(l.path)));
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const p of recentPaths) {
+      const norm = normalizePath(p);
+      if (locationNorms.has(norm) || seen.has(norm)) continue;
+      seen.add(norm);
+      result.push(p);
+      if (result.length >= 5) break;
+    }
+    return result;
+  }, [recentPaths, locations]);
 
   const activeCollectionId = useCollectionsStore((s) => s.activeCollectionId);
   const selectCollection = useCollectionsStore((s) => s.selectCollection);
@@ -687,7 +707,7 @@ export function LibraryLeftSidebar() {
       setIsViewingLastImport(false);
       const subtree = collectAllFolderPaths(node);
       effectiveSelected = new Set(subtree);
-      store.setSelectedFolderPaths(effectiveSelected);
+      store.setSelectedFolderPaths(effectiveSelected, node.path);
       lastClickedFolderRef.current = normNode;
     } else {
       // Right-clicked inside existing selection -> preserve active selection
@@ -834,7 +854,7 @@ export function LibraryLeftSidebar() {
       const normTarget = normalizePath(targetNode.path);
       const subtreePaths = collectAllFolderPaths(targetNode);
 
-      libState.setSelectedFolderPaths(new Set(subtreePaths));
+      libState.setSelectedFolderPaths(new Set(subtreePaths), targetNode.path);
       lastClickedFolderRef.current = normTarget;
 
       // Ordner im Sidebar-Tree sanft ins Sichtfeld scrollen
@@ -885,7 +905,7 @@ export function LibraryLeftSidebar() {
           const paths = collectAllFolderPaths(visibleNodes[i]);
           for (const p of paths) nextSelected.add(p);
         }
-        useLibraryStore.getState().setSelectedFolderPaths(nextSelected);
+        useLibraryStore.getState().setSelectedFolderPaths(nextSelected, node.path);
         lastClickedFolderRef.current = normNode;
         return;
       }
@@ -908,7 +928,7 @@ export function LibraryLeftSidebar() {
         }
       }
 
-      useLibraryStore.getState().setSelectedFolderPaths(nextSelected);
+      useLibraryStore.getState().setSelectedFolderPaths(nextSelected, isCurrentlySelected ? undefined : node.path);
       lastClickedFolderRef.current = normNode;
       return;
     }
@@ -922,7 +942,7 @@ export function LibraryLeftSidebar() {
       useLibraryStore.getState().setActiveFolderPath(rootPath || null);
       lastClickedFolderRef.current = null;
     } else {
-      useLibraryStore.getState().setSelectedFolderPaths(new Set(subtreePaths));
+      useLibraryStore.getState().setSelectedFolderPaths(new Set(subtreePaths), node.path);
       lastClickedFolderRef.current = normNode;
     }
   };
@@ -1605,6 +1625,28 @@ export function LibraryLeftSidebar() {
                 <div className="fixed inset-0 z-40" onClick={() => setDropdownOpen(false)}></div>
                 <div className="absolute top-[3.2rem] left-3 right-3 bg-app-card border border-app-border rounded-lg shadow-xl z-50 overflow-hidden text-xs py-1 animate-in fade-in zoom-in-95 duration-100">
                   
+                  {rootPath && !isCurrentRootInLocations && (
+                    <>
+                      <button
+                        onClick={() => {
+                          setDropdownOpen(false);
+                          const defaultName = normalizeSlash(rootPath).split('/').pop() || rootPath;
+                          addLocation({ id: Date.now().toString(), name: defaultName, path: rootPath });
+                          useToastStore.getState().showSuccess(
+                            t("sidebar.savedAsLocationToast", { name: defaultName }),
+                            t("sidebar.locationsTitle")
+                          );
+                        }}
+                        className="w-full text-left px-3 py-2 bg-accent/10 hover:bg-accent/20 text-accent font-medium transition-colors flex items-center gap-2"
+                        title={rootPath}
+                      >
+                        <Bookmark className="w-3.5 h-3.5 flex-shrink-0" />
+                        <span className="truncate">{t("sidebar.saveAsLocation")}</span>
+                      </button>
+                      <div className="h-px bg-app-border my-1"></div>
+                    </>
+                  )}
+
                   {locations.length > 0 && (
                     <>
                       <div className="px-3 py-1.5 text-[10px] font-bold text-txt-tertiary uppercase tracking-wider">{t("sidebar.locationsTitle")}</div>
@@ -1617,10 +1659,37 @@ export function LibraryLeftSidebar() {
                             handleFolderChange(loc.path);
                           }}
                         >
-                          <Folder className="w-3.5 h-3.5 text-accent" />
+                          <Folder className="w-3.5 h-3.5 text-accent flex-shrink-0" />
                           <span className="truncate">{loc.name}</span>
                         </button>
                       ))}
+                      <div className="h-px bg-app-border my-1"></div>
+                    </>
+                  )}
+
+                  {tempRecentPaths.length > 0 && (
+                    <>
+                      <div className="px-3 py-1.5 text-[10px] font-bold text-txt-tertiary uppercase tracking-wider">
+                        {t("sidebar.recentFoldersTitle")}
+                      </div>
+                      {tempRecentPaths.map((recentPath) => {
+                        const folderName = normalizeSlash(recentPath).split('/').pop() || recentPath;
+                        return (
+                          <button
+                            key={recentPath}
+                            title={recentPath}
+                            className="w-full text-left px-3 py-1.5 hover:bg-app-hover text-txt-secondary hover:text-txt-primary truncate transition-colors flex items-center gap-2"
+                            onClick={() => {
+                              setDropdownOpen(false);
+                              addRecentPath(recentPath);
+                              handleFolderChange(recentPath);
+                            }}
+                          >
+                            <Clock className="w-3.5 h-3.5 text-txt-tertiary flex-shrink-0" />
+                            <span className="truncate">{folderName}</span>
+                          </button>
+                        );
+                      })}
                       <div className="h-px bg-app-border my-1"></div>
                     </>
                   )}
@@ -1637,8 +1706,8 @@ export function LibraryLeftSidebar() {
                     }}
                     className="w-full text-left px-3 py-2 hover:bg-app-hover text-txt-secondary hover:text-accent transition-colors flex items-center gap-2"
                   >
-                    <Plus className="w-3.5 h-3.5" />
-                    {t("sidebar.addLocation")}
+                    <Plus className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span className="truncate">{t("sidebar.addLocation")}</span>
                   </button>
 
                   <button 
@@ -1646,13 +1715,14 @@ export function LibraryLeftSidebar() {
                       setDropdownOpen(false);
                       const selected = await open({ directory: true });
                       if (selected && typeof selected === 'string') {
+                        addRecentPath(selected);
                         handleFolderChange(selected);
                       }
                     }}
                     className="w-full text-left px-3 py-2 hover:bg-app-hover text-txt-secondary hover:text-txt-primary transition-colors flex items-center gap-2"
                   >
-                    <FolderOpen className="w-3.5 h-3.5" />
-                    {t("sidebar.browseTemp")}
+                    <FolderOpen className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span className="truncate">{t("sidebar.browseTemp")}</span>
                   </button>
 
                 </div>

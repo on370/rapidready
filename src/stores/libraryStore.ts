@@ -88,6 +88,32 @@ export interface ArchiveChunkPayload {
   directories?: string[];
 }
 
+function resolveRealFolderPath(
+  path: string,
+  state: { rootPath: string | null; discoveredFolders: Set<string>; images: LibraryImage[] }
+): string {
+  const norm = normalizePath(path);
+  if (state.rootPath && normalizePath(state.rootPath) === norm) {
+    return normalizeSlash(state.rootPath);
+  }
+  for (const d of state.discoveredFolders) {
+    if (normalizePath(d) === norm) {
+      return normalizeSlash(d);
+    }
+  }
+  for (const img of state.images) {
+    const normImg = normalizeSlash(img.path);
+    const lastSlash = normImg.lastIndexOf('/');
+    if (lastSlash > 0) {
+      const dir = normImg.substring(0, lastSlash);
+      if (normalizePath(dir) === norm) {
+        return dir;
+      }
+    }
+  }
+  return normalizeSlash(path);
+}
+
 interface LibraryStore {
   images: LibraryImage[];
   imageIndexMap: Map<string, number>;
@@ -103,7 +129,7 @@ interface LibraryStore {
   discoveredFolders: Set<string>;
   stagedDeleteFolderPaths: Set<string>;
   setActiveFolderPath: (path: string | null) => void;
-  setSelectedFolderPaths: (paths: Set<string>) => void;
+  setSelectedFolderPaths: (paths: Set<string>, primaryPath?: string | null) => void;
   addDiscoveredFolders: (folders: string[]) => void;
   removeFolder: (folderPath: string) => void;
   stageFoldersForDeletion: (folderPaths: string[]) => void;
@@ -607,10 +633,11 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
     };
   }),
   reconcileFolder: async (targetPath?: string) => {
-    const folder = targetPath || get().activeFolderPath;
-    if (!folder) return;
+    const rawFolder = targetPath || get().activeFolderPath;
+    if (!rawFolder) return;
 
-    const normFolder = normalizePath(folder);
+    const realFolder = resolveRealFolderPath(rawFolder, get());
+    const normFolder = normalizePath(realFolder);
     const folderPrefix = normFolder + '/';
 
     const knownPaths = get().images
@@ -633,7 +660,7 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
         new_dirs: string[];
         removed_dirs?: string[];
       }>('reconcile_folder', {
-        folderPath: folder,
+        folderPath: realFolder,
         knownPaths,
         knownDirs,
       });
@@ -1090,13 +1117,17 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
       selectedTagFilter: null,
     }));
   },
-  setSelectedFolderPaths: (paths) => {
+  setSelectedFolderPaths: (paths, primaryPath) => {
     const normPaths = new Set(Array.from(paths).map(p => normalizePath(p)));
-    const first = normPaths.size > 0 ? Array.from(normPaths)[0] : null;
-    invoke('set_active_viewport_folder', { folderPath: first || null }).catch(() => {});
+    const activePath = primaryPath
+      ? normalizeSlash(primaryPath)
+      : normPaths.size > 0
+        ? resolveRealFolderPath(Array.from(normPaths)[0], get())
+        : null;
+    invoke('set_active_viewport_folder', { folderPath: activePath }).catch(() => {});
     set((state) => ({
       selectedFolderPaths: normPaths,
-      activeFolderPath: first,
+      activeFolderPath: activePath,
       isViewingLastImport: normPaths.size > 0 ? false : state.isViewingLastImport,
       activeImageIndex: 0,
       selectedPaths: new Set(),
