@@ -574,5 +574,9 @@
     "ratingFeedback": "{{count}} Sterne",
     "colorFeedback": "Farbkennzeichnung: {{color}}",
     "noColorFeedback": "Keine Farbkennzeichnung"
+  },
+  "loupe": {
+    "lockZoom": "Zoom sperren",
+    "lockZoomTooltip": "Zoomstufe & Bildausschnitt beim Bildwechsel beibehalten"
   }
 }

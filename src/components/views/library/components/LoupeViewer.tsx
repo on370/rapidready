@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronLeft, ChevronRight, Film, Info, Camera } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Film, Info, Camera, Lock, Unlock } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -34,6 +34,8 @@ export const LoupeViewer = React.memo(function LoupeViewer({
   const showFilmstrip = useLibraryUIStore((s) => s.showFilmstrip);
   const setShowFilmstrip = useLibraryUIStore((s) => s.setShowFilmstrip);
   const loupeScale = useLibraryUIStore((s) => s.loupeScale);
+  const lockLoupeZoom = useLibraryUIStore((s) => s.lockLoupeZoom);
+  const toggleLockLoupeZoom = useLibraryUIStore((s) => s.toggleLockLoupeZoom);
   const scanState = useLibraryStore((s) => s.scanState);
   const activeStackVariantIndex = useLibraryUIStore((s) => s.activeStackVariantIndex);
   const setActiveStackVariantIndex = useLibraryUIStore((s) => s.setActiveStackVariantIndex);
@@ -517,6 +519,19 @@ export const LoupeViewer = React.memo(function LoupeViewer({
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={toggleLockLoupeZoom}
+            className={`px-2.5 py-1 rounded-lg transition-all flex items-center gap-1.5 text-xs font-medium cursor-pointer border ${
+              lockLoupeZoom
+                ? 'bg-accent/15 border-accent/30 text-accent hover:bg-accent/25'
+                : 'bg-app-card border-app-border text-txt-tertiary hover:bg-app-hover hover:text-txt-secondary'
+            }`}
+            title={t('loupe.lockZoomTooltip')}
+          >
+            {lockLoupeZoom ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
+            <span className="text-[11px]">{t('loupe.lockZoom')}</span>
+          </button>
+
           <button
             onClick={() => setShowFilmstrip(!showFilmstrip)}
             className={`px-2.5 py-1 rounded-lg transition-all flex items-center gap-1.5 text-xs font-medium cursor-pointer border ${

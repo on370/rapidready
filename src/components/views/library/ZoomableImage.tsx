@@ -24,6 +24,7 @@ export function ZoomableImage({ src, previewSrc, alt, onContextMenu, resetZoomKe
   const [isZoomTransitioning, setIsZoomTransitioning] = useState(false);
   const zoomTransitionTimeoutRef = useRef<number | null>(null);
   const prevResetKeyRef = useRef<string | undefined>(resetZoomKey ?? src);
+  const zoomAnchorRef = useRef<{ relX: number; relY: number }>({ relX: 0, relY: 0 });
 
   const isVideo = isVideoFilename(alt) || ['wmv', 'flv'].includes(alt.split('.').pop()?.toLowerCase() || '');
   const extension = (alt.split('.').pop() || 'VIDEO').toUpperCase();
@@ -53,8 +54,11 @@ export function ZoomableImage({ src, previewSrc, alt, onContextMenu, resetZoomKe
     const currentKey = resetZoomKey ?? src;
     if (currentKey !== prevResetKeyRef.current) {
       prevResetKeyRef.current = currentKey;
-      setLoupeScale(0);
-      setPosition({ x: 0, y: 0 });
+      if (!useLibraryUIStore.getState().lockLoupeZoom) {
+        setLoupeScale(0);
+        setPosition({ x: 0, y: 0 });
+        zoomAnchorRef.current = { relX: 0, relY: 0 };
+      }
     }
 
     const img = new Image();
@@ -95,7 +99,7 @@ export function ZoomableImage({ src, previewSrc, alt, onContextMenu, resetZoomKe
     }
   }, [currentSrc, src]);
 
-  const clampAndSetPosition = useCallback((x: number, y: number, currentScale = scale) => {
+  const clampAndSetPosition = useCallback((x: number, y: number, currentScale = scale, updateAnchor = true) => {
     if (!containerRef.current || !imageRef.current) return;
     const contRect = containerRef.current.getBoundingClientRect();
     
@@ -105,9 +109,19 @@ export function ZoomableImage({ src, previewSrc, alt, onContextMenu, resetZoomKe
     const maxTx = Math.max(0, (imgW - contRect.width) / 2);
     const maxTy = Math.max(0, (imgH - contRect.height) / 2);
 
+    const clampedX = Math.max(-maxTx, Math.min(maxTx, x));
+    const clampedY = Math.max(-maxTy, Math.min(maxTy, y));
+
+    if (updateAnchor && imgW > 0 && imgH > 0) {
+      zoomAnchorRef.current = {
+        relX: -clampedX / imgW,
+        relY: -clampedY / imgH,
+      };
+    }
+
     setPosition({
-      x: Math.max(-maxTx, Math.min(maxTx, x)),
-      y: Math.max(-maxTy, Math.min(maxTy, y))
+      x: clampedX,
+      y: clampedY,
     });
   }, [scale]);
 
@@ -115,8 +129,18 @@ export function ZoomableImage({ src, previewSrc, alt, onContextMenu, resetZoomKe
   useEffect(() => {
     if (loupeScale <= 0) {
       setPosition({ x: 0, y: 0 });
+      zoomAnchorRef.current = { relX: 0, relY: 0 };
+    } else if (imageRef.current && imageRef.current.naturalWidth > 0 && imageRef.current.naturalHeight > 0) {
+      const natW = imageRef.current.naturalWidth;
+      const natH = imageRef.current.naturalHeight;
+      clampAndSetPosition(
+        -zoomAnchorRef.current.relX * natW * loupeScale,
+        -zoomAnchorRef.current.relY * natH * loupeScale,
+        loupeScale,
+        false
+      );
     } else {
-      clampAndSetPosition(position.x, position.y, loupeScale);
+      clampAndSetPosition(position.x, position.y, loupeScale, false);
     }
   }, [loupeScale, clampAndSetPosition]);
 
@@ -132,6 +156,7 @@ export function ZoomableImage({ src, previewSrc, alt, onContextMenu, resetZoomKe
     if (next < 0.8) {
       setLoupeScale(0);
       setPosition({ x: 0, y: 0 });
+      zoomAnchorRef.current = { relX: 0, relY: 0 };
     } else {
       setLoupeScale(next);
     }
@@ -150,15 +175,25 @@ export function ZoomableImage({ src, previewSrc, alt, onContextMenu, resetZoomKe
     if (isZoomed) {
       setLoupeScale(0);
       setPosition({ x: 0, y: 0 });
+      zoomAnchorRef.current = { relX: 0, relY: 0 };
     } else {
       setLoupeScale(1); // 1 is 100% native resolution
-      if (e && containerRef.current && imageRef.current) {
-        const rect = containerRef.current.getBoundingClientRect();
-        const clickX = e.clientX - rect.left - rect.width / 2;
-        const clickY = e.clientY - rect.top - rect.height / 2;
-        clampAndSetPosition(-clickX, -clickY, 1);
+      if (e && imageRef.current && imageRef.current.naturalWidth > 0 && imageRef.current.naturalHeight > 0) {
+        const imgRect = imageRef.current.getBoundingClientRect();
+        const natW = imageRef.current.naturalWidth;
+        const natH = imageRef.current.naturalHeight;
+        const fitScale = Math.min(imgRect.width / natW, imgRect.height / natH);
+        const drawnW = natW * fitScale;
+        const drawnH = natH * fitScale;
+        const clickX = e.clientX - (imgRect.left + imgRect.width / 2);
+        const clickY = e.clientY - (imgRect.top + imgRect.height / 2);
+        const relX = drawnW > 0 ? Math.max(-0.5, Math.min(0.5, clickX / drawnW)) : 0;
+        const relY = drawnH > 0 ? Math.max(-0.5, Math.min(0.5, clickY / drawnH)) : 0;
+        zoomAnchorRef.current = { relX, relY };
+        clampAndSetPosition(-relX * natW * 1, -relY * natH * 1, 1, false);
       } else {
         setPosition({ x: 0, y: 0 });
+        zoomAnchorRef.current = { relX: 0, relY: 0 };
       }
     }
   }, [isZoomed, setLoupeScale, clampAndSetPosition]);
@@ -222,12 +257,9 @@ export function ZoomableImage({ src, previewSrc, alt, onContextMenu, resetZoomKe
     
     const maxTx = Math.max(0, (imgW - contRect.width) / 2);
     const maxTy = Math.max(0, (imgH - contRect.height) / 2);
-    
-    setPosition({
-      x: Math.max(-maxTx, Math.min(maxTx, (0.5 - px) * maxTx * 2)),
-      y: Math.max(-maxTy, Math.min(maxTy, (0.5 - py) * maxTy * 2)),
-    });
-  }, [scale]);
+
+    clampAndSetPosition((0.5 - px) * maxTx * 2, (0.5 - py) * maxTy * 2, scale, true);
+  }, [scale, clampAndSetPosition]);
 
   const onMinimapMouseDown = (e: ReactMouseEvent) => {
     if (e.button !== 0) return;
@@ -388,6 +420,19 @@ export function ZoomableImage({ src, previewSrc, alt, onContextMenu, resetZoomKe
             src={currentSrc}
             alt={alt}
             crossOrigin="anonymous"
+            onLoad={() => {
+              setLoadFailed(false);
+              if (loupeScale > 0 && imageRef.current && imageRef.current.naturalWidth > 0 && imageRef.current.naturalHeight > 0) {
+                const natW = imageRef.current.naturalWidth;
+                const natH = imageRef.current.naturalHeight;
+                clampAndSetPosition(
+                  -zoomAnchorRef.current.relX * natW * scale,
+                  -zoomAnchorRef.current.relY * natH * scale,
+                  scale,
+                  false
+                );
+              }
+            }}
             onError={() => setLoadFailed(true)}
             onMouseDown={onMouseDown}
             onTransitionEnd={() => setIsZoomTransitioning(false)}

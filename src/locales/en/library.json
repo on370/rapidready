@@ -574,5 +574,9 @@
     "ratingFeedback": "{{count}} stars",
     "colorFeedback": "Color label: {{color}}",
     "noColorFeedback": "No color label"
+  },
+  "loupe": {
+    "lockZoom": "Keep Zoom",
+    "lockZoomTooltip": "Keep zoom level & pan position when switching photos"
   }
 }

@@ -89,6 +89,10 @@ interface LibraryUIStore {
 
   activeStackVariantIndex: number;
   setActiveStackVariantIndex: (idx: number) => void;
+
+  lockLoupeZoom: boolean;
+  setLockLoupeZoom: (val: boolean) => void;
+  toggleLockLoupeZoom: () => void;
 }
 
 export type LibrarySortBy = 'filename' | 'date' | 'folder_date' | 'rating' | 'size';
@@ -109,6 +113,13 @@ const getSavedInspectorHistogramMode = (): InspectorHistogramMode => {
 const getSavedFocusPeakingEnabled = (): boolean => {
   try {
     return localStorage.getItem('rapidready_focus_peaking_enabled') === 'true';
+  } catch (_) {}
+  return false;
+};
+
+const getSavedLockLoupeZoom = (): boolean => {
+  try {
+    return localStorage.getItem('rapidready_lock_loupe_zoom') === 'true';
   } catch (_) {}
   return false;
 };
@@ -424,4 +435,19 @@ export const useLibraryUIStore = create<LibraryUIStore>((set) => ({
 
   activeStackVariantIndex: 0,
   setActiveStackVariantIndex: (idx) => set({ activeStackVariantIndex: Math.max(0, idx) }),
+
+  lockLoupeZoom: getSavedLockLoupeZoom(),
+  setLockLoupeZoom: (val) => {
+    try {
+      localStorage.setItem('rapidready_lock_loupe_zoom', val ? 'true' : 'false');
+    } catch (_) {}
+    set({ lockLoupeZoom: val });
+  },
+  toggleLockLoupeZoom: () => set((state) => {
+    const next = !state.lockLoupeZoom;
+    try {
+      localStorage.setItem('rapidready_lock_loupe_zoom', next ? 'true' : 'false');
+    } catch (_) {}
+    return { lockLoupeZoom: next };
+  }),
 }));
