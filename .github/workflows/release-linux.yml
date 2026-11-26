@@ -54,8 +54,44 @@ jobs:
           NO_BUMP: "1"
         run: npm run tauri build -- --bundles appimage,deb,rpm
 
+      - name: Strip conflicting Wayland/EGL libraries & repack AppImage
+        run: |
+          APPDIR="src-tauri/target/release/bundle/appimage/RapidReady.AppDir"
+          APPIMAGE_PATH="$(ls src-tauri/target/release/bundle/appimage/*.AppImage | head -n 1)"
+          if [ ! -d "$APPDIR" ] || [ ! -f "$APPIMAGE_PATH" ]; then
+            echo "Missing AppDir ($APPDIR) or AppImage ($APPIMAGE_PATH)"
+            exit 1
+          fi
+
+          rm -f \
+            "$APPDIR"/usr/lib/libwayland* \
+            "$APPDIR"/usr/lib/libEGL* \
+            "$APPDIR"/usr/lib/libGL* \
+            "$APPDIR"/usr/lib/libgbm* \
+            "$APPDIR"/usr/lib/libepoxy* \
+            "$APPDIR"/usr/lib/x86_64-linux-gnu/libwayland* \
+            "$APPDIR"/usr/lib/x86_64-linux-gnu/libEGL* \
+            "$APPDIR"/usr/lib/x86_64-linux-gnu/libGL* \
+            "$APPDIR"/usr/lib/x86_64-linux-gnu/libgbm* \
+            "$APPDIR"/usr/lib/x86_64-linux-gnu/libepoxy*
+
+          APPIMAGETOOL="$(find "$HOME/.cache/tauri" -maxdepth 2 -type f -name '*appimagetool*' 2>/dev/null | head -n 1 || true)"
+          if [ -z "$APPIMAGETOOL" ] || [ ! -f "$APPIMAGETOOL" ]; then
+            APPIMAGETOOL="/tmp/appimagetool"
+            curl -fSL -o "$APPIMAGETOOL" "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"
+            chmod +x "$APPIMAGETOOL"
+          fi
+
+          ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "$APPIMAGETOOL" --no-appstream "$APPDIR" "$APPIMAGE_PATH"
+          chmod +x "$APPIMAGE_PATH"
+
       - name: Verify bundles & glibc baseline
         run: |
+          APPDIR="src-tauri/target/release/bundle/appimage/RapidReady.AppDir"
+          if find "$APPDIR/usr/lib" -maxdepth 2 \( -name 'libwayland*' -o -name 'libEGL*' -o -name 'libGL*' -o -name 'libgbm*' -o -name 'libepoxy*' \) | grep -q .; then
+            echo "Conflicting graphics libraries still present!"
+            exit 1
+          fi
           ls -lh src-tauri/target/release/bundle/appimage/*.AppImage src-tauri/target/release/bundle/deb/*.deb src-tauri/target/release/bundle/rpm/*.rpm
           objdump -T src-tauri/target/release/rapid-ready | grep -oE 'GLIBC_[0-9]+\.[0-9]+' | sort -Vu | tail -n 5
 
