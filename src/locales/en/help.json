@@ -30,6 +30,9 @@
       "fullscreenSlideshow": "Toggle Full Window & Slideshow",
       "playPauseSlideshow": "Play / Pause Slideshow (in Full Window)",
       "selectAll": "Select All Images",
+      "toggleInSelection": "Add / Remove from Selection",
+      "selectRange": "Select Range",
+      "addRangeToSelection": "Add Range to Selection",
       "deselectOrAllPhotos": "Entire Archive / Deselect",
       "import": "Import View",
       "library": "Library View",
@@ -55,6 +58,7 @@
       "help": "Show this Help",
       "quit": "Quit Application"
     },
-    "footer": "RapidReady Help & Shortcuts"
+    "footer": "RapidReady Help & Shortcuts",
+    "click": "Click"
   }
 }

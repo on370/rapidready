@@ -30,6 +30,9 @@
       "fullscreenSlideshow": "Vollfenster & Diashow umschalten",
       "playPauseSlideshow": "Diashow Start / Pause (im Vollfenster)",
       "selectAll": "Alle Bilder auswählen",
+      "toggleInSelection": "Zur Auswahl hinzufügen / entfernen",
+      "selectRange": "Bereich auswählen",
+      "addRangeToSelection": "Bereich zur Auswahl hinzufügen",
       "deselectOrAllPhotos": "Gesamtes Archiv / Auswahl aufheben",
       "import": "Import-Ansicht",
       "library": "Bibliothek-Ansicht",
@@ -55,6 +58,7 @@
       "help": "Diese Hilfe anzeigen",
       "quit": "RapidReady beenden"
     },
-    "footer": "RapidReady Hilfe & Tastaturkürzel"
+    "footer": "RapidReady Hilfe & Tastaturkürzel",
+    "click": "Klick"
   }
 }

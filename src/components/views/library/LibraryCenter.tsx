@@ -7,6 +7,7 @@ import { ArchiveScanBanner } from "./components/ArchiveScanBanner";
 import { invoke } from "@tauri-apps/api/core";
 import { normalizePath, normalizeSlash, isRawFilename, isVideoFilename } from "../../../utils/image";
 import { getTopLevelSelectedPaths } from "./LibraryLeftSidebar";
+import { resolveAnchorIndex, computeRangeSelection } from "../../../utils/selection";
 
 import { CullingToolbar } from "./components/CullingToolbar";
 import { LibraryGrid } from "./components/LibraryGrid";
@@ -140,7 +141,8 @@ export function LibraryCenter({
   const { 
     images, activeImageIndex, setActiveImageIndex, autoAdvance, 
     updateCullingState, updateBatchCullingState, updateImageCullings,
-    selectedPaths, setSelectedPaths, selectRange, selectAll,
+    selectedPaths, setSelectedPaths, selectAll,
+    selectionAnchorPath, setSelectionAnchorPath,
     activeFolderPath, selectedFolderPaths, filterMode,
     selectedRatingFilter,
     selectedColorFilter,
@@ -1189,10 +1191,19 @@ export function LibraryCenter({
   ]);
 
   const handleItemClick = useCallback((e: React.MouseEvent, clickedIndex: number, img: LibraryImage) => {
-    const isMetaOrCtrl = e.metaKey || e.ctrlKey;
+    const isMod = e.metaKey || e.ctrlKey;
     const isShift = e.shiftKey;
 
-    if (isMetaOrCtrl) {
+    if (isShift) {
+      // Range from the anchor to the clicked photo; Shift replaces the selection,
+      // Ctrl/Cmd+Shift adds the range to it. The anchor itself stays put.
+      const orderedPaths = displayedImages.map((di) => di.path);
+      const anchorIdx = resolveAnchorIndex(orderedPaths, selectionAnchorPath, activeImageIndex);
+      setSelectedPaths(computeRangeSelection(orderedPaths, anchorIdx, clickedIndex, isMod ? selectedPaths : undefined));
+      // Pin the resolved anchor so chained Shift+clicks keep extending from it
+      setSelectionAnchorPath(orderedPaths[anchorIdx] ?? img.path);
+      setActiveImageIndex(clickedIndex);
+    } else if (isMod) {
       const nextSelected = new Set(selectedPaths);
       const isCurrentlySelected = nextSelected.has(img.path);
 
@@ -1228,17 +1239,14 @@ export function LibraryCenter({
         setSelectedPaths(nextSelected);
         setActiveImageIndex(clickedIndex);
       }
-    } else if (isShift) {
-      // Range selection (anchor to clicked)
-      const anchor = activeImageIndex >= 0 && activeImageIndex < displayedImages.length ? activeImageIndex : 0;
-      selectRange(anchor, clickedIndex, displayedImages);
-      setActiveImageIndex(clickedIndex);
+      // A Ctrl/Cmd+click (select or deselect) moves the range anchor, like Explorer/Finder
+      setSelectionAnchorPath(img.path);
     } else {
-      // Single selection
+      // Single selection (also becomes the range anchor)
       setSelectedPaths(new Set([img.path]));
       setActiveImageIndex(clickedIndex);
     }
-  }, [activeImageIndex, displayedImages, selectedPaths, selectRange, setSelectedPaths, setActiveImageIndex]);
+  }, [activeImageIndex, displayedImages, selectedPaths, selectionAnchorPath, setSelectedPaths, setSelectionAnchorPath, setActiveImageIndex]);
 
   const handleSortByExif = useCallback(async () => {
     if (!activeCollection) return;

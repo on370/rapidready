@@ -141,7 +141,9 @@ interface LibraryStore {
   selectedPaths: Set<string>;
   setSelectedPaths: (paths: Set<string>) => void;
   toggleSelectedPath: (path: string) => void;
-  selectRange: (fromIndex: number, toIndex: number, displayedImages: LibraryImage[]) => void;
+  /** Range-selection anchor (last photo picked without Shift), tracked by path. */
+  selectionAnchorPath: string | null;
+  setSelectionAnchorPath: (path: string | null) => void;
   selectAll: (displayedImages: LibraryImage[]) => void;
   selectAllInFolder: (folderPath: string, allFolderPaths?: string[]) => void;
   selectAllInFolders: (topPaths: string[], allFolderPaths: string[]) => void;
@@ -1283,7 +1285,14 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
   },
 
   selectedPaths: new Set<string>(),
-  setSelectedPaths: (paths) => set({ selectedPaths: paths }),
+  // Selecting exactly one photo (click, keyboard navigation, auto-advance) makes it the range anchor.
+  setSelectedPaths: (paths) => set(
+    paths.size === 1
+      ? { selectedPaths: paths, selectionAnchorPath: paths.values().next().value ?? null }
+      : { selectedPaths: paths }
+  ),
+  selectionAnchorPath: null,
+  setSelectionAnchorPath: (path) => set({ selectionAnchorPath: path }),
   toggleSelectedPath: (path) => set((state) => {
     const next = new Set(state.selectedPaths);
     if (next.has(path)) {
@@ -1302,17 +1311,6 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
       next.delete(found);
     } else {
       next.add(path);
-    }
-    return { selectedPaths: next };
-  }),
-  selectRange: (fromIndex, toIndex, displayedImages) => set(() => {
-    const start = Math.min(fromIndex, toIndex);
-    const end = Math.max(fromIndex, toIndex);
-    const next = new Set<string>();
-    for (let i = start; i <= end; i++) {
-      if (displayedImages[i]) {
-        next.add(displayedImages[i].path);
-      }
     }
     return { selectedPaths: next };
   }),

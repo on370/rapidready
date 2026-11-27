@@ -128,6 +128,18 @@ export function HelpPopover({ viewMode }: HelpPopoverProps) {
                   <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">{modSymbol}A</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
+                  <span className="text-txt-secondary">{t('shortcuts.actions.toggleInSelection')}</span>
+                  <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">{modSymbol}{t('shortcuts.click')}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-txt-secondary">{t('shortcuts.actions.selectRange')}</span>
+                  <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">{shiftSymbol}{t('shortcuts.click')}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-txt-secondary">{t('shortcuts.actions.addRangeToSelection')}</span>
+                  <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">{modSymbol}{shiftSymbol}{t('shortcuts.click')}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
                   <span className="text-txt-secondary">{t('tooltip.rateImage')}</span>
                   <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">1-5 / 0</span>
                 </div>
