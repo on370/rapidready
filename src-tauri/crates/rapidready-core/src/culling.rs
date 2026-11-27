@@ -39,6 +39,39 @@ pub fn get_sidecar_mode() -> SidecarMode {
     }
 }
 
+/// Serializes tests that depend on the process-global sidecar settings.
+///
+/// `SIDECAR_MODE` and the XMP naming mode are global, but cargo runs tests on parallel
+/// threads: a test switching to XMP mode made unrelated tests write `.xmp` instead of
+/// `.rrdata` and fail at random. Every test that writes sidecars or changes these modes
+/// holds this guard; it resets both modes to their defaults on acquire and on drop.
+#[cfg(test)]
+pub(crate) struct SidecarTestGuard {
+    _lock: std::sync::MutexGuard<'static, ()>,
+}
+
+#[cfg(test)]
+impl Drop for SidecarTestGuard {
+    fn drop(&mut self) {
+        reset_sidecar_modes_for_test();
+    }
+}
+
+#[cfg(test)]
+fn reset_sidecar_modes_for_test() {
+    set_sidecar_mode(SidecarMode::Rrdata);
+    crate::culling_xmp::set_xmp_naming_mode("standard");
+}
+
+#[cfg(test)]
+pub(crate) fn sidecar_test_guard() -> SidecarTestGuard {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    // A panicking test poisons the mutex; the state is reset below, so keep going.
+    let lock = LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    reset_sidecar_modes_for_test();
+    SidecarTestGuard { _lock: lock }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct CullingState {
     pub flag: Option<i8>, // 1 = Pick, -1 = Reject, None/0 = Unrated
@@ -339,19 +372,41 @@ fn format_rrdata_tag(tag: &str) -> String {
     }
 }
 
+/// Loads an existing `.rrdata` so it can be patched in place.
+///
+/// RapidRAW stores its edits (`adjustments`, masks, ...) in the same file. If an existing sidecar
+/// cannot be read or parsed, writing RapidReady's fields into a fresh object would silently delete
+/// those edits, so that is an error and the file is left untouched. A missing or whitespace-only
+/// file holds nothing to lose and starts as an empty object.
+fn load_rrdata_for_patch(sidecar_path: &Path) -> anyhow::Result<serde_json::Value> {
+    let contents = match fs::read_to_string(sidecar_path) {
+        Ok(c) => c,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(serde_json::json!({})),
+        Err(e) => {
+            return Err(anyhow::anyhow!(
+                "Cannot read existing sidecar {}: {} (left unchanged to protect RapidRAW edits)",
+                sidecar_path.display(),
+                e
+            ))
+        }
+    };
+    if contents.trim().is_empty() {
+        return Ok(serde_json::json!({}));
+    }
+    serde_json::from_str(&contents).map_err(|e| {
+        anyhow::anyhow!(
+            "Existing sidecar {} is not valid JSON ({}); left unchanged to protect RapidRAW edits",
+            sidecar_path.display(),
+            e
+        )
+    })
+}
+
 pub fn write_sidecar_rrdata(original_path: &Path, state: &CullingState) -> anyhow::Result<()> {
     let sidecar_path = get_sidecar_path(original_path);
 
-    // Load existing JSON if available, or create new default map
-    let mut root: serde_json::Value = if sidecar_path.exists() {
-        if let Ok(contents) = fs::read_to_string(&sidecar_path) {
-            serde_json::from_str(&contents).unwrap_or_else(|_| serde_json::json!({}))
-        } else {
-            serde_json::json!({})
-        }
-    } else {
-        serde_json::json!({})
-    };
+    // Load existing JSON (keeps RapidRAW's fields), or start a new map if there is none
+    let mut root = load_rrdata_for_patch(&sidecar_path)?;
 
     let obj = root.as_object_mut().ok_or_else(|| anyhow::anyhow!("Root is not a JSON object"))?;
 
@@ -520,16 +575,8 @@ pub fn write_gps_sidecar_rrdata(
 ) -> anyhow::Result<()> {
     let sidecar_path = get_sidecar_path(original_path);
 
-    // Load existing JSON if available, or create new default map
-    let mut root: serde_json::Value = if sidecar_path.exists() {
-        if let Ok(contents) = fs::read_to_string(&sidecar_path) {
-            serde_json::from_str(&contents).unwrap_or_else(|_| serde_json::json!({}))
-        } else {
-            serde_json::json!({})
-        }
-    } else {
-        serde_json::json!({})
-    };
+    // Load existing JSON (keeps RapidRAW's fields), or start a new map if there is none
+    let mut root = load_rrdata_for_patch(&sidecar_path)?;
 
     let obj = root.as_object_mut().ok_or_else(|| anyhow::anyhow!("Root is not a JSON object"))?;
 
@@ -676,6 +723,7 @@ mod tests {
 
     #[test]
     fn test_read_rapidraw_with_null_tags() {
+        let _sidecar_guard = crate::culling::sidecar_test_guard();
         let json = r#"{
             "version": 1,
             "rating": 3,
@@ -697,6 +745,7 @@ mod tests {
 
     #[test]
     fn test_read_rapidraw_with_pick_and_reject_tags() {
+        let _sidecar_guard = crate::culling::sidecar_test_guard();
         let pick_json = r#"{
             "version": 1,
             "rating": 4,
@@ -720,6 +769,7 @@ mod tests {
 
     #[test]
     fn test_non_destructive_write_preserves_adjustments_and_exif() {
+        let _sidecar_guard = crate::culling::sidecar_test_guard();
         let temp_dir = std::env::temp_dir().join(format!("rr_test_{}", std::process::id()));
         fs::create_dir_all(&temp_dir).unwrap();
         let img_path = temp_dir.join("photo.CR2");
@@ -778,6 +828,7 @@ mod tests {
 
     #[test]
     fn test_flag_transitions() {
+        let _sidecar_guard = crate::culling::sidecar_test_guard();
         let temp_dir = std::env::temp_dir().join(format!("rr_test_trans_{}", std::process::id()));
         fs::create_dir_all(&temp_dir).unwrap();
         let img_path = temp_dir.join("test.dng");
@@ -837,6 +888,7 @@ mod tests {
 
     #[test]
     fn test_rrdata_native_flag_and_legacy_fallback() {
+        let _sidecar_guard = crate::culling::sidecar_test_guard();
         // 1. Native string flags (including case-insensitivity)
         let s_pick = parse_sidecar_json(r#"{"flag": "PICK", "tags": ["nature"]}"#);
         assert_eq!(s_pick.flag, Some(1));
@@ -879,6 +931,7 @@ mod tests {
 
     #[test]
     fn test_sidecar_orientation_cycle_and_persistence() {
+        let _sidecar_guard = crate::culling::sidecar_test_guard();
         assert_eq!(next_orientation(1, "cw"), 6);
         assert_eq!(next_orientation(6, "cw"), 3);
         assert_eq!(next_orientation(3, "cw"), 8);
@@ -916,6 +969,7 @@ mod tests {
 
     #[test]
     fn test_tags_and_color_persistence_and_deletion() {
+        let _sidecar_guard = crate::culling::sidecar_test_guard();
         let temp_dir = std::env::temp_dir().join(format!("rr_tags_color_{}", std::process::id()));
         let _ = fs::create_dir_all(&temp_dir);
         let img_path = temp_dir.join("sample.arw");
@@ -960,6 +1014,7 @@ mod tests {
 
     #[test]
     fn test_atomic_sidecar_write() {
+        let _sidecar_guard = crate::culling::sidecar_test_guard();
         let temp_dir = std::env::temp_dir().join(format!("rr_atomic_test_{}", std::process::id()));
         let _ = fs::create_dir_all(&temp_dir);
         let img_path = temp_dir.join("test_atomic.cr2");
@@ -996,6 +1051,7 @@ mod tests {
 
     #[test]
     fn test_write_gps_sidecar_and_override() {
+        let _sidecar_guard = crate::culling::sidecar_test_guard();
         set_sidecar_mode(SidecarMode::Rrdata);
         let temp_dir = std::env::temp_dir().join(format!("rr_gps_write_test_{}", std::process::id()));
         let _ = fs::create_dir_all(&temp_dir);
@@ -1019,6 +1075,7 @@ mod tests {
 
     #[test]
     fn test_clear_gps_sidecar() {
+        let _sidecar_guard = crate::culling::sidecar_test_guard();
         set_sidecar_mode(SidecarMode::Rrdata);
         let temp_dir = std::env::temp_dir().join(format!("rr_gps_clear_test_{}", std::process::id()));
         let _ = fs::create_dir_all(&temp_dir);
@@ -1040,6 +1097,7 @@ mod tests {
 
     #[test]
     fn test_gps_sidecar_preserves_culling() {
+        let _sidecar_guard = crate::culling::sidecar_test_guard();
         let temp_dir = std::env::temp_dir().join(format!("rr_gps_pres_test_{}", std::process::id()));
         let _ = fs::create_dir_all(&temp_dir);
         let img_path = temp_dir.join("test_pres.cr2");
@@ -1085,6 +1143,7 @@ mod tests {
 
     #[test]
     fn test_xmp_read_write_roundtrip() {
+        let _sidecar_guard = crate::culling::sidecar_test_guard();
         let temp_dir = std::env::temp_dir().join(format!("rr_xmp_rt_{}", std::process::id()));
         fs::create_dir_all(&temp_dir).unwrap();
         let img_path = temp_dir.join("photo.ARW");
@@ -1137,6 +1196,7 @@ mod tests {
 
     #[test]
     fn test_xmp_non_destructive_preservation() {
+        let _sidecar_guard = crate::culling::sidecar_test_guard();
         let temp_dir = std::env::temp_dir().join(format!("rr_xmp_nd_{}", std::process::id()));
         fs::create_dir_all(&temp_dir).unwrap();
         let img_path = temp_dir.join("lightroom_edit.dng");
@@ -1188,6 +1248,7 @@ mod tests {
 
     #[test]
     fn test_ssot_mtime_coexistence() {
+        let _sidecar_guard = crate::culling::sidecar_test_guard();
         let temp_dir = std::env::temp_dir().join(format!("rr_ssot_{}", std::process::id()));
         fs::create_dir_all(&temp_dir).unwrap();
         let img_path = temp_dir.join("photo.CR3");
@@ -1234,6 +1295,7 @@ mod tests {
 
     #[test]
     fn test_editorial_and_date_override_roundtrip() {
+        let _sidecar_guard = crate::culling::sidecar_test_guard();
         set_sidecar_mode(SidecarMode::Rrdata);
         let temp_dir = std::env::temp_dir().join(format!("rr_editorial_test_{}", std::process::id()));
         fs::create_dir_all(&temp_dir).unwrap();
@@ -1287,5 +1349,81 @@ mod tests {
 
         set_sidecar_mode(SidecarMode::Rrdata);
         let _ = fs::remove_dir_all(&temp_dir);
+    }
+}
+
+/// `.rrdata` files are shared with RapidRAW, which stores its edits (`adjustments`, masks, ...)
+/// in them. RapidReady must never replace such a file with only its own fields.
+#[cfg(test)]
+mod rrdata_safety_tests {
+    use super::*;
+
+    const RAPIDRAW_EDITS: &str = r#"{"version":1,"rating":2,"adjustments":{"exposure":1.35,"masks":[{"id":"m1"}]},"tags":["user:wedding"],"rapidraw_only":{"keep":true}}"#;
+
+    fn setup(name: &str, sidecar_contents: Option<&str>) -> (std::path::PathBuf, std::path::PathBuf) {
+        let dir = std::env::temp_dir().join(format!("rr_rrdata_safety_{}_{}", name, std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let img = dir.join("DSC00042.ARW");
+        fs::write(&img, b"raw").unwrap();
+        if let Some(c) = sidecar_contents {
+            fs::write(get_sidecar_path(&img), c).unwrap();
+        }
+        (dir, img)
+    }
+
+    fn rated(rating: u8) -> CullingState {
+        CullingState { rating, ..CullingState::default() }
+    }
+
+    #[test]
+    fn truncated_rrdata_is_not_overwritten() {
+        // e.g. interrupted write by another tool, sync conflict, half-transferred NAS file
+        let truncated = &RAPIDRAW_EDITS[..RAPIDRAW_EDITS.len() - 1];
+        let (dir, img) = setup("truncated", Some(truncated));
+
+        let res = write_sidecar_rrdata(&img, &rated(4));
+
+        assert!(res.is_err(), "must refuse to overwrite an unparseable sidecar");
+        assert_eq!(fs::read_to_string(get_sidecar_path(&img)).unwrap(), truncated, "file must stay untouched");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn truncated_rrdata_is_not_overwritten_by_gps_write() {
+        let truncated = &RAPIDRAW_EDITS[..RAPIDRAW_EDITS.len() - 1];
+        let (dir, img) = setup("truncated_gps", Some(truncated));
+
+        let res = write_gps_sidecar_rrdata(&img, Some(47.5), Some(8.5), None);
+
+        assert!(res.is_err());
+        assert_eq!(fs::read_to_string(get_sidecar_path(&img)).unwrap(), truncated);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn valid_rrdata_keeps_rapidraw_edits() {
+        let (dir, img) = setup("valid", Some(RAPIDRAW_EDITS));
+
+        write_sidecar_rrdata(&img, &rated(4)).unwrap();
+
+        let v: serde_json::Value = serde_json::from_str(&fs::read_to_string(get_sidecar_path(&img)).unwrap()).unwrap();
+        assert_eq!(v["rating"], 4);
+        assert_eq!(v["adjustments"]["exposure"], 1.35);
+        assert_eq!(v["adjustments"]["masks"][0]["id"], "m1");
+        assert_eq!(v["rapidraw_only"]["keep"], true);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn empty_rrdata_is_treated_as_new() {
+        // An empty file holds nothing to lose; refusing it would block rating that image forever.
+        let (dir, img) = setup("empty", Some("  \n"));
+
+        write_sidecar_rrdata(&img, &rated(3)).unwrap();
+
+        let v: serde_json::Value = serde_json::from_str(&fs::read_to_string(get_sidecar_path(&img)).unwrap()).unwrap();
+        assert_eq!(v["rating"], 3);
+        let _ = fs::remove_dir_all(&dir);
     }
 }

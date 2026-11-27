@@ -45,7 +45,9 @@ gtk = "0.18"
 members = ["crates/rapidready-core"]
 
 [patch.crates-io]
-thumb-rs = { git = "https://github.com/iamzubin/thumb-rs.git" }
+# Not on crates.io (no RustSec coverage): pinned to a reviewed commit so `cargo update`
+# cannot silently pull new upstream code. Bump deliberately after reviewing the diff.
+thumb-rs = { git = "https://github.com/iamzubin/thumb-rs.git", rev = "2a929c28d3a630627159858deb5433ad9ffb8d11" }
 
 [profile.dev]
 opt-level = 1

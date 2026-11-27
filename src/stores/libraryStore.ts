@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
-import { normalizePath, normalizeSlash } from '../utils/image';
+import { normalizePath, normalizeSlash, foldPathCase } from '../utils/image';
 import { useLibraryUIStore } from './libraryUIStore';
 
 export interface CullingState {
@@ -272,7 +272,7 @@ export function mergeFoldersDeduped(
 
   const lowerMap = new Map<string, string>();
   for (const f of existing) {
-    lowerMap.set(f.toLowerCase(), f);
+    lowerMap.set(foldPathCase(f), f);
   }
 
   let changed = false;
@@ -281,7 +281,7 @@ export function mergeFoldersDeduped(
   for (const raw of incoming) {
     if (!raw) continue;
     const norm = normalizeSlash(raw);
-    const lower = norm.toLowerCase();
+    const lower = foldPathCase(norm);
     const existingEntry = lowerMap.get(lower);
 
     if (!existingEntry) {
@@ -357,14 +357,14 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
     return changed ? { discoveredFolders: next } : state;
   }),
   removeFolder: (folderPath) => set((state) => {
-    const norm = normalizeSlash(folderPath).toLowerCase();
+    const norm = normalizePath(folderPath);
     const prefix = norm + '/';
 
     // 1. Filter discoveredFolders
     const nextFolders = new Set<string>();
     let foldersChanged = false;
     for (const f of state.discoveredFolders) {
-      const fNorm = normalizeSlash(f).toLowerCase();
+      const fNorm = normalizePath(f);
       if (fNorm === norm || fNorm.startsWith(prefix)) {
         foldersChanged = true;
       } else {
@@ -376,7 +376,7 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
     const nextSelectedFolderPaths = new Set<string>();
     let selectedFoldersChanged = false;
     for (const f of state.selectedFolderPaths) {
-      const fNorm = normalizeSlash(f).toLowerCase();
+      const fNorm = normalizePath(f);
       if (fNorm === norm || fNorm.startsWith(prefix)) {
         selectedFoldersChanged = true;
       } else {
@@ -388,7 +388,7 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
     const nextStagedDelete = new Set<string>();
     let stagedChanged = false;
     for (const f of state.stagedDeleteFolderPaths) {
-      const fNorm = normalizeSlash(f).toLowerCase();
+      const fNorm = normalizePath(f);
       if (fNorm === norm || fNorm.startsWith(prefix)) {
         stagedChanged = true;
       } else {
@@ -399,7 +399,7 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
     // 2. activeFolderPath reset if it was or was inside this folder
     let nextActiveFolderPath = state.activeFolderPath;
     if (state.activeFolderPath) {
-      const activeNorm = normalizeSlash(state.activeFolderPath).toLowerCase();
+      const activeNorm = normalizePath(state.activeFolderPath);
       if (activeNorm === norm || activeNorm.startsWith(prefix)) {
         nextActiveFolderPath = state.rootPath;
       }
@@ -407,7 +407,7 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
 
     // 3. Remove images under this folder
     const nextImages = state.images.filter(img => {
-      const imgNorm = normalizeSlash(img.path).toLowerCase();
+      const imgNorm = normalizePath(img.path);
       return !imgNorm.startsWith(prefix);
     });
 
@@ -424,7 +424,7 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
       }
       nextSelected = new Set<string>();
       for (const p of state.selectedPaths) {
-        const pNorm = normalizeSlash(p).toLowerCase();
+        const pNorm = normalizePath(p);
         if (!pNorm.startsWith(prefix)) {
           nextSelected.add(p);
         }
@@ -459,9 +459,9 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
   }),
   unstageFoldersForDeletion: (folderPaths) => set((state) => {
     const next = new Set(state.stagedDeleteFolderPaths);
-    const toRemove = new Set(folderPaths.map(p => normalizeSlash(p).toLowerCase()));
+    const toRemove = new Set(folderPaths.map(p => normalizePath(p)));
     for (const p of next) {
-      if (toRemove.has(normalizeSlash(p).toLowerCase())) {
+      if (toRemove.has(normalizePath(p))) {
         next.delete(p);
       }
     }
@@ -1274,11 +1274,11 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
       let foldersChanged = false;
       for (const p of state.discoveredFolders) {
         const normP = normalizeSlash(p);
-        if (normP.toLowerCase().startsWith(oldPrefix.toLowerCase())) {
+        if (foldPathCase(normP).startsWith(foldPathCase(oldPrefix))) {
           const rel = normP.substring(oldPrefix.length);
           updatedDiscoveredFolders.add(normalizeSlash(newPrefix + rel));
           foldersChanged = true;
-        } else if (normP.toLowerCase() === normOld.toLowerCase()) {
+        } else if (foldPathCase(normP) === foldPathCase(normOld)) {
           updatedDiscoveredFolders.add(normalizeSlash(normNew));
           foldersChanged = true;
         } else {

@@ -9,15 +9,15 @@ anyhow = "1.0.104"
 blake3 = "1.8.7"
 chrono = { version = "0.4.45", features = ["serde"] }
 kamadak-exif = "0.6.1"
-rusqlite = { version = "0.40.2", features = ["bundled"] }
+rusqlite = { version = "0.41", features = ["bundled"] }
 serde = { version = "1.0.229", features = ["derive"] }
-tokio = { version = "1.53.1", features = ["fs", "sync"] }
+tokio = { version = "1.53.1", features = ["fs", "sync", "rt"] }
 walkdir = "2.5.0"
 thumb-rs = "0.1.1"
 image = "0.25.10"
 sysinfo = "0.39.6"
 regex = "1.13.1"
-lru = "0.13"
+lru = "0.18.2"
 rayon = "1.10"
 
 [target.'cfg(unix)'.dependencies]

@@ -7,7 +7,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useLibraryStore, LibraryImage } from "../../../stores/libraryStore";
 import { useDialogStore } from "../../../stores/dialogStore";
 import { useToastStore } from "../../../stores/toastStore";
-import { normalizePath, normalizeSlash } from "../../../utils/image";
+import { normalizePath, normalizeSlash, foldPathCase } from "../../../utils/image";
 import { FolderContextMenu } from "./components/FolderContextMenu";
 import { LastImportContextMenu } from "./components/LastImportContextMenu";
 import { NewFolderModal } from "./components/NewFolderModal";
@@ -27,14 +27,14 @@ export type TreeNode = {
 // Helper to build a clean folder tree from flat image paths and extra empty folders
 function buildTree(images: LibraryImage[], rootPath: string, allFolders: Set<string> = new Set()): TreeNode {
   const normRoot = normalizeSlash(rootPath);
-  const normRootLower = normRoot.toLowerCase();
+  const normRootKey = foldPathCase(normRoot);
   const root: TreeNode = { name: "Root", path: normRoot, fileCount: 0, children: {} };
   const rootLen = normRoot.length;
   
   // 1. Insert all known directories (discovered from disk or created dynamically)
   for (const folder of allFolders) {
     const normF = normalizeSlash(folder);
-    if (!normF.toLowerCase().startsWith(normRootLower)) continue;
+    if (!foldPathCase(normF).startsWith(normRootKey)) continue;
     if (normF.length === rootLen) continue; // Skip root itself
     let relPath = normF.substring(rootLen);
     if (relPath.charCodeAt(0) === 47 /* '/' */) relPath = relPath.substring(1);
@@ -43,7 +43,7 @@ function buildTree(images: LibraryImage[], rootPath: string, allFolders: Set<str
     let currentPath = normRoot;
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i];
-      const key = part.toLowerCase();
+      const key = foldPathCase(part);
       let child = current.children[key];
       if (!child) {
         child = {
@@ -68,7 +68,7 @@ function buildTree(images: LibraryImage[], rootPath: string, allFolders: Set<str
   // 2. Insert images and calculate counts for all ancestor folders
   for (let idx = 0; idx < images.length; idx++) {
     const normImgPath = normalizeSlash(images[idx].path);
-    if (!normImgPath.toLowerCase().startsWith(normRootLower)) continue;
+    if (!foldPathCase(normImgPath).startsWith(normRootKey)) continue;
     root.fileCount++;
     
     let relPath = normImgPath.substring(rootLen);
@@ -82,7 +82,7 @@ function buildTree(images: LibraryImage[], rootPath: string, allFolders: Set<str
     const end = parts.length - 1;
     for (let i = 0; i < end; i++) {
       const part = parts[i];
-      const key = part.toLowerCase();
+      const key = foldPathCase(part);
       let child = current.children[key];
       if (!child) {
         child = {
@@ -1160,9 +1160,9 @@ export function LibraryLeftSidebar() {
       return false;
     });
     const allImages = useLibraryStore.getState().images;
-    const normTargets = validPaths.map(p => normalizeSlash(p).toLowerCase());
+    const normTargets = validPaths.map(p => normalizePath(p));
     const affectedImages = allImages.filter(img => {
-      const normImg = normalizeSlash(img.path).toLowerCase();
+      const normImg = normalizePath(img.path);
       return normTargets.some(t => normImg.startsWith(t + '/') || normImg === t);
     });
     const photoCount = affectedImages.length;
@@ -1242,9 +1242,9 @@ export function LibraryLeftSidebar() {
   };
 
   const performPostFoldersDeleteCleanup = (folderPaths: string[], isNas: boolean) => {
-    const normTargets = folderPaths.map(p => normalizeSlash(p).toLowerCase());
+    const normTargets = folderPaths.map(p => normalizePath(p));
     const isUnderAny = (p: string) => {
-      const norm = normalizeSlash(p).toLowerCase();
+      const norm = normalizePath(p);
       return normTargets.some(t => norm.startsWith(t + '/') || norm === t);
     };
 
@@ -1271,7 +1271,7 @@ export function LibraryLeftSidebar() {
       useLibraryStore.getState().removeFolder(fp);
     }
 
-    const curActive = normalizeSlash(useLibraryStore.getState().activeFolderPath || '').toLowerCase();
+    const curActive = normalizePath(useLibraryStore.getState().activeFolderPath || '');
     if (isUnderAny(curActive)) {
       useLibraryStore.getState().setActiveFolderPath(rootPath || null);
     }
@@ -1315,9 +1315,9 @@ export function LibraryLeftSidebar() {
     stageFoldersForDeletion(validPaths);
 
     // Mark all photos in these folders as rejected (-1)
-    const normTargets = (allFolderPaths.length > 0 ? allFolderPaths : validPaths).map(p => normalizeSlash(p).toLowerCase());
+    const normTargets = (allFolderPaths.length > 0 ? allFolderPaths : validPaths).map(p => normalizePath(p));
     const isUnderAny = (p: string) => {
-      const norm = normalizeSlash(p).toLowerCase();
+      const norm = normalizePath(p);
       return normTargets.some(t => norm.startsWith(t + '/') || norm === t);
     };
     const allImages = useLibraryStore.getState().images;
@@ -1345,9 +1345,9 @@ export function LibraryLeftSidebar() {
     unstageFoldersForDeletion(topPaths);
 
     // Unflag photos in these folders that were rejected (-1)
-    const normTargets = (allFolderPaths.length > 0 ? allFolderPaths : topPaths).map(p => normalizeSlash(p).toLowerCase());
+    const normTargets = (allFolderPaths.length > 0 ? allFolderPaths : topPaths).map(p => normalizePath(p));
     const isUnderAny = (p: string) => {
-      const norm = normalizeSlash(p).toLowerCase();
+      const norm = normalizePath(p);
       return normTargets.some(t => norm.startsWith(t + '/') || norm === t);
     };
     const allImages = useLibraryStore.getState().images;

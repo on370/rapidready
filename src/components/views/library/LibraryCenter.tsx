@@ -5,7 +5,7 @@ import { ContextMenu } from "./ContextMenu";
 import { ArchiveConnectingOverlay } from "./components/ArchiveConnectingOverlay";
 import { ArchiveScanBanner } from "./components/ArchiveScanBanner";
 import { invoke } from "@tauri-apps/api/core";
-import { normalizePath, normalizeSlash, isRawFilename, isVideoFilename } from "../../../utils/image";
+import { normalizePath, isRawFilename, isVideoFilename } from "../../../utils/image";
 import { getTopLevelSelectedPaths } from "./LibraryLeftSidebar";
 
 import { CullingToolbar } from "./components/CullingToolbar";
@@ -1068,9 +1068,9 @@ export function LibraryCenter({
     }
 
     try {
-      const normStagedTargets = topStagedFolders.map(p => normalizeSlash(p).toLowerCase());
+      const normStagedTargets = topStagedFolders.map(p => normalizePath(p));
       const isUnderAnyStaged = (p: string) => {
-        const norm = normalizeSlash(p).toLowerCase();
+        const norm = normalizePath(p);
         return normStagedTargets.some(t => norm.startsWith(t + '/') || norm === t);
       };
 
