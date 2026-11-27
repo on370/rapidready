@@ -221,6 +221,12 @@ pub fn get_creation_date(path: &Path) -> Result<NaiveDateTime> {
                         }
                     }
                 }
+            } else if crate::metadata_resolver::cr3_exif::is_cr3_magic(&magic16) {
+                for exif in crate::metadata_resolver::cr3_exif::read_cr3_exif_blocks(&mut file) {
+                    if let Some(dt) = extract_date_from_exif(&exif) {
+                        return Ok(dt);
+                    }
+                }
             } else {
                 // Tier 3: Full container fallback (JPEG, HEIF, PNG, WebP)
                 // kamadak-exif handles JPEG/HEIC/PNG/WebP efficiently by reading only the APP1 / Exif box.

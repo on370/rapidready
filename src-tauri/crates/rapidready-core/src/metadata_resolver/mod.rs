@@ -4,6 +4,7 @@ use std::path::Path;
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 
+pub(crate) mod cr3_exif;
 mod formatters;
 mod linux_mounts;
 mod monochrome;
@@ -221,14 +222,16 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
             }
         }
 
-        let exif_opt: Option<exif::Exif> = if &magic16[0..2] == b"II" || &magic16[0..2] == b"MM" {
+        let exif_blocks: Vec<exif::Exif> = if cr3_exif::is_cr3_magic(&magic16) {
+            cr3_exif::read_cr3_exif_blocks(&mut file)
+        } else if &magic16[0..2] == b"II" || &magic16[0..2] == b"MM" {
             // TIFF-based container (CR2, ARW, NEF, DNG, ORF, RW2, etc.):
             // Read via read_raw on 256 KB slice (with 2 MB fallback) to avoid reading entire multi-MB file over SMB
             let mut header = vec![0u8; 256 * 1024];
             let _ = file.seek(SeekFrom::Start(target_offset));
             let read_res = file.read(&mut header).ok().map(|n| { header.truncate(n); header });
             
-            read_res.and_then(|mut buf| {
+            let exif_opt = read_res.and_then(|mut buf| {
                 if buf.len() < 8 { return None; }
                 crate::thumbnail::header_parser::normalize_tiff_magic_for_exif(&mut buf);
                 let parse_slice = |slice_buf: Vec<u8>| -> Option<exif::Exif> {
@@ -273,15 +276,29 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
                             None
                         }
                     })
-            })
+            });
+            exif_opt.into_iter().collect()
         } else {
             let _ = file.seek(SeekFrom::Start(target_offset));
             let mut bufreader = std::io::BufReader::new(file);
             let exifreader = exif::Reader::new();
-            exifreader.read_from_container(&mut bufreader).ok()
+            exifreader.read_from_container(&mut bufreader).ok().into_iter().collect()
         };
 
-        if let Some(exif) = exif_opt {
+        if !exif_blocks.is_empty() {
+            let find_field_with_exif = |pred: &dyn Fn(&exif::Field) -> bool| -> Option<(&exif::Exif, &exif::Field)> {
+                exif_blocks.iter().find_map(|e| e.fields().find(|f| pred(f)).map(|f| (e, f)))
+            };
+            let find_field = |pred: &dyn Fn(&exif::Field) -> bool| -> Option<&exif::Field> {
+                exif_blocks.iter().find_map(|e| e.fields().find(|f| pred(f)))
+            };
+            let find_primary_or_any = |tag: exif::Tag| -> Option<&exif::Field> {
+                exif_blocks
+                    .iter()
+                    .find_map(|e| e.get_field(tag, exif::In::PRIMARY))
+                    .or_else(|| exif_blocks.iter().find_map(|e| e.fields().find(|f| f.tag == tag)))
+            };
+
             let parse_date_str = |dt_str: &str| -> Option<NaiveDateTime> {
                 let trimmed = dt_str.trim();
                 NaiveDateTime::parse_from_str(trimmed, "%Y:%m:%d %H:%M:%S")
@@ -302,9 +319,7 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
 
             // 1. Capture Date (DateTimeOriginal / DateTimeDigitized)
             for tag in [exif::Tag::DateTimeOriginal, exif::Tag::DateTimeDigitized] {
-                if let Some(f) = exif.get_field(tag, exif::In::PRIMARY)
-                    .or_else(|| exif.fields().find(|f| f.tag == tag))
-                {
+                if let Some(f) = find_primary_or_any(tag) {
                     if let Some(dt) = parse_field_date(f) {
                         exif_capture_date = Some(dt);
                         break;
@@ -313,9 +328,7 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
             }
 
             // 2. Modify Date (DateTime tag 0x0132)
-            if let Some(f) = exif.get_field(exif::Tag::DateTime, exif::In::PRIMARY)
-                .or_else(|| exif.fields().find(|f| f.tag == exif::Tag::DateTime))
-            {
+            if let Some(f) = find_primary_or_any(exif::Tag::DateTime) {
                 exif_modify_date = parse_field_date(f);
             }
 
@@ -336,12 +349,12 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
             };
 
             // 3. Camera Make & Model
-            let raw_make = exif.fields().find(|f| f.tag == exif::Tag::Make).map(&extract_ascii_field);
-            let raw_model = exif.fields().find(|f| f.tag == exif::Tag::Model).map(&extract_ascii_field);
+            let raw_make = find_field(&|f| f.tag == exif::Tag::Make).map(&extract_ascii_field);
+            let raw_model = find_field(&|f| f.tag == exif::Tag::Model).map(&extract_ascii_field);
             meta.camera = combine_camera_make_and_model(raw_make.as_deref(), raw_model.as_deref());
 
             // 4. Lens Model & Fallback via LensSpecification (0xA432)
-            if let Some(field) = exif.fields().find(|f| {
+            if let Some(field) = find_field(&|f| {
                 f.tag == exif::Tag::LensModel || f.tag == exif::Tag(exif::Context::Tiff, 0xA434)
             }) {
                 let raw = extract_ascii_field(field);
@@ -349,7 +362,7 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
             }
 
             if meta.lens.is_none() {
-                let lens_spec_field = exif.fields().find(|f| {
+                let lens_spec_field = find_field(&|f| {
                     f.tag == exif::Tag::LensSpecification || f.tag == exif::Tag(exif::Context::Exif, 0xA432) || f.tag == exif::Tag(exif::Context::Tiff, 0xA432)
                 });
                 if let Some(field) = lens_spec_field {
@@ -395,8 +408,8 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
             }
 
             // 5. ISO
-            let iso_tag = exif.fields().find(|f| f.tag == exif::Tag::PhotographicSensitivity)
-                .or_else(|| exif.fields().find(|f| f.tag == exif::Tag::ISOSpeed));
+            let iso_tag = find_field(&|f| f.tag == exif::Tag::PhotographicSensitivity)
+                .or_else(|| find_field(&|f| f.tag == exif::Tag::ISOSpeed));
             if let Some(field) = iso_tag {
                 let iso = field.display_value().to_string().trim().to_string();
                 if !iso.is_empty() {
@@ -405,7 +418,7 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
             }
 
             // 6. Aperture (FNumber)
-            if let Some(field) = exif.fields().find(|f| f.tag == exif::Tag::FNumber) {
+            if let Some(field) = find_field(&|f| f.tag == exif::Tag::FNumber) {
                 let f_str = field.display_value().to_string().trim().to_string();
                 if !f_str.is_empty() {
                     meta.aperture = Some(clean_aperture(&f_str));
@@ -413,7 +426,7 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
             }
 
             // 7. Shutter Speed (ExposureTime)
-            if let Some(field) = exif.fields().find(|f| f.tag == exif::Tag::ExposureTime) {
+            if let Some(field) = find_field(&|f| f.tag == exif::Tag::ExposureTime) {
                 let exp_str = field.display_value().to_string().trim().to_string();
                 if !exp_str.is_empty() {
                     meta.shutter = Some(clean_shutter_speed(&exp_str));
@@ -421,7 +434,7 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
             }
 
             // 8. Exposure Bias Value (Exposure compensation in EV)
-            if let Some(field) = exif.fields().find(|f| f.tag == exif::Tag::ExposureBiasValue) {
+            if let Some(field) = find_field(&|f| f.tag == exif::Tag::ExposureBiasValue) {
                 let ev_num = match field.value {
                     exif::Value::SRational(ref vec) => {
                         vec.first().and_then(|r| if r.denom != 0 { Some(r.num as f64 / r.denom as f64) } else { None })
@@ -442,21 +455,23 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
             }
 
             // 9. Focal Length
-            if let Some(field) = exif.fields().find(|f| f.tag == exif::Tag::FocalLength) {
-                let fl = field.display_value().with_unit(&exif).to_string();
+            if let Some((exif_ctx, field)) = find_field_with_exif(&|f| f.tag == exif::Tag::FocalLength) {
+                let fl = field.display_value().with_unit(exif_ctx).to_string();
                 if !fl.is_empty() {
                     meta.focal_length = Some(clean_focal_length(&fl));
                 }
             }
 
             // 10. Dimensions (PixelXDimension / PixelYDimension or ImageWidth / ImageLength)
-            let max_w = exif
-                .fields()
+            let max_w = exif_blocks
+                .iter()
+                .flat_map(|e| e.fields())
                 .filter(|f| f.tag == exif::Tag::PixelXDimension || f.tag == exif::Tag::ImageWidth)
                 .filter_map(|f| f.value.get_uint(0))
                 .max();
-            let max_h = exif
-                .fields()
+            let max_h = exif_blocks
+                .iter()
+                .flat_map(|e| e.fields())
                 .filter(|f| f.tag == exif::Tag::PixelYDimension || f.tag == exif::Tag::ImageLength)
                 .filter_map(|f| f.value.get_uint(0))
                 .max();
@@ -475,11 +490,11 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
             meta.height = height;
 
             // 11. Monochrome Sensor Check via EXIF PhotometricInterpretation & CFAPattern
-            if let Some(field) = exif.fields().find(|f| f.tag == exif::Tag::PhotometricInterpretation) {
+            if let Some(field) = find_field(&|f| f.tag == exif::Tag::PhotometricInterpretation) {
                 if let Some(val) = field.value.get_uint(0) {
                     // 0 = WhiteIsZero, 1 = BlackIsZero (Standard Grayscale/Monochrome sensor)
                     // 32803 = CFA (Color Filter Array)
-                    let has_cfa = exif.fields().any(|f| f.tag == exif::Tag::CFAPattern);
+                    let has_cfa = exif_blocks.iter().any(|e| e.fields().any(|f| f.tag == exif::Tag::CFAPattern));
                     if (val == 0 || val == 1) && !has_cfa {
                         meta.is_monochrome_sensor = true;
                     }
@@ -487,20 +502,20 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
             }
 
             // 9. GPS Coordinates (Latitude, Longitude, Altitude) from EXIF
-            let lat_field = exif.fields().find(|f| f.tag == exif::Tag::GPSLatitude);
-            let lat_ref = exif.fields().find(|f| f.tag == exif::Tag::GPSLatitudeRef);
+            let lat_field = find_field(&|f| f.tag == exif::Tag::GPSLatitude);
+            let lat_ref = find_field(&|f| f.tag == exif::Tag::GPSLatitudeRef);
             if let Some(f) = lat_field {
                 meta.latitude = parse_gps_coord(f, lat_ref);
             }
 
-            let lon_field = exif.fields().find(|f| f.tag == exif::Tag::GPSLongitude);
-            let lon_ref = exif.fields().find(|f| f.tag == exif::Tag::GPSLongitudeRef);
+            let lon_field = find_field(&|f| f.tag == exif::Tag::GPSLongitude);
+            let lon_ref = find_field(&|f| f.tag == exif::Tag::GPSLongitudeRef);
             if let Some(f) = lon_field {
                 meta.longitude = parse_gps_coord(f, lon_ref);
             }
 
-            let alt_field = exif.fields().find(|f| f.tag == exif::Tag::GPSAltitude);
-            let alt_ref = exif.fields().find(|f| f.tag == exif::Tag::GPSAltitudeRef);
+            let alt_field = find_field(&|f| f.tag == exif::Tag::GPSAltitude);
+            let alt_ref = find_field(&|f| f.tag == exif::Tag::GPSAltitudeRef);
             if let Some(f) = alt_field {
                 if let exif::Value::Rational(ref vec) = f.value {
                     if let Some(first) = vec.first() {
@@ -519,7 +534,7 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
             }
 
             // 12. Focal Length in 35mm Film (Tag 0xA405)
-            let fl35_field = exif.fields().find(|f| {
+            let fl35_field = find_field(&|f| {
                 f.tag == exif::Tag::FocalLengthIn35mmFilm || f.tag == exif::Tag(exif::Context::Exif, 0xA405)
             });
             if let Some(field) = fl35_field {
@@ -531,7 +546,7 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
             }
 
             // 13. Exposure Program (Tag 0x8822) & Exposure Mode / Bracket (Tag 0xA402)
-            let prog_field = exif.fields().find(|f| f.tag == exif::Tag::ExposureProgram || f.tag == exif::Tag(exif::Context::Exif, 0x8822));
+            let prog_field = find_field(&|f| f.tag == exif::Tag::ExposureProgram || f.tag == exif::Tag(exif::Context::Exif, 0x8822));
             let mut prog_str = prog_field.and_then(|f| f.value.get_uint(0)).and_then(|val| {
                 match val {
                     1 => Some("Manual (M)".to_string()),
@@ -546,7 +561,7 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
                 }
             });
 
-            let mode_field = exif.fields().find(|f| f.tag == exif::Tag::ExposureMode || f.tag == exif::Tag(exif::Context::Exif, 0xA402));
+            let mode_field = find_field(&|f| f.tag == exif::Tag::ExposureMode || f.tag == exif::Tag(exif::Context::Exif, 0xA402));
             let is_bracket = mode_field.and_then(|f| f.value.get_uint(0)).map(|v| v == 2).unwrap_or(false);
             if is_bracket {
                 if let Some(ref mut s) = prog_str {
@@ -558,7 +573,7 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
             meta.exposure_program = prog_str;
 
             // 14. Metering Mode (Tag 0x9207)
-            let meter_field = exif.fields().find(|f| f.tag == exif::Tag::MeteringMode || f.tag == exif::Tag(exif::Context::Exif, 0x9207));
+            let meter_field = find_field(&|f| f.tag == exif::Tag::MeteringMode || f.tag == exif::Tag(exif::Context::Exif, 0x9207));
             if let Some(field) = meter_field {
                 if let Some(val) = field.value.get_uint(0) {
                     meta.metering_mode = match val {
@@ -574,10 +589,10 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
             }
 
             // 15. White Balance (Tag 0xA403) + Light Source (Tag 0x9208)
-            let wb_field = exif.fields().find(|f| f.tag == exif::Tag::WhiteBalance || f.tag == exif::Tag(exif::Context::Exif, 0xA403));
+            let wb_field = find_field(&|f| f.tag == exif::Tag::WhiteBalance || f.tag == exif::Tag(exif::Context::Exif, 0xA403));
             let wb_val = wb_field.and_then(|f| f.value.get_uint(0));
 
-            let light_field = exif.fields().find(|f| f.tag == exif::Tag::LightSource || f.tag == exif::Tag(exif::Context::Exif, 0x9208));
+            let light_field = find_field(&|f| f.tag == exif::Tag::LightSource || f.tag == exif::Tag(exif::Context::Exif, 0x9208));
             let light_val = light_field.and_then(|f| f.value.get_uint(0)).filter(|&v| v != 0);
 
             let light_name = light_val.and_then(|v| match v {
@@ -603,7 +618,7 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
             };
 
             // 16. Flash (Tag 0x9209)
-            let flash_field = exif.fields().find(|f| f.tag == exif::Tag::Flash || f.tag == exif::Tag(exif::Context::Exif, 0x9209));
+            let flash_field = find_field(&|f| f.tag == exif::Tag::Flash || f.tag == exif::Tag(exif::Context::Exif, 0x9209));
             if let Some(field) = flash_field {
                 if let Some(val) = field.value.get_uint(0) {
                     let fired = (val & 1) != 0;
@@ -626,7 +641,7 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
             }
 
             // 17. Color Space (Tag 0xA001)
-            let cs_field = exif.fields().find(|f| f.tag == exif::Tag::ColorSpace || f.tag == exif::Tag(exif::Context::Exif, 0xA001));
+            let cs_field = find_field(&|f| f.tag == exif::Tag::ColorSpace || f.tag == exif::Tag(exif::Context::Exif, 0xA001));
             if let Some(field) = cs_field {
                 if let Some(val) = field.value.get_uint(0) {
                     if val == 1 {
@@ -634,7 +649,7 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
                     } else if val == 2 {
                         meta.color_space = Some("Adobe RGB".to_string());
                     } else if val == 65535 || val == 0xFFFF {
-                        let interop_field = exif.fields().find(|f| {
+                        let interop_field = find_field(&|f| {
                             f.tag == exif::Tag::InteroperabilityIndex || f.tag == exif::Tag(exif::Context::Exif, 0x0001) || f.tag == exif::Tag(exif::Context::Tiff, 0x0001)
                         });
                         let is_adobe = interop_field.map(|f| extract_ascii_field(f).contains("R03")).unwrap_or(false);
@@ -648,7 +663,7 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
             }
 
             // 18. Subject Distance (Tag 0x9206)
-            let dist_field = exif.fields().find(|f| f.tag == exif::Tag::SubjectDistance || f.tag == exif::Tag(exif::Context::Exif, 0x9206));
+            let dist_field = find_field(&|f| f.tag == exif::Tag::SubjectDistance || f.tag == exif::Tag(exif::Context::Exif, 0x9206));
             if let Some(field) = dist_field {
                 if let exif::Value::Rational(ref vec) = field.value {
                     if let Some(r) = vec.first() {
@@ -669,7 +684,7 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
             }
 
             // 19. Digital Zoom Ratio (Tag 0xA404)
-            let zoom_field = exif.fields().find(|f| f.tag == exif::Tag::DigitalZoomRatio || f.tag == exif::Tag(exif::Context::Exif, 0xA404));
+            let zoom_field = find_field(&|f| f.tag == exif::Tag::DigitalZoomRatio || f.tag == exif::Tag(exif::Context::Exif, 0xA404));
             if let Some(field) = zoom_field {
                 if let exif::Value::Rational(ref vec) = field.value {
                     if let Some(r) = vec.first() {
@@ -684,29 +699,29 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
             }
 
             // 20. Software (Tag 0x0131)
-            let sw_field = exif.fields().find(|f| f.tag == exif::Tag::Software || f.tag == exif::Tag(exif::Context::Tiff, 0x0131));
+            let sw_field = find_field(&|f| f.tag == exif::Tag::Software || f.tag == exif::Tag(exif::Context::Tiff, 0x0131));
             if let Some(field) = sw_field {
                 let raw = extract_ascii_field(field);
                 meta.software = clean_camera_model(&raw);
             }
 
             // 21. Body Serial Number (Tag 0xA431)
-            let bs_field = exif.fields().find(|f| f.tag == exif::Tag::BodySerialNumber || f.tag == exif::Tag(exif::Context::Exif, 0xA431));
+            let bs_field = find_field(&|f| f.tag == exif::Tag::BodySerialNumber || f.tag == exif::Tag(exif::Context::Exif, 0xA431));
             if let Some(field) = bs_field {
                 let raw = extract_ascii_field(field);
                 meta.body_serial = clean_camera_model(&raw);
             }
 
             // 22. Lens Serial Number (Tag 0xA435)
-            let ls_field = exif.fields().find(|f| f.tag == exif::Tag::LensSerialNumber || f.tag == exif::Tag(exif::Context::Exif, 0xA435));
+            let ls_field = find_field(&|f| f.tag == exif::Tag::LensSerialNumber || f.tag == exif::Tag(exif::Context::Exif, 0xA435));
             if let Some(field) = ls_field {
                 let raw = extract_ascii_field(field);
                 meta.lens_serial = clean_camera_model(&raw);
             }
 
             // 23. SubSecTimeOriginal (Tag 0x9291) / SubSecTime (Tag 0x9290)
-            let subsec_field = exif.fields().find(|f| f.tag == exif::Tag::SubSecTimeOriginal || f.tag == exif::Tag(exif::Context::Exif, 0x9291))
-                .or_else(|| exif.fields().find(|f| f.tag == exif::Tag::SubSecTime || f.tag == exif::Tag(exif::Context::Exif, 0x9290)));
+            let subsec_field = find_field(&|f| f.tag == exif::Tag::SubSecTimeOriginal || f.tag == exif::Tag(exif::Context::Exif, 0x9291))
+                .or_else(|| find_field(&|f| f.tag == exif::Tag::SubSecTime || f.tag == exif::Tag(exif::Context::Exif, 0x9290)));
             if let Some(field) = subsec_field {
                 let raw = extract_ascii_field(field);
                 let digits: String = raw.chars().filter(|c| c.is_ascii_digit()).collect();
@@ -716,7 +731,7 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
             }
 
             // 24. Artist (Tag 0x013B)
-            if let Some(field) = exif.fields().find(|f| f.tag == exif::Tag::Artist) {
+            if let Some(field) = find_field(&|f| f.tag == exif::Tag::Artist) {
                 let s = extract_ascii_field(field);
                 if !s.is_empty() {
                     meta.exif_artist = Some(s);
@@ -724,7 +739,7 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
             }
 
             // 25. Copyright (Tag 0x8298)
-            if let Some(field) = exif.fields().find(|f| f.tag == exif::Tag::Copyright) {
+            if let Some(field) = find_field(&|f| f.tag == exif::Tag::Copyright) {
                 let s = extract_ascii_field(field);
                 if !s.is_empty() {
                     meta.exif_copyright = Some(s);
@@ -732,7 +747,7 @@ pub fn get_image_metadata(path: &Path) -> ImageMetadata {
             }
 
             // 26. ImageDescription (Tag 0x010E)
-            if let Some(field) = exif.fields().find(|f| f.tag == exif::Tag::ImageDescription) {
+            if let Some(field) = find_field(&|f| f.tag == exif::Tag::ImageDescription) {
                 let s = extract_ascii_field(field);
                 if !s.is_empty() {
                     meta.exif_description = Some(s);
