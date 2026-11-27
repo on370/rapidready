@@ -133,25 +133,29 @@ pub fn start_watching_dir_internal(
                         if !img_path.exists() {
                             continue;
                         }
-                        let sc_mtime = std::fs::metadata(&p)
-                            .ok()
-                            .and_then(|m| m.modified().ok())
-                            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                            .map(|d| d.as_secs() as i64);
+                        let dev_edit_mtime = if rapidready_core::thumbnail::detect_external_developer_edit_change(&img_path, &p) {
+                            std::fs::metadata(&p)
+                                .ok()
+                                .and_then(|m| m.modified().ok())
+                                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                                .map(|d| d.as_secs() as i64)
+                        } else {
+                            None
+                        };
                         let culling = rapidready_core::culling::read_sidecar(&img_path);
                         if let Ok(catalog) = get_archive_catalog(&app_handle) {
-                            let _ = catalog.update_culling(&img_path_str, &culling, sc_mtime);
+                            let _ = catalog.update_culling(&img_path_str, &culling, dev_edit_mtime);
                         }
                         let _ = app_handle.emit("sidecar-updated", serde_json::json!({
                             "path": img_path_str,
                             "culling": culling,
-                            "sidecar_mtime": sc_mtime
+                            "sidecar_mtime": dev_edit_mtime
                         }));
                     } else if path_str.to_lowercase().ends_with(".xmp") {
                         if !p.exists() {
                             continue;
                         }
-                        let sc_mtime = std::fs::metadata(&p)
+                        let raw_sc_mtime = std::fs::metadata(&p)
                             .ok()
                             .and_then(|m| m.modified().ok())
                             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
@@ -179,14 +183,19 @@ pub fn start_watching_dir_internal(
                                 continue;
                             }
                             let img_path_str = img_path.to_string_lossy().to_string();
+                            let dev_edit_mtime = if rapidready_core::thumbnail::detect_external_developer_edit_change(&img_path, &p) {
+                                raw_sc_mtime
+                            } else {
+                                None
+                            };
                             let culling = rapidready_core::culling::read_sidecar(&img_path);
                             if let Ok(catalog) = get_archive_catalog(&app_handle) {
-                                let _ = catalog.update_culling(&img_path_str, &culling, sc_mtime);
+                                let _ = catalog.update_culling(&img_path_str, &culling, dev_edit_mtime);
                             }
                             let _ = app_handle.emit("sidecar-updated", serde_json::json!({
                                 "path": img_path_str,
                                 "culling": culling,
-                                "sidecar_mtime": sc_mtime
+                                "sidecar_mtime": dev_edit_mtime
                             }));
                         }
                     } else if p.is_dir() {
@@ -729,18 +738,25 @@ pub async fn rebuild_archive_catalog(
 ) -> Result<(), String> {
     let catalog = catalog_state.catalog.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        // Targeted invalidation of this archive's chunks only! Never wipe other archives globally.
+        // Clear L1 RAM cache so stale thumbnails cannot survive an archive rebuild.
+        rapidready_core::thumbnail::clear_ram_thumbnail_cache();
+        // Targeted invalidation of this archive's chunks only (both raw and developer-preview keys)!
         if let Some(chunk_cache) = rapidready_core::chunk_cache::get_global_chunk_cache() {
-            if let Ok(cands) = catalog.get_thumbnail_candidates_for_root(&path) {
-                let mut keys = Vec::with_capacity(cands.len() * 2);
-                for c in cands {
-                    let p = Path::new(&c.path);
-                    let orient = c.orientation.unwrap_or(1);
-                    keys.push(rapidready_core::chunk_cache::compute_cache_key(p, c.size, c.mtime, 1, orient));
-                    keys.push(rapidready_core::chunk_cache::compute_cache_key(p, c.size, c.mtime, 2, orient));
-                }
-                let _ = chunk_cache.remove_entries_for_keys(&keys);
+            let mut keys = Vec::new();
+            for dev_mode in [false, true] {
+                rapidready_core::thumbnail::with_developer_previews_override(Some(dev_mode), || {
+                    if let Ok(cands) = catalog.get_thumbnail_candidates_for_root(&path) {
+                        keys.reserve(cands.len() * 2);
+                        for c in cands {
+                            let p = Path::new(&c.path);
+                            let orient = c.orientation.unwrap_or(1);
+                            keys.push(rapidready_core::chunk_cache::compute_cache_key(p, c.size, c.mtime, 1, orient));
+                            keys.push(rapidready_core::chunk_cache::compute_cache_key(p, c.size, c.mtime, 2, orient));
+                        }
+                    }
+                });
             }
+            let _ = chunk_cache.remove_entries_for_keys(&keys);
         }
         catalog.rebuild_archive_catalog(&path).map_err(|e| e.to_string())
     })

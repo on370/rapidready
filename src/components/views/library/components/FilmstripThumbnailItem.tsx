@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Check, Star, Film } from 'lucide-react';
 import { LibraryImage } from '../../../../stores/libraryStore';
+import { useSettingsStore } from '../../../../stores/settingsStore';
 import { getRrImageUrl, isRawFilename, isVideoFilename } from '../../../../utils/image';
 import { getColorConfig } from '../../../../constants/culling';
 import { loadedThumbnailCache } from '../utils/thumbnailCache';
@@ -24,6 +25,8 @@ export const FilmstripThumbnailItem = React.memo(function FilmstripThumbnailItem
   onClick,
   onContextMenu,
 }: FilmstripThumbnailItemProps) {
+  // Subscribe so toggling developer previews immediately refreshes visible thumbnails
+  useSettingsStore((s) => s.useDeveloperPreviews);
   const isVideo = img.is_video ?? isVideoFilename(img.name);
   const isRaw = !isVideo && (img.is_raw ?? isRawFilename(img.name));
   const isStacked = Boolean(img.stackMembers && img.stackMembers.length > 1);

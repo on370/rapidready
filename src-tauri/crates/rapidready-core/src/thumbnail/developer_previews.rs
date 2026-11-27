@@ -17,17 +17,44 @@ use super::jpeg_extract::inject_orientation_into_jpeg;
 /// Enabled by default.
 static USE_DEVELOPER_PREVIEWS: AtomicBool = AtomicBool::new(true);
 
-pub fn set_use_developer_previews(enabled: bool) {
-    let prev = USE_DEVELOPER_PREVIEWS.swap(enabled, Ordering::SeqCst);
-    if prev != enabled {
-        if let Ok(mut cache) = super::THUMBNAIL_CACHE.lock() {
-            cache.clear();
-        }
+pub fn clear_ram_thumbnail_cache() {
+    if let Ok(mut cache) = super::THUMBNAIL_CACHE.lock() {
+        cache.clear();
     }
 }
 
+pub fn set_use_developer_previews(enabled: bool) {
+    let prev = USE_DEVELOPER_PREVIEWS.swap(enabled, Ordering::SeqCst);
+    if prev != enabled {
+        clear_ram_thumbnail_cache();
+    }
+}
+
+use std::cell::Cell;
+
+thread_local! {
+    static DEV_PREVIEWS_OVERRIDE: Cell<Option<bool>> = const { Cell::new(None) };
+}
+
+pub fn with_developer_previews_override<R>(override_opt: Option<bool>, f: impl FnOnce() -> R) -> R {
+    if override_opt.is_none() {
+        return f();
+    }
+    struct Guard(Option<bool>);
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            DEV_PREVIEWS_OVERRIDE.with(|c| c.set(self.0));
+        }
+    }
+    let prev = DEV_PREVIEWS_OVERRIDE.with(|c| c.replace(override_opt));
+    let _guard = Guard(prev);
+    f()
+}
+
 pub fn get_use_developer_previews() -> bool {
-    USE_DEVELOPER_PREVIEWS.load(Ordering::Relaxed)
+    DEV_PREVIEWS_OVERRIDE
+        .with(|c| c.get())
+        .unwrap_or_else(|| USE_DEVELOPER_PREVIEWS.load(Ordering::Relaxed))
 }
 
 // ============================================================================
@@ -377,11 +404,12 @@ fn compute_rapidraw_hashes(
 
 /// Attempts to locate and read RapidRAW's pre-rendered preview JPEG for `path`.
 pub fn try_read_rapidraw_cached_preview(path: &Path, scale: u32) -> Option<Vec<u8>> {
-    let sidecar_path = crate::culling::get_sidecar_path(path);
-    let rr_mtime = mtime_secs(&fs::metadata(&sidecar_path).ok()?)?;
-
+    // Short-circuit BEFORE touching the NAS/filesystem if RapidRAW's local cache directory does not exist.
     let (settings, thumbs_dir_opt) = get_rapidraw_config();
     let thumbs_dir = thumbs_dir_opt?;
+
+    let sidecar_path = crate::culling::get_sidecar_path(path);
+    let rr_mtime = mtime_secs(&fs::metadata(&sidecar_path).ok()?)?;
 
     let img_mod_time = mtime_secs(&fs::metadata(path).ok()?)?;
     let is_raw = is_rapidraw_raw_extension(path);
@@ -476,14 +504,25 @@ fn find_darktable_paths() -> (Option<PathBuf>, Vec<PathBuf>) {
     }
 
     let mut mipmap_dirs = Vec::new();
+    let mut cache_roots = Vec::new();
     if let Some(cache_root) = os_cache_root() {
-        let dt_cache = cache_root.join("darktable");
+        cache_roots.push(cache_root.join("darktable"));
+    }
+    #[cfg(target_os = "macos")]
+    if let Some(home) = user_home_dir() {
+        let unix_cache = home.join(".cache").join("darktable");
+        if !cache_roots.contains(&unix_cache) {
+            cache_roots.push(unix_cache);
+        }
+    }
+
+    for dt_cache in cache_roots {
         if let Ok(entries) = fs::read_dir(&dt_cache) {
             for entry in entries.flatten() {
                 let p = entry.path();
                 if p.is_dir() {
                     let name = entry.file_name().to_string_lossy().into_owned();
-                    if name.starts_with("mipmaps-") && name.ends_with(".d") {
+                    if name.starts_with("mipmaps-") && name.ends_with(".d") && !mipmap_dirs.contains(&p) {
                         mipmap_dirs.push(p);
                     }
                 }
@@ -494,11 +533,7 @@ fn find_darktable_paths() -> (Option<PathBuf>, Vec<PathBuf>) {
     (db_path, mipmap_dirs)
 }
 
-fn lookup_darktable_image_id(path: &Path) -> Option<(i64, Vec<PathBuf>)> {
-    let parent = path.parent()?.to_string_lossy().to_string();
-    let filename = path.file_name()?.to_string_lossy().to_string();
-
-    let mut guard = DARKTABLE_STATE.lock().unwrap_or_else(|e| e.into_inner());
+fn ensure_darktable_state(guard: &mut Option<DarktableCacheState>) {
     let needs_refresh = match *guard {
         Some(ref state) => state.last_checked.elapsed() > Duration::from_secs(10),
         None => true,
@@ -545,6 +580,23 @@ fn lookup_darktable_image_id(path: &Path) -> Option<(i64, Vec<PathBuf>)> {
             db_mtime: current_mtime,
         });
     }
+}
+
+fn has_darktable_mipmap_dirs() -> bool {
+    let mut guard = DARKTABLE_STATE.lock().unwrap_or_else(|e| e.into_inner());
+    ensure_darktable_state(&mut guard);
+    guard
+        .as_ref()
+        .map(|s| !s.mipmap_dirs.is_empty())
+        .unwrap_or(false)
+}
+
+fn lookup_darktable_image_id(path: &Path) -> Option<(i64, Vec<PathBuf>)> {
+    let parent = path.parent()?.to_string_lossy().to_string();
+    let filename = path.file_name()?.to_string_lossy().to_string();
+
+    let mut guard = DARKTABLE_STATE.lock().unwrap_or_else(|e| e.into_inner());
+    ensure_darktable_state(&mut guard);
 
     let state = guard.as_ref()?;
     if state.mipmap_dirs.is_empty() {
@@ -600,6 +652,11 @@ static DARKTABLE_ID_CACHE: LazyLock<Mutex<HashMap<PathBuf, (Option<SystemTime>, 
 
 /// Attempts to locate and read darktable's pre-rendered mipmap JPEG for `path`.
 pub fn try_read_darktable_cached_preview(path: &Path, scale: u32) -> Option<Vec<u8>> {
+    // Short-circuit BEFORE touching the NAS/filesystem if darktable has no local mipmaps cache.
+    if !has_darktable_mipmap_dirs() {
+        return None;
+    }
+
     // Only check darktable if an .xmp sidecar exists for this file
     let xmp_path = crate::culling::find_existing_xmp_path(path)?;
     if !xmp_path.is_file() {
@@ -940,30 +997,111 @@ fn collect_dng_jpeg_previews(
 // 5. Unified Entrypoint & Sidecar Timestamp Resolution
 // ============================================================================
 
+const VIDEO_EXTENSIONS: &[&str] = &[
+    "mp4", "mov", "m4v", "avi", "mkv", "mts", "m2ts", "wmv", "webm", "flv",
+];
+
+fn is_video_extension(path: &Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .map(|e| VIDEO_EXTENSIONS.contains(&e.to_ascii_lowercase().as_str()))
+        .unwrap_or(false)
+}
+
+/// Tracks the last seen blake3 hash of the `adjustments` JSON block per image,
+/// so culling-only updates written by RapidReady (rating/flag/color/tags) do NOT
+/// invalidate cached thumbnails.
+static LAST_ADJUSTMENTS_HASH: LazyLock<Mutex<HashMap<PathBuf, Option<[u8; 32]>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// Returns `true` only if `sidecar_path` contains actual external developer edits that
+/// changed since the last check (ignoring culling-only writes made inside RapidReady).
+pub fn detect_external_developer_edit_change(img_path: &Path, sidecar_path: &Path) -> bool {
+    let ext = sidecar_path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+
+    if ext == "rrdata" {
+        if get_rapidraw_config().1.is_none() {
+            return false;
+        }
+        let adj_hash = fs::read_to_string(sidecar_path)
+            .ok()
+            .and_then(|content| serde_json::from_str::<serde_json::Value>(&content).ok())
+            .and_then(|mut root| {
+                let mut adj = root
+                    .get_mut("adjustments")
+                    .map(std::mem::take)
+                    .unwrap_or(serde_json::Value::Null);
+                if let Some(obj) = adj.as_object_mut() {
+                    if obj.remove("rating").is_some() && obj.is_empty() {
+                        adj = serde_json::Value::Null;
+                    }
+                }
+                if !is_rapidraw_adjustments_edited(&adj) {
+                    return None;
+                }
+                serde_json::to_vec(&adj)
+                    .ok()
+                    .map(|b| *blake3::hash(&b).as_bytes())
+            });
+
+        let mut guard = LAST_ADJUSTMENTS_HASH
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if guard.len() > 100_000 {
+            guard.clear();
+        }
+        let prev = guard.insert(img_path.to_path_buf(), adj_hash);
+        match prev {
+            Some(old) => old != adj_hash,
+            None => adj_hash.is_some(),
+        }
+    } else if ext == "xmp" {
+        if !has_darktable_mipmap_dirs() {
+            return false;
+        }
+        // Only invalidate for XMP files that contain darktable develop history
+        fs::read_to_string(sidecar_path)
+            .map(|s| s.contains("darktable:history"))
+            .unwrap_or(false)
+    } else {
+        false
+    }
+}
+
 /// Computes an effective modification timestamp that changes whenever the image's
 /// external developer sidecar (.rrdata or .xmp) or developer preview toggle changes.
 /// This ensures L1 RAM and L2 ChunkCache automatically invalidate when an image is edited!
 pub fn resolve_effective_mtime_for_cache(path: &Path, base_mtime: i64) -> i64 {
-    if !get_use_developer_previews() {
+    if !get_use_developer_previews() || is_video_extension(path) {
         return base_mtime;
     }
 
     let mut max_sidecar_mtime = 0i64;
 
-    let rr_path = crate::culling::get_sidecar_path(path);
-    if let Ok(meta) = fs::metadata(&rr_path) {
-        if let Ok(mod_time) = meta.modified() {
-            if let Ok(dur) = mod_time.duration_since(UNIX_EPOCH) {
-                max_sidecar_mtime = max_sidecar_mtime.max(dur.as_secs() as i64);
+    // Only stat .rrdata on NAS/disk if RapidRAW's local cache directory actually exists
+    if get_rapidraw_config().1.is_some() {
+        let rr_path = crate::culling::get_sidecar_path(path);
+        if let Ok(meta) = fs::metadata(&rr_path) {
+            if let Ok(mod_time) = meta.modified() {
+                if let Ok(dur) = mod_time.duration_since(UNIX_EPOCH) {
+                    max_sidecar_mtime = max_sidecar_mtime.max(dur.as_secs() as i64);
+                }
             }
         }
     }
 
-    if let Some(xmp_path) = crate::culling::find_existing_xmp_path(path) {
-        if let Ok(meta) = fs::metadata(&xmp_path) {
-            if let Ok(mod_time) = meta.modified() {
-                if let Ok(dur) = mod_time.duration_since(UNIX_EPOCH) {
-                    max_sidecar_mtime = max_sidecar_mtime.max(dur.as_secs() as i64);
+    // Only stat .xmp on NAS/disk if darktable's local mipmaps cache actually exists
+    if has_darktable_mipmap_dirs() {
+        if let Some(xmp_path) = crate::culling::find_existing_xmp_path(path) {
+            if let Ok(meta) = fs::metadata(&xmp_path) {
+                if let Ok(mod_time) = meta.modified() {
+                    if let Ok(dur) = mod_time.duration_since(UNIX_EPOCH) {
+                        max_sidecar_mtime = max_sidecar_mtime.max(dur.as_secs() as i64);
+                    }
                 }
             }
         }
@@ -995,7 +1133,7 @@ pub fn try_get_developer_preview(
     scale: u32,
     target_orient: Option<u32>,
 ) -> Option<Vec<u8>> {
-    if !get_use_developer_previews() {
+    if !get_use_developer_previews() || is_video_extension(path) {
         return None;
     }
 

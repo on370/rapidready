@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
-import { normalizePath, normalizeSlash } from '../utils/image';
+import { normalizePath, normalizeSlash, bumpImageCacheEpoch } from '../utils/image';
 import { useLibraryUIStore } from './libraryUIStore';
 
 export interface CullingState {
@@ -854,6 +854,7 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
     if (!root) return;
     try {
       await invoke('rebuild_archive_catalog', { path: root });
+      bumpImageCacheEpoch();
       set({
         images: [],
         imageIndexMap: new Map(),

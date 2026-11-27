@@ -561,24 +561,40 @@ impl ArchiveCatalog {
                         .map(|d| d.as_secs() as i64)
                         .unwrap_or(0)
                 };
-                let sidecar_mtime = {
+                let sidecar_mtime = if file.culling.sidecar_source.is_some()
+                    || file.culling != CullingState::default()
+                {
                     let path_obj = Path::new(&file.path);
-                    let rr_mtime = fs::metadata(get_sidecar_path(path_obj))
-                        .ok()
-                        .and_then(|m| m.modified().ok())
-                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                        .map(|d| d.as_secs() as i64);
-                    let xmp_mtime = crate::culling::find_existing_xmp_path(path_obj)
-                        .and_then(|xp| fs::metadata(xp).ok())
-                        .and_then(|m| m.modified().ok())
-                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                        .map(|d| d.as_secs() as i64);
+                    let src = file.culling.sidecar_source.as_deref().unwrap_or("");
+                    let check_rr = src.is_empty() || src == "rrdata" || src.starts_with("both");
+                    let check_xmp = src == "xmp" || src.starts_with("both");
+
+                    let rr_mtime = if check_rr {
+                        fs::metadata(get_sidecar_path(path_obj))
+                            .ok()
+                            .and_then(|m| m.modified().ok())
+                            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                            .map(|d| d.as_secs() as i64)
+                    } else {
+                        None
+                    };
+                    let xmp_mtime = if check_xmp {
+                        crate::culling::find_existing_xmp_path(path_obj)
+                            .and_then(|xp| fs::metadata(xp).ok())
+                            .and_then(|m| m.modified().ok())
+                            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                            .map(|d| d.as_secs() as i64)
+                    } else {
+                        None
+                    };
                     match (rr_mtime, xmp_mtime) {
                         (Some(a), Some(b)) => Some(a.max(b)),
                         (Some(a), None) => Some(a),
                         (None, Some(b)) => Some(b),
                         (None, None) => None,
                     }
+                } else {
+                    None
                 };
                 let exif_date_str = file.date.map(|d| d.format("%Y-%m-%dT%H:%M:%S").to_string());
                 let sidecar_json = serde_json::to_string(&file.culling).ok();
@@ -620,13 +636,15 @@ impl ArchiveCatalog {
     }
 
     /// Fast sidecar culling update in database when user rates/colors a photo.
+    /// Passing `sidecar_mtime: None` preserves the existing `sidecar_mtime` so internal
+    /// RapidReady culling writes do not invalidate cached thumbnails.
     pub fn update_culling(&self, path: &str, culling: &CullingState, sidecar_mtime: Option<i64>) -> Result<()> {
         let norm_path = normalize_canonical_path(path);
         let sidecar_json = serde_json::to_string(culling)?;
         let conn = self.conn.lock().unwrap();
         conn.execute(
             "UPDATE archive_files
-             SET sidecar_culling_json = ?1, sidecar_mtime = ?2
+             SET sidecar_culling_json = ?1, sidecar_mtime = COALESCE(?2, sidecar_mtime)
              WHERE canonical_path = ?3",
             (&sidecar_json, sidecar_mtime, &norm_path),
         )?;

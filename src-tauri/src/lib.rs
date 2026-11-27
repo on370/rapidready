@@ -145,6 +145,7 @@ pub fn run() {
                 let size_param: Option<u64> = extract_query_param(query, &full_uri_str, "size");
                 let mtime_param: Option<i64> = extract_query_param(query, &full_uri_str, "mtime");
                 let scale: u32 = extract_query_param(query, &full_uri_str, "scale").unwrap_or(1);
+                let devprev_override: Option<bool> = extract_query_param::<u8>(query, &full_uri_str, "devprev").map(|v| v != 0);
 
                 let path_str = uri_path;
                 let path_str = if path_str.starts_with("rr-image://localhost") {
@@ -193,13 +194,15 @@ pub fn run() {
                 // FAST PATH: If not fullres, check L1 RAM cache and L2 local NVMe chunk cache.
                 // Resolves in < 0.05 ms without spawning blocking threads or touching SMB/NAS!
                 if !is_fullres {
-                    if let Some(bytes) = rapidready_core::thumbnail::get_cached_preview_jpeg_fast(
-                        &path,
-                        scale,
-                        orient_param,
-                        size_param,
-                        mtime_param,
-                    ) {
+                    if let Some(bytes) = rapidready_core::thumbnail::with_developer_previews_override(devprev_override, || {
+                        rapidready_core::thumbnail::get_cached_preview_jpeg_fast(
+                            &path,
+                            scale,
+                            orient_param,
+                            size_param,
+                            mtime_param,
+                        )
+                    }) {
                         let res = Response::builder()
                             .header("Content-Type", "image/jpeg")
                             .header("Access-Control-Allow-Origin", "*")
@@ -243,13 +246,15 @@ pub fn run() {
                 // or the background thumbnailer already cached this image while we were waiting,
                 // respond immediately without touching the NAS / slow decode!
                 if !is_fullres {
-                    if let Some(bytes) = rapidready_core::thumbnail::get_cached_preview_jpeg_fast(
-                        &path,
-                        scale,
-                        orient_param,
-                        size_param,
-                        mtime_param,
-                    ) {
+                    if let Some(bytes) = rapidready_core::thumbnail::with_developer_previews_override(devprev_override, || {
+                        rapidready_core::thumbnail::get_cached_preview_jpeg_fast(
+                            &path,
+                            scale,
+                            orient_param,
+                            size_param,
+                            mtime_param,
+                        )
+                    }) {
                         drop(permit);
                         let res = Response::builder()
                             .header("Content-Type", "image/jpeg")
@@ -272,23 +277,15 @@ pub fn run() {
                 }
 
                 let res = tauri::async_runtime::spawn_blocking(move || {
+                    rapidready_core::thumbnail::with_developer_previews_override(devprev_override, || {
                     let _permit = permit;
                     let _vp_guard = _vp_guard;
                     let path = &path;
                     if is_fullres {
                         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
                         
-                        // Check external developer previews first (even for edited JPEGs/PNGs in RapidRAW or darktable!)
-                        if let Some(dev_bytes) = rapidready_core::thumbnail::try_get_developer_preview(path, 100, orient_param) {
-                            return Response::builder()
-                                .header("Content-Type", "image/jpeg")
-                                .header("Access-Control-Allow-Origin", "*")
-                                .header("Cache-Control", "public, max-age=86400, immutable")
-                                .body(dev_bytes)
-                                .unwrap();
-                        }
-
                         // Video extensions must stay in sync with archive.rs VIDEO list; otherwise the generic else-branch would read the whole video file.
+                        // RAW / HEIF / Video all go through get_max_preview_jpeg_with_orient_and_hints (which checks L1 cache + developer previews once, skipping videos).
                         if ["cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2", "pef", "3fr", "x3f", "nrw", "heic", "heif", "hif", "mp4", "mov", "m4v", "avi", "mkv", "mts", "m2ts", "wmv", "webm", "flv"].contains(&ext.as_str()) {
                             match rapidready_core::thumbnail::get_max_preview_jpeg_with_orient_and_hints(path, orient_param, size_param, mtime_param) {
                                 Ok(bytes) => {
@@ -302,6 +299,15 @@ pub fn run() {
                                 Err(_) => {}
                             }
                         } else {
+                            // For standard raster images (JPG/PNG/WebP), check external developer previews first (e.g., JPEG edited in RapidRAW/darktable)
+                            if let Some(dev_bytes) = rapidready_core::thumbnail::try_get_developer_preview(path, 100, orient_param) {
+                                return Response::builder()
+                                    .header("Content-Type", "image/jpeg")
+                                    .header("Access-Control-Allow-Origin", "*")
+                                    .header("Cache-Control", "public, max-age=86400, immutable")
+                                    .body(dev_bytes)
+                                    .unwrap();
+                            }
                             let sidecar_state = rapidready_core::culling::read_sidecar(path);
                             let eff_orient = orient_param.or(sidecar_state.orientation);
                             if let Ok(bytes) = std::fs::read(path) {
@@ -367,6 +373,7 @@ pub fn run() {
                             }
                         }
                     }
+                    })
                 }).await.unwrap_or_else(|_| Response::builder().status(500).body(Vec::new()).unwrap());
 
                 responder.respond(res);

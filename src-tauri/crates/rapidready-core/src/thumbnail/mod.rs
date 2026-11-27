@@ -243,6 +243,54 @@ fn apply_developer_mtime_offset(path: &Path, base_mtime: i64, sidecar_mtime: Opt
     }
 }
 
+/// Downscales oversized JPEG previews (> 1.5 MB) to `target_px` (720px for grid, 160px for micro-icons)
+/// so L1 RAM and L2 chunk caches stay compact (~80-120 KB per image).
+/// Loupe View and 100% Zoom (`scale >= 100`) bypass downscaling to preserve full resolution.
+fn downscale_grid_preview_if_large(
+    path: &Path,
+    bytes: Vec<u8>,
+    scale: u32,
+    target_px: u32,
+    target_orient: Option<u32>,
+) -> Vec<u8> {
+    if scale >= 100 || bytes.len() <= 1_500_000 {
+        return bytes;
+    }
+
+    let orient = parse_header_orientation(&bytes)
+        .or(target_orient)
+        .or_else(|| get_effective_orientation(path))
+        .unwrap_or(1);
+
+    #[cfg(target_os = "macos")]
+    {
+        let downscaled = imageio::extract_thumbnail_from_data(&bytes, target_px).unwrap_or(bytes);
+        if orient != 1 {
+            inject_orientation_into_jpeg(&downscaled, orient as u16)
+        } else {
+            downscaled
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        // Windows / Linux fallback downscaling using image crate:
+        // (Optimized SIMD decoding via turbojpeg/zune-jpeg tracked in ROADMAP.md backlog)
+        if let Ok(dyn_img) = image::load_from_memory(&bytes) {
+            let resized = dyn_img.thumbnail(target_px, target_px);
+            let mut buf = std::io::Cursor::new(Vec::new());
+            if resized.into_rgb8().write_to(&mut buf, image::ImageFormat::Jpeg).is_ok() {
+                let out = buf.into_inner();
+                if orient != 1 {
+                    return inject_orientation_into_jpeg(&out, orient as u16);
+                } else {
+                    return out;
+                }
+            }
+        }
+        bytes
+    }
+}
+
 fn resolve_fast_metadata(
     path: &Path,
     target_orient: Option<u32>,
@@ -251,8 +299,7 @@ fn resolve_fast_metadata(
 ) -> Option<(u64, i64, u32)> {
     if let Some((cat_sz, cat_mt, cat_orient, cat_sc_mt)) = crate::archive_catalog::get_catalog_metadata_hint(path) {
         let sz = hint_size.unwrap_or(cat_sz);
-        let base_mt = hint_mtime.unwrap_or(cat_mt);
-        let eff_mt = apply_developer_mtime_offset(path, base_mt, cat_sc_mt);
+        let eff_mt = apply_developer_mtime_offset(path, cat_mt, cat_sc_mt);
         let orient = target_orient.or(cat_orient).unwrap_or(1);
         Some((sz, eff_mt, orient))
     } else if let (Some(sz), Some(mt)) = (hint_size, hint_mtime) {
@@ -488,22 +535,28 @@ pub fn get_preview_jpeg_with_orient_and_hints(
         (sz, mt, resolved_orient, key, c_key)
     };
 
-    // Fast-path 0: External RAW Developer Previews (RapidRAW, darktable, Lightroom .dng)
-    if let Some(dev_bytes) = try_get_developer_preview(path, scale, target_orient) {
-        record_thumbnail_cache(&cache_key, blake3_key.as_deref(), scale, &dev_bytes);
-        return Ok(dev_bytes);
-    }
-
-    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
-    let is_jpeg = ext == "jpg" || ext == "jpeg";
-    let is_raw = RAW_EXTENSIONS.contains(&ext.as_str());
-
     let target_px = match scale {
         0 => 160,
         2 => 720,
         s if s >= 100 => 2560,
         _ => 720,
     };
+
+    // Fast-path 0: External RAW Developer Previews (RapidRAW, darktable, Lightroom .dng)
+    if let Some(dev_bytes) = try_get_developer_preview(path, scale, target_orient) {
+        let final_bytes = downscale_grid_preview_if_large(path, dev_bytes, scale, target_px, target_orient);
+        let l2_key = if hint_mtime.map(|hm| hm == _mtime_sec).unwrap_or(false) {
+            None
+        } else {
+            blake3_key.as_deref()
+        };
+        record_thumbnail_cache(&cache_key, l2_key, scale, &final_bytes);
+        return Ok(final_bytes);
+    }
+
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+    let is_jpeg = ext == "jpg" || ext == "jpeg";
+    let is_raw = RAW_EXTENSIONS.contains(&ext.as_str());
 
     // Fast-path 1: Embedded JPEG preview extraction for RAW files (< 2ms)
     // Camera RAW files (CR2, CR3, NEF, ARW, DNG, RAF, RW2, ORF, PEF, X3F, etc.) contain an embedded preview.
@@ -527,48 +580,7 @@ pub fn get_preview_jpeg_with_orient_and_hints(
             // For full-sensor camera previews > 1.5 MB (e.g. Canon CR2 5472x3648, 2.5-5.5 MB):
             // Downscale to target_px (720px) to keep chunk cache compact (~80-120 KB vs 3.5 MB per image).
             // Loupe View and 100% Zoom (scale >= 100) bypass downscaling and preserve full sensor resolution.
-            #[cfg(target_os = "macos")]
-            let final_bytes = if scale < 100 && fast_bytes.len() > 1_500_000 {
-                let orient = parse_header_orientation(&fast_bytes)
-                    .or(target_orient)
-                    .or_else(|| get_effective_orientation(path))
-                    .unwrap_or(1);
-                let downscaled = imageio::extract_thumbnail_from_data(&fast_bytes, target_px).unwrap_or(fast_bytes);
-                if orient != 1 {
-                    inject_orientation_into_jpeg(&downscaled, orient as u16)
-                } else {
-                    downscaled
-                }
-            } else {
-                fast_bytes
-            };
-            #[cfg(not(target_os = "macos"))]
-            let final_bytes = if scale < 100 && fast_bytes.len() > 1_500_000 {
-                let orient = parse_header_orientation(&fast_bytes)
-                    .or(target_orient)
-                    .or_else(|| get_effective_orientation(path))
-                    .unwrap_or(1);
-                // Windows / Linux fallback downscaling using image crate:
-                // (Optimized SIMD decoding via turbojpeg/zune-jpeg tracked in ROADMAP.md backlog)
-                if let Ok(dyn_img) = image::load_from_memory(&fast_bytes) {
-                    let resized = dyn_img.thumbnail(target_px, target_px);
-                    let mut buf = std::io::Cursor::new(Vec::new());
-                    if resized.into_rgb8().write_to(&mut buf, image::ImageFormat::Jpeg).is_ok() {
-                        let out = buf.into_inner();
-                        if orient != 1 {
-                            inject_orientation_into_jpeg(&out, orient as u16)
-                        } else {
-                            out
-                        }
-                    } else {
-                        fast_bytes
-                    }
-                } else {
-                    fast_bytes
-                }
-            } else {
-                fast_bytes
-            };
+            let final_bytes = downscale_grid_preview_if_large(path, fast_bytes, scale, target_px, target_orient);
 
             record_thumbnail_cache(&cache_key, blake3_key.as_deref(), scale, &final_bytes);
             return Ok(final_bytes);

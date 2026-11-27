@@ -317,7 +317,7 @@ export function SidecarSettingsCard() {
             className={`toggle-track shrink-0 cursor-pointer ${useDeveloperPreviews ? 'on' : ''}`}
             onClick={() => setUseDeveloperPreviews(!useDeveloperPreviews)}
           >
-            <div className="toggle-thumb" />
+            <div className="toggle-knob"></div>
           </div>
         </div>
 

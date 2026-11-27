@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { invoke } from '@tauri-apps/api/core';
-import { normalizePath, setDeveloperPreviewsUrlFlag } from '../utils/image';
+import { normalizePath, setDeveloperPreviewsUrlFlag, bumpImageCacheEpoch } from '../utils/image';
 import { useLibraryStore } from './libraryStore';
 import { loadedThumbnailCache } from '../components/views/library/utils/thumbnailCache';
 
@@ -187,6 +187,7 @@ export const useSettingsStore = create<SettingsState>()(
       setCustomRawDeveloperPath: (customRawDeveloperPath) => set({ customRawDeveloperPath }),
       setUseDeveloperPreviews: (useDeveloperPreviews) => {
         setDeveloperPreviewsUrlFlag(useDeveloperPreviews);
+        bumpImageCacheEpoch();
         loadedThumbnailCache.clear();
         set({ useDeveloperPreviews });
         invoke('set_use_developer_previews_cmd', { enabled: useDeveloperPreviews }).catch(console.error);
