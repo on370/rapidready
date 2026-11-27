@@ -2,11 +2,22 @@ use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
+use std::time::{Duration, SystemTime};
 use anyhow::{Context, Result};
 use rusqlite::Connection;
 
 pub const DEFAULT_MAX_CHUNK_SIZE: u64 = 128 * 1024 * 1024; // 128 MB
+
+/// Disk budget for Tier 2 previews (`previews/`). When exceeded, the least recently used
+/// previews are deleted until the cache is back at 90 % of the budget.
+pub const DEFAULT_MAX_PREVIEW_BYTES: u64 = 4 * 1024 * 1024 * 1024; // 4 GB
+
+/// Temp files from interrupted preview writes older than this are removed while pruning.
+const STALE_TMP_AGE: Duration = Duration::from_secs(10 * 60);
+
+static TMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// Canonical BLAKE3 Cache-Key for Thumbnails & Screen Previews.
 /// Key = BLAKE3(normalize_path(path) + "_" + file_size + "_" + mtime + "_scale" + scale + "_rot" + orientation)
@@ -85,12 +96,23 @@ pub struct ChunkCache {
     max_chunk_size: u64,
     index: RwLock<HashMap<String, ChunkLocation>>,
     open_chunk_files: Mutex<HashMap<u32, Arc<File>>>,
+    max_preview_bytes: u64,
+    /// Running total of `previews/`; exact after each prune, updated on every write.
+    preview_bytes: AtomicU64,
+    /// False until the first prune has measured `previews/` (done lazily on the first write).
+    preview_bytes_known: AtomicBool,
+    prune_lock: Mutex<()>,
 }
 
 static GLOBAL_CHUNK_CACHE: std::sync::RwLock<Option<Arc<ChunkCache>>> = std::sync::RwLock::new(None);
 
 pub fn init_global_chunk_cache(cache_dir: &Path, db_path: &Path) -> Result<Arc<ChunkCache>> {
     let cache = Arc::new(ChunkCache::new(cache_dir, db_path)?);
+    // Measure (and if needed trim) the preview cache off the startup path.
+    let bg = cache.clone();
+    let _ = std::thread::Builder::new()
+        .name("rr-preview-prune".into())
+        .spawn(move || bg.prune_previews());
     let mut guard = GLOBAL_CHUNK_CACHE.write().unwrap();
     *guard = Some(cache.clone());
     Ok(cache)
@@ -172,6 +194,10 @@ impl ChunkCache {
             max_chunk_size: DEFAULT_MAX_CHUNK_SIZE,
             index: RwLock::new(index_map),
             open_chunk_files: Mutex::new(HashMap::new()),
+            max_preview_bytes: DEFAULT_MAX_PREVIEW_BYTES,
+            preview_bytes: AtomicU64::new(0),
+            preview_bytes_known: AtomicBool::new(false),
+            prune_lock: Mutex::new(()),
         })
     }
 
@@ -226,6 +252,11 @@ impl ChunkCache {
     #[cfg(test)]
     pub fn set_max_chunk_size(&mut self, size: u64) {
         self.max_chunk_size = size;
+    }
+
+    #[cfg(test)]
+    pub fn set_max_preview_bytes(&mut self, bytes: u64) {
+        self.max_preview_bytes = bytes;
     }
 
     fn init_writer_locked(&self, guard: &mut Option<ChunkWriter>) -> Result<()> {
@@ -381,10 +412,15 @@ impl ChunkCache {
     }
 
     /// Reads Tier 2 Screen Preview from sharded filesystem tree.
+    /// A hit refreshes the file's mtime, which pruning uses as "last used".
     pub fn read_preview(&self, cache_key: &str) -> Result<Option<Vec<u8>>> {
         let p = self.preview_path(cache_key);
         if p.is_file() {
-            Ok(Some(fs::read(p)?))
+            let data = fs::read(&p)?;
+            if let Ok(f) = OpenOptions::new().write(true).open(&p) {
+                let _ = f.set_modified(SystemTime::now());
+            }
+            Ok(Some(data))
         } else {
             Ok(None)
         }
@@ -403,10 +439,82 @@ impl ChunkCache {
             }
         }
 
-        let tmp = p.with_extension(format!("tmp_{}", std::process::id()));
-        fs::write(&tmp, data)?;
-        fs::rename(tmp, p)?;
+        // Unique per write: the UI and the background worker can store the same key concurrently.
+        let tmp = p.with_extension(format!(
+            "tmp_{}_{}",
+            std::process::id(),
+            TMP_COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        let replaced_len = fs::metadata(&p).map(|m| m.len()).unwrap_or(0);
+        if let Err(e) = fs::write(&tmp, data) {
+            let _ = fs::remove_file(&tmp);
+            return Err(e.into());
+        }
+        if let Err(e) = fs::rename(&tmp, &p) {
+            let _ = fs::remove_file(&tmp);
+            return Err(e.into());
+        }
+
+        let added = data.len() as u64;
+        let apply = |cur: u64| cur.saturating_add(added).saturating_sub(replaced_len);
+        let total = self
+            .preview_bytes
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |cur| Some(apply(cur)))
+            .map(apply)
+            .unwrap_or(0);
+        if !self.preview_bytes_known.load(Ordering::Relaxed) || total > self.max_preview_bytes {
+            self.prune_previews();
+        }
         Ok(())
+    }
+
+    /// Measures `previews/` and, if it exceeds the budget, deletes the least recently used
+    /// previews (oldest mtime; reads refresh it) until 90 % of the budget is reached.
+    /// Also removes temp files left behind by interrupted writes.
+    pub fn prune_previews(&self) {
+        let Ok(_guard) = self.prune_lock.try_lock() else {
+            return; // another thread is already pruning
+        };
+        let now = SystemTime::now();
+        let mut files: Vec<(PathBuf, u64, SystemTime)> = Vec::new();
+        let mut total = 0u64;
+        for entry in walkdir::WalkDir::new(&self.previews_dir).into_iter().flatten() {
+            if !entry.file_type().is_file() {
+                continue;
+            }
+            let Ok(meta) = entry.metadata() else { continue };
+            let mtime = meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
+            let is_tmp = entry
+                .path()
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(|e| e.starts_with("tmp_"))
+                .unwrap_or(false);
+            if is_tmp {
+                if now.duration_since(mtime).map(|age| age > STALE_TMP_AGE).unwrap_or(false) {
+                    let _ = fs::remove_file(entry.path());
+                }
+                continue;
+            }
+            total += meta.len();
+            files.push((entry.into_path(), meta.len(), mtime));
+        }
+
+        if total > self.max_preview_bytes {
+            let target = self.max_preview_bytes / 10 * 9;
+            files.sort_by_key(|(_, _, mtime)| *mtime);
+            for (path, len, _) in files {
+                if total <= target {
+                    break;
+                }
+                if fs::remove_file(&path).is_ok() {
+                    total -= len;
+                }
+            }
+        }
+
+        self.preview_bytes.store(total, Ordering::Relaxed);
+        self.preview_bytes_known.store(true, Ordering::Relaxed);
     }
 
     /// Unified Reader: Tier 1 (scale < 2) reads from packed chunks; Tier 2 (scale >= 2) reads from sharded previews.
@@ -519,6 +627,8 @@ impl ChunkCache {
         let _ = fs::remove_dir_all(&self.previews_dir);
         let _ = fs::create_dir_all(&self.chunks_dir);
         let _ = fs::create_dir_all(&self.previews_dir);
+        self.preview_bytes.store(0, Ordering::Relaxed);
+        self.preview_bytes_known.store(true, Ordering::Relaxed);
 
         self.index.write().unwrap().clear();
         if let Ok(mut files) = self.open_chunk_files.lock() {
@@ -607,6 +717,82 @@ mod tests {
         assert_eq!(r1_again, thumb1);
 
         let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    fn preview_cache(name: &str, budget: u64) -> (PathBuf, ChunkCache) {
+        let temp_dir = std::env::temp_dir().join(format!("rr_preview_budget_{}_{}", name, std::process::id()));
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+        let mut cache = ChunkCache::new(&temp_dir.join("cache"), &temp_dir.join("catalog.db")).unwrap();
+        cache.set_max_preview_bytes(budget);
+        (temp_dir, cache)
+    }
+
+    /// Writes a preview and backdates its mtime so "least recently used" order is deterministic.
+    fn write_aged(cache: &ChunkCache, key: &str, len: usize, age_secs: u64) {
+        cache.write_preview(key, &vec![0x5A; len]).unwrap();
+        let f = OpenOptions::new().write(true).open(cache.preview_path(key)).unwrap();
+        f.set_modified(SystemTime::now() - Duration::from_secs(age_secs)).unwrap();
+    }
+
+    #[test]
+    fn preview_cache_is_pruned_to_its_budget() {
+        let (dir, cache) = preview_cache("prune", 10_000);
+        for i in 0..30u64 {
+            // key00 is the oldest, key29 the newest
+            write_aged(&cache, &format!("key{:02}", i), 1_000, 1_000 - i);
+        }
+        let stats = cache.get_stats().unwrap();
+        assert!(stats.preview_bytes <= 10_000, "preview cache grew to {} bytes", stats.preview_bytes);
+        assert!(cache.has_thumbnail("key29", 2), "newest preview must be kept");
+        assert!(!cache.has_thumbnail("key00", 2), "oldest preview must be evicted");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn reading_a_preview_keeps_it_cached() {
+        let (dir, cache) = preview_cache("recency", 5_000);
+        write_aged(&cache, "a", 1_000, 500);
+        write_aged(&cache, "b", 1_000, 400);
+        write_aged(&cache, "c", 1_000, 300);
+        assert!(cache.read_preview("a").unwrap().is_some()); // a becomes most recently used
+        for i in 0..4 {
+            write_aged(&cache, &format!("new{}", i), 1_000, 10 - i);
+        }
+        assert!(cache.has_thumbnail("a", 2), "recently viewed preview must survive pruning");
+        assert!(!cache.has_thumbnail("b", 2), "least recently used preview must go first");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn concurrent_writes_of_the_same_preview_do_not_collide() {
+        let (dir, cache) = preview_cache("concurrent", DEFAULT_MAX_PREVIEW_BYTES);
+        let data = vec![0x42u8; 256 * 1024];
+        std::thread::scope(|s| {
+            for _ in 0..8 {
+                s.spawn(|| {
+                    for _ in 0..20 {
+                        cache.write_preview("samekey", &data).unwrap();
+                    }
+                });
+            }
+        });
+        assert_eq!(cache.read_preview("samekey").unwrap().unwrap(), data);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn stale_temp_files_are_removed() {
+        let (dir, cache) = preview_cache("tmp", DEFAULT_MAX_PREVIEW_BYTES);
+        cache.write_preview("abcd1234", b"jpeg").unwrap();
+        let stale = cache.preview_path("abcd1234").with_extension("tmp_99_1");
+        fs::write(&stale, b"partial").unwrap();
+        OpenOptions::new().write(true).open(&stale).unwrap()
+            .set_modified(SystemTime::now() - Duration::from_secs(3600)).unwrap();
+        cache.prune_previews();
+        assert!(!stale.exists());
+        assert!(cache.has_thumbnail("abcd1234", 2));
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

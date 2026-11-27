@@ -1,3 +1,4 @@
+import { isMac, isWindows } from './platform';
 import { convertFileSrc } from '@tauri-apps/api/core';
 
 /**
@@ -45,11 +46,26 @@ export function normalizeSlash(p: string | undefined | null): string {
 }
 
 /**
- * Normalizes slashes, removes trailing slashes, and lowercases for cross-platform comparison
+ * Whether paths compare case-insensitively. Mirrors the backend (`normalize_path_for_comparison`):
+ * macOS and Windows file systems ignore case by default, Linux file systems do not, so there
+ * "IMG_0001.JPG" and "img_0001.jpg" in one folder are two different files.
+ */
+export const PATHS_CASE_INSENSITIVE: boolean = isMac || isWindows;
+
+/**
+ * Case-folds a path or path segment for comparisons, but only where the platform ignores case.
+ */
+export function foldPathCase(s: string, caseInsensitive: boolean = PATHS_CASE_INSENSITIVE): string {
+  return caseInsensitive ? s.toLowerCase() : s;
+}
+
+/**
+ * Normalizes slashes, removes trailing slashes, and case-folds where the platform ignores case.
+ * Use this (not an ad-hoc `.toLowerCase()`) for every path comparison or map key.
  */
 export function normalizePath(p: string | undefined | null): string {
   if (!p) return '';
-  return normalizeSlash(p).toLowerCase();
+  return foldPathCase(normalizeSlash(p));
 }
 
 export const RAW_EXTENSIONS = new Set([

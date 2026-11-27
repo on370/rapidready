@@ -793,6 +793,16 @@ fn test_parse_all_real_formats() {
     }
 }
 
+/// Width and height of a JPEG as a viewer shows it: decoded pixel size, swapped when the
+/// EXIF orientation tag rotates by 90 or 270 degrees (orientations 5 to 8).
+fn displayed_dimensions(jpeg: &[u8]) -> (u32, u32) {
+    let img = image::load_from_memory(jpeg).expect("Preview must be a decodable JPEG");
+    match parse_header_orientation(jpeg) {
+        Some(5..=8) => (img.height(), img.width()),
+        _ => (img.width(), img.height()),
+    }
+}
+
 #[test]
 fn test_issue_2_thumb_and_inspector_orientation_consistency() {
     let temp_dir = std::env::temp_dir().join(format!("rr_orient_test_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
@@ -823,12 +833,13 @@ fn test_issue_2_thumb_and_inspector_orientation_consistency() {
     let inspector_bytes = get_max_preview_jpeg_with_orient_and_hints(&img_path, None, Some(size), Some(mtime))
         .expect("Must generate inspector preview");
 
-    let thumb_orient = parse_header_orientation(&thumb_bytes);
-    let inspector_orient = parse_header_orientation(&inspector_bytes);
-
-    assert_eq!(thumb_orient, Some(6), "Thumbnail must preserve EXIF orientation 6");
-    assert_eq!(inspector_orient, Some(6), "Inspector preview must preserve EXIF orientation 6");
-    assert_eq!(thumb_orient, inspector_orient, "Thumbnail and inspector must have identical orientation");
+    // Platforms may either keep the EXIF tag (macOS ImageIO path) or rotate the pixels and drop
+    // the tag (pure-Rust path on Linux/Windows). What must hold everywhere: both previews
+    // *display* as portrait, i.e. the rotation is applied exactly once.
+    let (thumb_w, thumb_h) = displayed_dimensions(&thumb_bytes);
+    let (insp_w, insp_h) = displayed_dimensions(&inspector_bytes);
+    assert!(thumb_h > thumb_w, "Thumbnail must display as portrait, got {}x{}", thumb_w, thumb_h);
+    assert!(insp_h > insp_w, "Inspector preview must display as portrait, got {}x{}", insp_w, insp_h);
 
     // Also test real RAW file if present in testdata
     let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -844,12 +855,10 @@ fn test_issue_2_thumb_and_inspector_orientation_consistency() {
         let dng_insp = get_max_preview_jpeg_with_orient_and_hints(&dng_path, None, Some(dng_sz), Some(dng_mt))
             .expect("Must generate DNG inspector preview");
 
-        let dng_thumb_orient = parse_header_orientation(&dng_thumb);
-        let dng_insp_orient = parse_header_orientation(&dng_insp);
-
-        assert_eq!(dng_thumb_orient, Some(6), "DNG thumb must have EXIF orientation 6");
-        assert_eq!(dng_insp_orient, Some(6), "DNG inspector preview must have EXIF orientation 6");
-        assert_eq!(dng_thumb_orient, dng_insp_orient, "DNG thumbnail and inspector must have identical orientation");
+        let (dng_thumb_w, dng_thumb_h) = displayed_dimensions(&dng_thumb);
+        let (dng_insp_w, dng_insp_h) = displayed_dimensions(&dng_insp);
+        assert!(dng_thumb_h > dng_thumb_w, "DNG thumbnail must display as portrait (orientation 6)");
+        assert!(dng_insp_h > dng_insp_w, "DNG inspector preview must display as portrait (orientation 6)");
     }
 
     let _ = std::fs::remove_dir_all(&temp_dir);
@@ -1028,4 +1037,10 @@ fn test_inject_orientation_overrides_exif_8_to_1() {
 
     let overridden_to_1 = inject_orientation_into_jpeg(&with_orient_8, 1);
     assert_eq!(parse_header_orientation(&overridden_to_1), Some(1));
+}
+
+#[test]
+fn local_full_size_jpeg_is_not_copied_into_disk_cache() {
+    // A local JPEG is its own full-size preview; a disk copy would only double its size.
+    assert!(!persist_full_jpeg_preview_on_disk(&std::env::temp_dir().join("IMG_0001.JPG")));
 }

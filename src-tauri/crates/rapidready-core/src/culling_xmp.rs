@@ -1115,6 +1115,7 @@ mod tests {
 
     #[test]
     fn test_darktable_colorlabels_parsing() {
+        let _sidecar_guard = crate::culling::sidecar_test_guard();
         let xmp_data = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/">
  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
   <rdf:Description rdf:about=""
@@ -1137,6 +1138,7 @@ mod tests {
 
     #[test]
     fn test_patch_darktable_and_lr_subject() {
+        let _sidecar_guard = crate::culling::sidecar_test_guard();
         let base_xmp = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/">
  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
   <rdf:Description rdf:about=""
@@ -1173,6 +1175,7 @@ mod tests {
 
     #[test]
     fn test_xmp_naming_mode() {
+        let _sidecar_guard = crate::culling::sidecar_test_guard();
         set_xmp_naming_mode("standard");
         assert_eq!(get_xmp_naming_mode(), "standard");
         set_xmp_naming_mode("darktable");

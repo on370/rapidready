@@ -2,18 +2,17 @@ use std::path::Path;
 use std::io::Cursor;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use std::num::NonZeroUsize;
 use std::sync::LazyLock;
 use std::collections::HashSet;
 use image::{ImageFormat, RgbaImage};
 use thumb_rs::{get_thumbnail, ThumbnailScale};
 use anyhow::{Context, Result};
-use lru::LruCache;
 
 pub mod header_parser;
 pub mod jpeg_extract;
 pub mod imageio_ffi;
 pub mod worker;
+pub mod ram_cache;
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 pub mod external_decoder;
 #[cfg(test)]
@@ -164,11 +163,11 @@ pub fn get_active_viewport_count() -> usize {
     0
 }
 
-// In-memory LRU cache holding up to 10,000 thumbnail/preview JPEGs (~200MB RAM)
+// In-memory LRU cache for thumbnail/preview JPEGs, bounded by bytes (see ram_cache.rs):
+// 256 MB for grid thumbnails and small previews, 384 MB for full-size previews.
 // Provides instantaneous ~0.01ms responses on repeat requests or grid scrolls
-pub(super) static THUMBNAIL_CACHE: LazyLock<Mutex<LruCache<String, Vec<u8>>>> = LazyLock::new(|| {
-    Mutex::new(LruCache::new(NonZeroUsize::new(10000).unwrap()))
-});
+pub(super) static THUMBNAIL_CACHE: LazyLock<Mutex<ram_cache::RamCache>> =
+    LazyLock::new(|| Mutex::new(ram_cache::RamCache::new()));
 
 pub const RAW_EXTENSIONS: &[&str] = &[
     "cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2", "pef", "3fr", "x3f", "nrw", "rwl", "fff", "iiq", "crw", "erf",
@@ -194,6 +193,12 @@ pub fn make_l1_cache_key(path: &Path, scale: u32, orient: u32, mtime_sec: i64) -
     } else {
         format!("{}:{}:{}:{}", path.to_string_lossy(), scale, orient, mtime_sec)
     }
+}
+
+/// Whether a full-size JPEG served as its own preview should also be copied into the disk cache:
+/// only for network shares, where re-reading the original is slow.
+pub(crate) fn persist_full_jpeg_preview_on_disk(path: &Path) -> bool {
+    crate::metadata_resolver::is_network_or_remote_path(path)
 }
 
 fn record_thumbnail_cache(
@@ -834,7 +839,10 @@ pub fn get_max_preview_jpeg_with_orient_and_hints(
         } else {
             bytes
         };
-        record_thumbnail_cache(&cache_key, blake3_key.as_deref(), 100, &out_bytes);
+        // The "preview" of a JPEG is the whole original file. Keeping a second copy on disk only
+        // pays off when the original sits on a network share; for local files it doubles disk use.
+        let disk_key = if persist_full_jpeg_preview_on_disk(path) { blake3_key.as_deref() } else { None };
+        record_thumbnail_cache(&cache_key, disk_key, 100, &out_bytes);
         return Ok(out_bytes);
     }
 
