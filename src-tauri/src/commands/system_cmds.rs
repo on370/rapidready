@@ -581,6 +581,28 @@ fn find_rapidraw_binary() -> Option<std::path::PathBuf> {
     None
 }
 
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn clean_appimage_env(cmd: &mut std::process::Command) {
+    if std::env::var_os("APPIMAGE").is_some() {
+        cmd.env_remove("LD_LIBRARY_PATH")
+            .env_remove("LD_PRELOAD");
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn spawn_detached_linux(cmd: &mut std::process::Command) -> std::io::Result<()> {
+    clean_appimage_env(cmd);
+    let mut child = cmd
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()?;
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+    Ok(())
+}
+
 fn open_system_default(file_path: &str) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
@@ -590,8 +612,17 @@ fn open_system_default(file_path: &str) -> Result<(), String> {
             .map_err(|e| format!("Failed to open: {}", e))?;
         Ok(())
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
     {
+        open::that(file_path).map_err(|e| e.to_string())
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        if std::env::var_os("APPIMAGE").is_some() {
+            let mut cmd = std::process::Command::new("xdg-open");
+            cmd.arg(file_path);
+            return spawn_detached_linux(&mut cmd).map_err(|e| e.to_string());
+        }
         open::that(file_path).map_err(|e| e.to_string())
     }
 }
@@ -632,7 +663,7 @@ pub fn open_in_rapidraw(
                             return Ok(());
                         }
                     }
-                    #[cfg(not(target_os = "macos"))]
+                    #[cfg(target_os = "windows")]
                     {
                         let _ = std::process::Command::new(cp)
                             .arg(&file_to_open)
@@ -640,6 +671,14 @@ pub fn open_in_rapidraw(
                             .stdout(std::process::Stdio::null())
                             .stderr(std::process::Stdio::null())
                             .spawn()
+                            .map_err(|e| format!("Failed to launch custom binary: {}", e))?;
+                        return Ok(());
+                    }
+                    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+                    {
+                        let mut cmd = std::process::Command::new(cp);
+                        cmd.arg(&file_to_open);
+                        spawn_detached_linux(&mut cmd)
                             .map_err(|e| format!("Failed to launch custom binary: {}", e))?;
                         return Ok(());
                     }
@@ -697,13 +736,9 @@ pub fn open_in_rapidraw(
             }
             #[cfg(not(any(target_os = "macos", target_os = "windows")))]
             {
-                if let Ok(_child) = std::process::Command::new("darktable")
-                    .arg(&file_to_open)
-                    .stdin(std::process::Stdio::null())
-                    .stdout(std::process::Stdio::null())
-                    .stderr(std::process::Stdio::null())
-                    .spawn()
-                {
+                let mut cmd = std::process::Command::new("darktable");
+                cmd.arg(&file_to_open);
+                if spawn_detached_linux(&mut cmd).is_ok() {
                     return Ok(());
                 }
                 open_system_default(&file_to_open)
@@ -825,21 +860,71 @@ pub fn open_in_rapidraw(
             }
             #[cfg(not(any(target_os = "macos", target_os = "windows")))]
             {
-                // Try native rapidraw binary (system install or flatpak wrapper)
-                if let Ok(mut child) = std::process::Command::new("rapidraw")
-                    .arg(&file_to_open)
-                    .stdin(std::process::Stdio::null())
-                    .stdout(std::process::Stdio::null())
-                    .stderr(std::process::Stdio::null())
-                    .spawn()
-                {
-                    // Reap the child in the background to avoid a zombie process.
-                    std::thread::spawn(move || {
-                        let _ = child.wait();
-                    });
+                // 1. Official .deb binary name in PATH ("RapidRAW")
+                let mut cmd = std::process::Command::new("RapidRAW");
+                cmd.arg(&file_to_open);
+                if spawn_detached_linux(&mut cmd).is_ok() {
                     return Ok(());
                 }
 
+                // 2. Lowercase binary / wrapper in PATH ("rapidraw")
+                let mut cmd = std::process::Command::new("rapidraw");
+                cmd.arg(&file_to_open);
+                if spawn_detached_linux(&mut cmd).is_ok() {
+                    return Ok(());
+                }
+
+                // 3. Explicit system binary locations
+                for bin in ["/usr/bin/RapidRAW", "/bin/RapidRAW"] {
+                    if std::path::Path::new(bin).exists() {
+                        let mut cmd = std::process::Command::new(bin);
+                        cmd.arg(&file_to_open);
+                        if spawn_detached_linux(&mut cmd).is_ok() {
+                            return Ok(());
+                        }
+                    }
+                }
+
+                // 4. Flatpak export binaries
+                let mut flatpak_bins = vec![
+                    std::path::PathBuf::from("/var/lib/flatpak/exports/bin/io.github.CyberTimon.RapidRAW"),
+                ];
+                if let Ok(home) = std::env::var("HOME") {
+                    flatpak_bins.push(
+                        std::path::PathBuf::from(home)
+                            .join(".local/share/flatpak/exports/bin/io.github.CyberTimon.RapidRAW"),
+                    );
+                }
+                for bin in flatpak_bins {
+                    if bin.exists() {
+                        let mut cmd = std::process::Command::new(&bin);
+                        cmd.arg(&file_to_open);
+                        if spawn_detached_linux(&mut cmd).is_ok() {
+                            return Ok(());
+                        }
+                    }
+                }
+
+                // 5. Flatpak run fallback
+                let mut fp_check = std::process::Command::new("flatpak");
+                clean_appimage_env(&mut fp_check);
+                let has_flatpak_app = fp_check
+                    .args(["info", "io.github.CyberTimon.RapidRAW"])
+                    .stdin(std::process::Stdio::null())
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status()
+                    .map(|s| s.success())
+                    .unwrap_or(false);
+                if has_flatpak_app {
+                    let mut cmd = std::process::Command::new("flatpak");
+                    cmd.args(["run", "io.github.CyberTimon.RapidRAW", &file_to_open]);
+                    if spawn_detached_linux(&mut cmd).is_ok() {
+                        return Ok(());
+                    }
+                }
+
+                // 6. Fallback: system default
                 open_system_default(&file_to_open)
             }
         }
@@ -938,7 +1023,9 @@ fn reveal_in_file_manager_linux(paths: &[String]) -> Result<(), String> {
         uris.iter().map(|u| format!("'{}'", u)).collect::<Vec<_>>().join(", ")
     );
 
-    let dbus_ok = std::process::Command::new("gdbus")
+    let mut gdbus_cmd = std::process::Command::new("gdbus");
+    clean_appimage_env(&mut gdbus_cmd);
+    let dbus_ok = gdbus_cmd
         .args([
             "call",
             "--session",
@@ -973,8 +1060,15 @@ fn reveal_in_file_manager_linux(paths: &[String]) -> Result<(), String> {
             path.parent().map(Path::to_path_buf).unwrap_or_else(|| path.to_path_buf())
         };
         if opened.insert(target.clone()) {
-            open::that_detached(&target)
-                .map_err(|e| format!("Failed to open file manager: {}", e))?;
+            if std::env::var_os("APPIMAGE").is_some() {
+                let mut cmd = std::process::Command::new("xdg-open");
+                cmd.arg(&target);
+                spawn_detached_linux(&mut cmd)
+                    .map_err(|e| format!("Failed to open file manager: {}", e))?;
+            } else {
+                open::that_detached(&target)
+                    .map_err(|e| format!("Failed to open file manager: {}", e))?;
+            }
         }
     }
     Ok(())

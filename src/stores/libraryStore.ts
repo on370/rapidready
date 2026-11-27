@@ -88,6 +88,26 @@ export interface ArchiveChunkPayload {
   directories?: string[];
 }
 
+const PRESERVED_METADATA_FIELDS: ReadonlyArray<keyof LibraryImage> = [
+  'camera', 'lens', 'iso', 'aperture', 'shutter', 'focal_length', 'exposure_bias',
+  'width', 'height', 'latitude', 'longitude', 'altitude', 'date_modified',
+  'original_date', 'date_override', 'time_shift_seconds', 'artist', 'copyright',
+  'usage_terms', 'title', 'description', 'exif_artist', 'exif_copyright', 'exif_description',
+];
+
+function mergeImagePreservingMetadata(existing: LibraryImage, incoming: LibraryImage): LibraryImage {
+  const merged: LibraryImage = { ...existing, ...incoming };
+  const mergedRecord = merged as unknown as Record<string, unknown>;
+  const existingRecord = existing as unknown as Record<string, unknown>;
+  const incomingRecord = incoming as unknown as Record<string, unknown>;
+  for (const field of PRESERVED_METADATA_FIELDS) {
+    if (incomingRecord[field] == null && existingRecord[field] != null) {
+      mergedRecord[field] = existingRecord[field];
+    }
+  }
+  return merged;
+}
+
 function resolveRealFolderPath(
   path: string,
   state: { rootPath: string | null; discoveredFolders: Set<string>; images: LibraryImage[] }
@@ -478,7 +498,7 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
       const norm = normalizePath(img.path);
       const existingIdx = nextMap.get(norm);
       if (existingIdx !== undefined) {
-        nextImages[existingIdx] = { ...nextImages[existingIdx], ...img };
+        nextImages[existingIdx] = mergeImagePreservingMetadata(nextImages[existingIdx], img);
         changed = true;
       } else {
         const newIdx = nextImages.length;
@@ -529,7 +549,7 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
       const norm = normalizePath(img.path);
       const existingIdx = nextMap.get(norm);
       if (existingIdx !== undefined) {
-        nextImages[existingIdx] = { ...nextImages[existingIdx], ...img };
+        nextImages[existingIdx] = mergeImagePreservingMetadata(nextImages[existingIdx], img);
         changed = true;
       } else {
         const newIdx = nextImages.length;
@@ -803,8 +823,12 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
           get().removeImages(delta.removed);
         }
         if (delta.updated && delta.updated.length > 0) {
+          const state = get();
           for (const item of delta.updated) {
-            get().updateImageMetadata(item.path, item);
+            const existingIdx = state.imageIndexMap.get(normalizePath(item.path));
+            const existing = existingIdx !== undefined ? state.images[existingIdx] : undefined;
+            const patch = existing ? mergeImagePreservingMetadata(existing, item) : item;
+            get().updateImageMetadata(item.path, patch);
           }
         }
       }

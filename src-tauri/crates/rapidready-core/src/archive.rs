@@ -22,10 +22,15 @@ pub struct ArchiveFile {
     pub name: String,
     pub size: u64,
     pub date: Option<NaiveDateTime>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub camera: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lens: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub iso: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub aperture: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shutter: Option<String>,
     pub culling: CullingState,
     pub is_raw: bool,
