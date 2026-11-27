@@ -9,6 +9,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { openPath } from '@tauri-apps/plugin-opener';
 import { LibraryImage, useLibraryStore, CullingState } from '../../../../stores/libraryStore';
 import { useLibraryUIStore } from '../../../../stores/libraryUIStore';
+import { useSettingsStore } from '../../../../stores/settingsStore';
 import { getRrImageUrl, isVideoFilename, isRawFilename } from '../../../../utils/image';
 
 export interface FullscreenViewerProps {
@@ -34,6 +35,7 @@ export const FullscreenViewer = React.memo(function FullscreenViewer({
   onContextMenu,
 }: FullscreenViewerProps) {
   const { t } = useTranslation('library');
+  useSettingsStore((s) => s.useDeveloperPreviews);
   const scanState = useLibraryStore((s) => s.scanState);
 
   const isSlideshowPlaying = useLibraryUIStore((s) => s.isSlideshowPlaying);

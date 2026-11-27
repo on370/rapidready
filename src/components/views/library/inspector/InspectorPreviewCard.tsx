@@ -5,6 +5,7 @@ import { openPath } from "@tauri-apps/plugin-opener";
 import { invoke } from "@tauri-apps/api/core";
 import { LibraryImage } from "../../../../stores/libraryStore";
 import { useLibraryUIStore } from "../../../../stores/libraryUIStore";
+import { useSettingsStore } from "../../../../stores/settingsStore";
 import { getRrImageUrl } from "../../../../utils/image";
 import { FocusPeakingOverlay } from "../components/FocusPeakingOverlay";
 import { InspectorHistogram } from "../components/InspectorHistogram";
@@ -27,6 +28,7 @@ export function InspectorPreviewCard({
   isRaw,
 }: InspectorPreviewCardProps) {
   const { t } = useTranslation('library');
+  useSettingsStore((s) => s.useDeveloperPreviews);
   const { 
     focusPeakingEnabled, 
     toggleFocusPeaking, 

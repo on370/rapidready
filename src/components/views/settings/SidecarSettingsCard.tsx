@@ -42,6 +42,8 @@ export function SidecarSettingsCard() {
     setRawDeveloper,
     customRawDeveloperPath,
     setCustomRawDeveloperPath,
+    useDeveloperPreviews,
+    setUseDeveloperPreviews,
   } = useSettingsStore();
   const images = useLibraryStore((s) => s.images);
 
@@ -293,6 +295,30 @@ export function SidecarSettingsCard() {
               </button>
             </div>
           )}
+        </div>
+
+        {/* Use Developer Previews Toggle */}
+        <div className="p-3.5 bg-app-deepest/40 border border-app-border rounded-xl flex items-center justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <div className="text-xs font-semibold text-txt-primary">
+              {t(
+                'sidecar.useDeveloperPreviewsTitle',
+                'Use previews from RapidRAW, darktable, Lightroom (.dng only)'
+              )}
+            </div>
+            <p className="text-[11px] text-txt-secondary mt-0.5 leading-relaxed">
+              {t(
+                'sidecar.useDeveloperPreviewsDesc',
+                'Displays rendered previews from RapidRAW and darktable local caches, and extracts full rendered previews embedded in Lightroom .dng files. Falls back to fast embedded RAW previews for unedited photos.'
+              )}
+            </p>
+          </div>
+          <div
+            className={`toggle-track shrink-0 cursor-pointer ${useDeveloperPreviews ? 'on' : ''}`}
+            onClick={() => setUseDeveloperPreviews(!useDeveloperPreviews)}
+          >
+            <div className="toggle-knob"></div>
+          </div>
         </div>
 
         {/* 3-Way Mode Selector */}

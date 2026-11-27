@@ -36,7 +36,7 @@ pub fn get_global_catalog() -> Option<Arc<ArchiveCatalog>> {
     GLOBAL_ARCHIVE_CATALOG.get().cloned()
 }
 
-pub fn get_catalog_metadata_hint(path: &Path) -> Option<(u64, i64, Option<u32>)> {
+pub fn get_catalog_metadata_hint(path: &Path) -> Option<(u64, i64, Option<u32>, Option<i64>)> {
     let catalog = get_global_catalog()?;
     catalog.get_file_metadata_hint(path)
 }
@@ -405,23 +405,24 @@ impl ArchiveCatalog {
         Ok(result)
     }
 
-    /// Fast indexed lookup of size, mtime, and orientation from local SQLite catalog in < 0.02 ms.
-    pub fn get_file_metadata_hint(&self, path: &Path) -> Option<(u64, i64, Option<u32>)> {
+    /// Fast indexed lookup of size, mtime, orientation, and sidecar_mtime from local SQLite catalog in < 0.02 ms.
+    pub fn get_file_metadata_hint(&self, path: &Path) -> Option<(u64, i64, Option<u32>, Option<i64>)> {
         let norm = normalize_canonical_path(&path.to_string_lossy());
         if self.db_path.is_some() {
             if let Ok(conn) = self.get_read_conn() {
                 let mut stmt = conn.prepare_cached(
-                    "SELECT file_size, mtime, sidecar_culling_json FROM archive_files WHERE canonical_path = ?1"
+                    "SELECT file_size, mtime, sidecar_culling_json, sidecar_mtime FROM archive_files WHERE canonical_path = ?1"
                 ).ok()?;
                 let mut rows = stmt.query([&norm]).ok()?;
                 if let Ok(Some(row)) = rows.next() {
                     let size: i64 = row.get(0).unwrap_or(0);
                     let mtime: i64 = row.get(1).unwrap_or(0);
                     let sidecar_json: Option<String> = row.get(2).unwrap_or(None);
+                    let sidecar_mtime: Option<i64> = row.get(3).unwrap_or(None);
                     let orient = sidecar_json
                         .and_then(|s| serde_json::from_str::<CullingState>(&s).ok())
                         .and_then(|c| c.orientation);
-                    return Some((size as u64, mtime, orient));
+                    return Some((size as u64, mtime, orient, sidecar_mtime));
                 } else {
                     return None;
                 }
@@ -429,17 +430,18 @@ impl ArchiveCatalog {
         }
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare_cached(
-            "SELECT file_size, mtime, sidecar_culling_json FROM archive_files WHERE canonical_path = ?1"
+            "SELECT file_size, mtime, sidecar_culling_json, sidecar_mtime FROM archive_files WHERE canonical_path = ?1"
         ).ok()?;
         let mut rows = stmt.query([&norm]).ok()?;
         if let Ok(Some(row)) = rows.next() {
             let size: i64 = row.get(0).unwrap_or(0);
             let mtime: i64 = row.get(1).unwrap_or(0);
             let sidecar_json: Option<String> = row.get(2).unwrap_or(None);
+            let sidecar_mtime: Option<i64> = row.get(3).unwrap_or(None);
             let orient = sidecar_json
                 .and_then(|s| serde_json::from_str::<CullingState>(&s).ok())
                 .and_then(|c| c.orientation);
-            Some((size as u64, mtime, orient))
+            Some((size as u64, mtime, orient, sidecar_mtime))
         } else {
             None
         }
@@ -449,10 +451,11 @@ impl ArchiveCatalog {
     pub fn get_thumbnail_candidates_for_root(&self, root: &str) -> Result<Vec<ThumbnailCandidate>> {
         let norm_root = normalize_canonical_path(root);
         let pattern = format!("{}/%", norm_root);
+        let use_dev_previews = crate::thumbnail::get_use_developer_previews();
 
         let query_fn = |conn: &Connection| -> Result<Vec<ThumbnailCandidate>> {
             let mut stmt = conn.prepare(
-                "SELECT canonical_path, file_size, mtime, sidecar_culling_json, is_video
+                "SELECT canonical_path, file_size, mtime, sidecar_culling_json, is_video, sidecar_mtime
                  FROM archive_files
                  WHERE archive_root = ?1 OR canonical_path = ?1 OR canonical_path LIKE ?2
                  ORDER BY canonical_path ASC"
@@ -460,9 +463,19 @@ impl ArchiveCatalog {
             let rows = stmt.query_map((&norm_root, &pattern), |row| {
                 let canonical_path: String = row.get(0)?;
                 let file_size: i64 = row.get(1)?;
-                let mtime: i64 = row.get(2)?;
+                let mut mtime: i64 = row.get(2)?;
                 let sidecar_json: Option<String> = row.get(3)?;
                 let is_video: bool = row.get(4)?;
+                let sidecar_mtime: Option<i64> = row.get(5).unwrap_or(None);
+                if use_dev_previews {
+                    if let Some(sc_mt) = sidecar_mtime {
+                        if sc_mt > 0 {
+                            mtime = mtime.wrapping_add(sc_mt.wrapping_mul(31));
+                        }
+                    } else if canonical_path.len() >= 4 && canonical_path[canonical_path.len() - 4..].eq_ignore_ascii_case(".dng") {
+                        mtime = mtime.wrapping_add(0x444E47);
+                    }
+                }
                 let orient = sidecar_json
                     .and_then(|s| serde_json::from_str::<CullingState>(&s).ok())
                     .and_then(|c| c.orientation);
@@ -548,14 +561,38 @@ impl ArchiveCatalog {
                         .map(|d| d.as_secs() as i64)
                         .unwrap_or(0)
                 };
-                let sidecar_mtime = if file.culling != CullingState::default() {
+                let sidecar_mtime = if file.culling.sidecar_source.is_some()
+                    || file.culling != CullingState::default()
+                {
                     let path_obj = Path::new(&file.path);
-                    let sidecar_path = get_sidecar_path(path_obj);
-                    fs::metadata(&sidecar_path)
-                        .ok()
-                        .and_then(|m| m.modified().ok())
-                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                        .map(|d| d.as_secs() as i64)
+                    let src = file.culling.sidecar_source.as_deref().unwrap_or("");
+                    let check_rr = src.is_empty() || src == "rrdata" || src.starts_with("both");
+                    let check_xmp = src == "xmp" || src.starts_with("both");
+
+                    let rr_mtime = if check_rr {
+                        fs::metadata(get_sidecar_path(path_obj))
+                            .ok()
+                            .and_then(|m| m.modified().ok())
+                            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                            .map(|d| d.as_secs() as i64)
+                    } else {
+                        None
+                    };
+                    let xmp_mtime = if check_xmp {
+                        crate::culling::find_existing_xmp_path(path_obj)
+                            .and_then(|xp| fs::metadata(xp).ok())
+                            .and_then(|m| m.modified().ok())
+                            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                            .map(|d| d.as_secs() as i64)
+                    } else {
+                        None
+                    };
+                    match (rr_mtime, xmp_mtime) {
+                        (Some(a), Some(b)) => Some(a.max(b)),
+                        (Some(a), None) => Some(a),
+                        (None, Some(b)) => Some(b),
+                        (None, None) => None,
+                    }
                 } else {
                     None
                 };
@@ -599,13 +636,15 @@ impl ArchiveCatalog {
     }
 
     /// Fast sidecar culling update in database when user rates/colors a photo.
+    /// Passing `sidecar_mtime: None` preserves the existing `sidecar_mtime` so internal
+    /// RapidReady culling writes do not invalidate cached thumbnails.
     pub fn update_culling(&self, path: &str, culling: &CullingState, sidecar_mtime: Option<i64>) -> Result<()> {
         let norm_path = normalize_canonical_path(path);
         let sidecar_json = serde_json::to_string(culling)?;
         let conn = self.conn.lock().unwrap();
         conn.execute(
             "UPDATE archive_files
-             SET sidecar_culling_json = ?1, sidecar_mtime = ?2
+             SET sidecar_culling_json = ?1, sidecar_mtime = COALESCE(?2, sidecar_mtime)
              WHERE canonical_path = ?3",
             (&sidecar_json, sidecar_mtime, &norm_path),
         )?;

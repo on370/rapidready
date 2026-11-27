@@ -2,6 +2,7 @@ import React, { useRef, useEffect } from 'react';
 import { Check, Star, Film } from 'lucide-react';
 import { LibraryImage } from '../../../../stores/libraryStore';
 import { useLibraryUIStore } from '../../../../stores/libraryUIStore';
+import { useSettingsStore } from '../../../../stores/settingsStore';
 import { getRrImageUrl, isRawFilename, isVideoFilename } from '../../../../utils/image';
 import { getColorConfig } from '../../../../constants/culling';
 import { loadedThumbnailCache } from '../utils/thumbnailCache';
@@ -45,6 +46,8 @@ export const GridThumbnailItem = React.memo(function GridThumbnailItem({
   const isRaw = !isVideo && (img.is_raw ?? isRawFilename(img.name));
   const isStacked = Boolean(img.stackMembers && img.stackMembers.length > 1);
 
+  // Subscribe so toggling developer previews immediately refreshes visible thumbnails
+  useSettingsStore((s) => s.useDeveloperPreviews);
   const gridThumbnailSize = useLibraryUIStore((s) => s.gridThumbnailSize);
   const effectiveWidth = gridThumbnailSize || 240;
   // Dynamic maximum width for the pill:

@@ -5,6 +5,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { LibraryImage, useLibraryStore } from '../../../../stores/libraryStore';
 import { useLibraryUIStore } from '../../../../stores/libraryUIStore';
+import { useSettingsStore } from '../../../../stores/settingsStore';
 import { ZoomableImage } from '../ZoomableImage';
 import { FilmstripBar } from './FilmstripBar';
 import { getRrImageUrl, isRawFilename, isVideoFilename } from '../../../../utils/image';
@@ -31,6 +32,7 @@ export const LoupeViewer = React.memo(function LoupeViewer({
   onContextMenu,
 }: LoupeViewerProps) {
   const { t } = useTranslation('library');
+  useSettingsStore((s) => s.useDeveloperPreviews);
   const showFilmstrip = useLibraryUIStore((s) => s.showFilmstrip);
   const setShowFilmstrip = useLibraryUIStore((s) => s.setShowFilmstrip);
   const loupeScale = useLibraryUIStore((s) => s.loupeScale);

@@ -123,6 +123,8 @@
     "rawDevCustomAppPath": "Selected application:",
     "rawDevNoCustomApp": "No application selected",
     "rawDevBrowseApp": "Select App…",
+    "useDeveloperPreviewsTitle": "Use previews from RapidRAW, darktable, Lightroom (.dng only)",
+    "useDeveloperPreviewsDesc": "Displays rendered previews from RapidRAW and darktable local caches, and extracts full rendered previews embedded in Lightroom .dng files. Falls back to fast embedded RAW previews for unedited photos.",
     "rawDevOpenAfterImportTitle": "Automatically open in {{app}} after import",
     "rawDevOpenAfterImportDesc": "Directly launches {{app}} with newly imported photos after copying completes.",
     "modeRrdataDesc": "Standard. Writes native ultra-fast .rrdata JSON sidecars. Automatically falls back to reading .xmp if only XMP exists.",

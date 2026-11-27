@@ -52,6 +52,12 @@ pub fn set_xmp_naming_mode_cmd(mode: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn set_use_developer_previews_cmd(enabled: bool) -> Result<(), String> {
+    rapidready_core::thumbnail::set_use_developer_previews(enabled);
+    Ok(())
+}
+
+#[tauri::command]
 pub fn get_culling_state(path: String) -> rapidready_core::culling::CullingState {
     let p = PathBuf::from(path);
     rapidready_core::culling::read_sidecar(&p)
