@@ -1,8 +1,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { invoke } from '@tauri-apps/api/core';
-import { normalizePath } from '../utils/image';
+import { normalizePath, setDeveloperPreviewsUrlFlag } from '../utils/image';
 import { useLibraryStore } from './libraryStore';
+import { loadedThumbnailCache } from '../components/views/library/utils/thumbnailCache';
 
 export type RawDeveloperId = 'rapidraw' | 'darktable' | 'lightroom' | 'system' | 'custom';
 
@@ -82,6 +83,7 @@ interface SettingsState {
   xmpNaming: 'standard' | 'darktable';
   rawDeveloper: RawDeveloperId;
   customRawDeveloperPath: string | null;
+  useDeveloperPreviews: boolean;
   defaultArtist: string;
   defaultCopyright: string;
   defaultUsageTerms: string;
@@ -97,6 +99,7 @@ interface SettingsState {
   setXmpNaming: (mode: 'standard' | 'darktable') => void;
   setRawDeveloper: (dev: RawDeveloperId) => void;
   setCustomRawDeveloperPath: (path: string | null) => void;
+  setUseDeveloperPreviews: (enabled: boolean) => void;
   setAutoDetect: (val: boolean) => void;
   setDismissDefaultPicturesWarning: (val: boolean) => void;
   setVerifyCopy: (val: boolean) => void;
@@ -144,6 +147,7 @@ export const useSettingsStore = create<SettingsState>()(
       xmpNaming: 'standard',
       rawDeveloper: 'rapidraw',
       customRawDeveloperPath: null,
+      useDeveloperPreviews: true,
       defaultArtist: '',
       defaultCopyright: '',
       defaultUsageTerms: '',
@@ -181,6 +185,12 @@ export const useSettingsStore = create<SettingsState>()(
       },
       setRawDeveloper: (rawDeveloper) => set({ rawDeveloper }),
       setCustomRawDeveloperPath: (customRawDeveloperPath) => set({ customRawDeveloperPath }),
+      setUseDeveloperPreviews: (useDeveloperPreviews) => {
+        setDeveloperPreviewsUrlFlag(useDeveloperPreviews);
+        loadedThumbnailCache.clear();
+        set({ useDeveloperPreviews });
+        invoke('set_use_developer_previews_cmd', { enabled: useDeveloperPreviews }).catch(console.error);
+      },
       setDefaultArtist: (defaultArtist) => set({ defaultArtist }),
       setDefaultCopyright: (defaultCopyright) => set({ defaultCopyright }),
       setDefaultUsageTerms: (defaultUsageTerms) => set({ defaultUsageTerms }),
@@ -264,3 +274,6 @@ export const useSettingsStore = create<SettingsState>()(
     }
   )
 );
+
+// Sync the URL flag with the (synchronously rehydrated) persisted setting before the first render.
+setDeveloperPreviewsUrlFlag(useSettingsStore.getState().useDeveloperPreviews ?? true);

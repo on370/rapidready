@@ -33,8 +33,9 @@ function App() {
   useEffect(() => {
     setActiveView(startupView);
     useCollectionsStore.getState().selectCollection(null);
-    const sidecarMode = useSettingsStore.getState().sidecarMode;
+    const { sidecarMode, useDeveloperPreviews } = useSettingsStore.getState();
     invoke("set_sidecar_mode_cmd", { mode: sidecarMode || "rrdata" }).catch(console.error);
+    invoke("set_use_developer_previews_cmd", { enabled: useDeveloperPreviews ?? true }).catch(console.error);
     invoke("show_main_window").catch(() => {});
   }, []);
 
@@ -122,7 +123,7 @@ function App() {
 
   // Real-time synchronization for RapidRAW / external sidecar and file changes
   useEffect(() => {
-    const unlistenPromise = listen<{ path: string; culling: CullingState }>(
+    const unlistenPromise = listen<{ path: string; culling: CullingState; sidecar_mtime?: number | null }>(
       "sidecar-updated",
       (event) => {
         useLibraryStore.getState().updateImageCullingByPath(event.payload.path, event.payload.culling);

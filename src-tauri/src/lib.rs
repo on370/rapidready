@@ -278,6 +278,16 @@ pub fn run() {
                     if is_fullres {
                         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
                         
+                        // Check external developer previews first (even for edited JPEGs/PNGs in RapidRAW or darktable!)
+                        if let Some(dev_bytes) = rapidready_core::thumbnail::try_get_developer_preview(path, 100, orient_param) {
+                            return Response::builder()
+                                .header("Content-Type", "image/jpeg")
+                                .header("Access-Control-Allow-Origin", "*")
+                                .header("Cache-Control", "public, max-age=86400, immutable")
+                                .body(dev_bytes)
+                                .unwrap();
+                        }
+
                         // Video extensions must stay in sync with archive.rs VIDEO list; otherwise the generic else-branch would read the whole video file.
                         if ["cr2", "cr3", "arw", "nef", "dng", "orf", "raf", "rw2", "pef", "3fr", "x3f", "nrw", "heic", "heif", "hif", "mp4", "mov", "m4v", "avi", "mkv", "mts", "m2ts", "wmv", "webm", "flv"].contains(&ext.as_str()) {
                             match rapidready_core::thumbnail::get_max_preview_jpeg_with_orient_and_hints(path, orient_param, size_param, mtime_param) {
@@ -423,6 +433,7 @@ pub fn run() {
             commands::clear_disk_cache,
             commands::set_sidecar_mode_cmd,
             commands::set_xmp_naming_mode_cmd,
+            commands::set_use_developer_previews_cmd,
             commands::sync_archive_sidecars,
             commands::pause_sidecar_sync,
             commands::resume_sidecar_sync,

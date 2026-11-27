@@ -133,15 +133,29 @@ pub fn start_watching_dir_internal(
                         if !img_path.exists() {
                             continue;
                         }
+                        let sc_mtime = std::fs::metadata(&p)
+                            .ok()
+                            .and_then(|m| m.modified().ok())
+                            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                            .map(|d| d.as_secs() as i64);
                         let culling = rapidready_core::culling::read_sidecar(&img_path);
+                        if let Ok(catalog) = get_archive_catalog(&app_handle) {
+                            let _ = catalog.update_culling(&img_path_str, &culling, sc_mtime);
+                        }
                         let _ = app_handle.emit("sidecar-updated", serde_json::json!({
                             "path": img_path_str,
-                            "culling": culling
+                            "culling": culling,
+                            "sidecar_mtime": sc_mtime
                         }));
                     } else if path_str.to_lowercase().ends_with(".xmp") {
                         if !p.exists() {
                             continue;
                         }
+                        let sc_mtime = std::fs::metadata(&p)
+                            .ok()
+                            .and_then(|m| m.modified().ok())
+                            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                            .map(|d| d.as_secs() as i64);
                         let without_xmp = &path_str[..path_str.len() - 4];
                         let candidate = PathBuf::from(without_xmp);
                         let mut target_paths = Vec::new();
@@ -164,10 +178,15 @@ pub fn start_watching_dir_internal(
                             if !img_path.exists() {
                                 continue;
                             }
+                            let img_path_str = img_path.to_string_lossy().to_string();
                             let culling = rapidready_core::culling::read_sidecar(&img_path);
+                            if let Ok(catalog) = get_archive_catalog(&app_handle) {
+                                let _ = catalog.update_culling(&img_path_str, &culling, sc_mtime);
+                            }
                             let _ = app_handle.emit("sidecar-updated", serde_json::json!({
-                                "path": img_path.to_string_lossy(),
-                                "culling": culling
+                                "path": img_path_str,
+                                "culling": culling,
+                                "sidecar_mtime": sc_mtime
                             }));
                         }
                     } else if p.is_dir() {

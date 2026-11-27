@@ -1,5 +1,12 @@
 import { convertFileSrc } from '@tauri-apps/api/core';
 
+// Mirrors settingsStore.useDeveloperPreviews. Kept as a plain module variable (set by the store)
+// to avoid a circular import between utils/image.ts and stores/settingsStore.ts.
+let developerPreviewsEnabled = true;
+export function setDeveloperPreviewsUrlFlag(enabled: boolean): void {
+  developerPreviewsEnabled = enabled;
+}
+
 /**
  * Normalizes a file path into a valid Tauri protocol URL across macOS and Windows.
  * On Windows WebView2, Tauri maps custom protocols to http://<protocol>.localhost/<path>.
@@ -21,6 +28,7 @@ export function getRrImageUrl(
   if (scale !== undefined) params.push(`scale=${scale}`);
   if (size !== undefined && size !== null) params.push(`size=${size}`);
   if (mtime !== undefined && mtime !== null) params.push(`mtime=${mtime}`);
+  if (!developerPreviewsEnabled) params.push('devprev=0');
   const queryString = params.length > 0 ? `?${params.join('&')}` : '';
 
   try {

@@ -14,6 +14,7 @@ pub mod header_parser;
 pub mod jpeg_extract;
 pub mod imageio_ffi;
 pub mod worker;
+pub mod developer_previews;
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 pub mod external_decoder;
 #[cfg(test)]
@@ -23,6 +24,7 @@ pub use header_parser::*;
 pub use jpeg_extract::*;
 pub use imageio_ffi::*;
 pub use worker::*;
+pub use developer_previews::*;
 
 #[cfg(target_os = "macos")]
 use imageio_ffi::imageio;
@@ -220,18 +222,43 @@ pub fn get_preview_jpeg_with_orient(
     get_preview_jpeg_with_orient_and_hints(path, scale, target_orient, None, None)
 }
 
+fn apply_developer_mtime_offset(path: &Path, base_mtime: i64, sidecar_mtime: Option<i64>) -> i64 {
+    if !get_use_developer_previews() {
+        return base_mtime;
+    }
+    if let Some(sc_mt) = sidecar_mtime {
+        if sc_mt > 0 {
+            return base_mtime.wrapping_add(sc_mt.wrapping_mul(31));
+        }
+    }
+    let is_dng = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.eq_ignore_ascii_case("dng"))
+        .unwrap_or(false);
+    if is_dng {
+        base_mtime.wrapping_add(0x444E47)
+    } else {
+        base_mtime
+    }
+}
+
 fn resolve_fast_metadata(
     path: &Path,
     target_orient: Option<u32>,
     hint_size: Option<u64>,
     hint_mtime: Option<i64>,
 ) -> Option<(u64, i64, u32)> {
-    if let (Some(sz), Some(mt)) = (hint_size, hint_mtime) {
-        let orient = target_orient.unwrap_or(1);
-        Some((sz, mt, orient))
-    } else if let Some((cat_sz, cat_mt, cat_orient)) = crate::archive_catalog::get_catalog_metadata_hint(path) {
+    if let Some((cat_sz, cat_mt, cat_orient, cat_sc_mt)) = crate::archive_catalog::get_catalog_metadata_hint(path) {
+        let sz = hint_size.unwrap_or(cat_sz);
+        let base_mt = hint_mtime.unwrap_or(cat_mt);
+        let eff_mt = apply_developer_mtime_offset(path, base_mt, cat_sc_mt);
         let orient = target_orient.or(cat_orient).unwrap_or(1);
-        Some((cat_sz, cat_mt, orient))
+        Some((sz, eff_mt, orient))
+    } else if let (Some(sz), Some(mt)) = (hint_size, hint_mtime) {
+        let eff_mt = resolve_effective_mtime_for_cache(path, mt);
+        let orient = target_orient.unwrap_or(1);
+        Some((sz, eff_mt, orient))
     } else {
         None
     }
@@ -409,7 +436,7 @@ pub fn get_preview_jpeg_with_orient_and_hints(
     } else {
         let resolved_orient = target_orient.or_else(|| get_effective_orientation(path)).unwrap_or(1);
         let meta_res = std::fs::metadata(path);
-        let (sz, mt) = match &meta_res {
+        let (sz, raw_mt) = match &meta_res {
             Ok(m) => {
                 let sec = m.modified()
                     .ok()
@@ -420,6 +447,7 @@ pub fn get_preview_jpeg_with_orient_and_hints(
             }
             Err(_) => (0, 0),
         };
+        let mt = resolve_effective_mtime_for_cache(path, raw_mt);
         let c_key = make_l1_cache_key(path, scale, resolved_orient, mt);
         if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
             if let Some(cached) = cache.get(&c_key) {
@@ -459,6 +487,12 @@ pub fn get_preview_jpeg_with_orient_and_hints(
         }
         (sz, mt, resolved_orient, key, c_key)
     };
+
+    // Fast-path 0: External RAW Developer Previews (RapidRAW, darktable, Lightroom .dng)
+    if let Some(dev_bytes) = try_get_developer_preview(path, scale, target_orient) {
+        record_thumbnail_cache(&cache_key, blake3_key.as_deref(), scale, &dev_bytes);
+        return Ok(dev_bytes);
+    }
 
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
     let is_jpeg = ext == "jpg" || ext == "jpeg";
@@ -748,15 +782,7 @@ pub fn get_max_preview_jpeg_with_orient_and_hints(
     hint_mtime: Option<i64>,
 ) -> Result<Vec<u8>> {
     // Fast path: Try resolving size, mtime, and orientation via hints or local catalog without touching NAS!
-    let fast_metadata = if let (Some(sz), Some(mt)) = (hint_size, hint_mtime) {
-        let orient = explicit_orient.unwrap_or(1);
-        Some((sz, mt, orient))
-    } else if let Some((cat_sz, cat_mt, cat_orient)) = crate::archive_catalog::get_catalog_metadata_hint(path) {
-        let orient = explicit_orient.or(cat_orient).unwrap_or(1);
-        Some((cat_sz, cat_mt, orient))
-    } else {
-        None
-    };
+    let fast_metadata = resolve_fast_metadata(path, explicit_orient, hint_size, hint_mtime);
 
     if let Some((fast_sz, fast_mt, fast_orient)) = fast_metadata {
         let fast_cache_key = make_l1_cache_key(path, 100, fast_orient, fast_mt);
@@ -790,7 +816,7 @@ pub fn get_max_preview_jpeg_with_orient_and_hints(
     } else {
         let target_orient = explicit_orient.or_else(|| get_effective_orientation(path)).unwrap_or(1);
         let meta_res = std::fs::metadata(path);
-        let (sz, mt) = match &meta_res {
+        let (sz, raw_mt) = match &meta_res {
             Ok(m) => {
                 let sec = m.modified()
                     .ok()
@@ -801,6 +827,7 @@ pub fn get_max_preview_jpeg_with_orient_and_hints(
             }
             Err(_) => (0, 0),
         };
+        let mt = resolve_effective_mtime_for_cache(path, raw_mt);
         let c_key = make_l1_cache_key(path, 100, target_orient, mt);
         if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
             if let Some(cached) = cache.get(&c_key) {
@@ -824,6 +851,12 @@ pub fn get_max_preview_jpeg_with_orient_and_hints(
         }
         (sz, mt, target_orient, key, c_key)
     };
+
+    // Check External RAW Developer Previews first (RapidRAW, darktable, Lightroom .dng)
+    if let Some(dev_bytes) = try_get_developer_preview(path, 100, explicit_orient) {
+        record_thumbnail_cache(&cache_key, blake3_key.as_deref(), 100, &dev_bytes);
+        return Ok(dev_bytes);
+    }
 
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
     if ext == "jpg" || ext == "jpeg" {
@@ -952,15 +985,7 @@ pub fn is_thumbnail_cached_with_hints(
     hint_mtime: Option<i64>,
 ) -> bool {
     let eff_scale = if scale >= 100 { 100 } else { scale };
-    let fast_metadata = if let (Some(sz), Some(mt)) = (hint_size, hint_mtime) {
-        let orient = target_orient.unwrap_or(1);
-        Some((sz, mt, orient))
-    } else if let Some((cat_sz, cat_mt, cat_orient)) = crate::archive_catalog::get_catalog_metadata_hint(path) {
-        let orient = target_orient.or(cat_orient).unwrap_or(1);
-        Some((cat_sz, cat_mt, orient))
-    } else {
-        None
-    };
+    let fast_metadata = resolve_fast_metadata(path, target_orient, hint_size, hint_mtime);
 
     if let Some((fast_sz, fast_mt, fast_orient)) = fast_metadata {
         let fast_cache_key = make_l1_cache_key(path, eff_scale, fast_orient, fast_mt);
@@ -999,13 +1024,14 @@ pub fn is_thumbnail_cached_with_hints(
 
     let resolved_orient = target_orient.or_else(|| get_effective_orientation(path));
     let meta_res = std::fs::metadata(path);
-    let mtime_sec = meta_res
+    let raw_mtime_sec = meta_res
         .as_ref()
         .ok()
         .and_then(|m| m.modified().ok())
         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0);
+    let mtime_sec = resolve_effective_mtime_for_cache(path, raw_mtime_sec);
     let cache_key = make_l1_cache_key(path, eff_scale, resolved_orient.unwrap_or(1), mtime_sec);
     if let Ok(cache) = THUMBNAIL_CACHE.lock() {
         if cache.contains(&cache_key) {
@@ -1051,15 +1077,7 @@ pub fn is_thumbnail_ram_cached(
     hint_mtime: Option<i64>,
 ) -> bool {
     let eff_scale = if scale >= 100 { 100 } else { scale };
-    let fast_metadata = if let (Some(sz), Some(mt)) = (hint_size, hint_mtime) {
-        let orient = target_orient.unwrap_or(1);
-        Some((sz, mt, orient))
-    } else if let Some((cat_sz, cat_mt, cat_orient)) = crate::archive_catalog::get_catalog_metadata_hint(path) {
-        let orient = target_orient.or(cat_orient).unwrap_or(1);
-        Some((cat_sz, cat_mt, orient))
-    } else {
-        None
-    };
+    let fast_metadata = resolve_fast_metadata(path, target_orient, hint_size, hint_mtime);
 
     if let Some((_, fast_mt, fast_orient)) = fast_metadata {
         let fast_cache_key = make_l1_cache_key(path, eff_scale, fast_orient, fast_mt);
