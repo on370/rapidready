@@ -18,6 +18,7 @@ import {
 import { useSettingsStore } from "../../../stores/settingsStore";
 import { useLibraryStore } from "../../../stores/libraryStore";
 import { useToastStore } from "../../../stores/toastStore";
+import { isLinux } from "../../../utils/platform";
 
 interface SidecarSyncProgress {
   processed: number;
@@ -179,7 +180,7 @@ export function SidecarSettingsCard() {
           </div>
 
           {/* Pills / Buttons */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 pt-0.5">
+          <div className={`grid grid-cols-2 ${isLinux ? 'sm:grid-cols-4' : 'sm:grid-cols-5'} gap-1.5 pt-0.5`}>
             {[
               {
                 id: 'rapidraw' as const,
@@ -206,17 +207,22 @@ export function SidecarSettingsCard() {
                 id: 'system' as const,
                 label: isEn ? 'System' : 'System',
                 title: isEn
-                  ? 'System Default: Opens the RAW file with the default application registered for this file type in macOS (Finder) or Windows (Explorer).'
-                  : 'System-Standard: Öffnet die RAW-Datei mit dem Programm, das in macOS (Finder) bzw. Windows (Explorer) als Standard-App für diesen Dateityp hinterlegt ist.',
+                  ? (isLinux
+                    ? 'System Default: Opens the RAW file with the default application registered for this file type in your desktop (xdg-open).'
+                    : 'System Default: Opens the RAW file with the default application registered for this file type in macOS (Finder) or Windows (Explorer).')
+                  : (isLinux
+                    ? 'System-Standard: Öffnet die RAW-Datei mit dem Programm, das in Deiner Desktop-Umgebung als Standard-App für diesen Dateityp hinterlegt ist (xdg-open).'
+                    : 'System-Standard: Öffnet die RAW-Datei mit dem Programm, das in macOS (Finder) bzw. Windows (Explorer) als Standard-App für diesen Dateityp hinterlegt ist.'),
               },
               {
                 id: 'custom' as const,
                 label: isEn ? 'Custom…' : 'Eigene App…',
                 title: isEn
-                  ? 'Choose a custom application (.app / .exe)'
-                  : 'Eigene Anwendung (.app / .exe) frei auswählen',
+                  ? (isLinux ? 'Choose a custom application (executable)' : 'Choose a custom application (.app / .exe)')
+                  : (isLinux ? 'Eigene Anwendung (ausführbare Datei) frei auswählen' : 'Eigene Anwendung (.app / .exe) frei auswählen'),
               },
-            ].map(dev => (
+            // Lightroom Classic does not exist for Linux; the backend would only fall back to xdg-open there.
+            ].filter(dev => !(isLinux && dev.id === 'lightroom')).map(dev => (
               <button
                 key={dev.id}
                 type="button"
@@ -252,8 +258,12 @@ export function SidecarSettingsCard() {
             )}
             {rawDeveloper === 'system' && (
               isEn
-                ? 'System Default: Hands the file to the OS and launches the default app registered for this RAW type in Finder / Explorer.'
-                : 'System-Standard: Übergibt die Datei an das Betriebssystem und startet die im Finder / Explorer für diesen RAW-Typ hinterlegte Standard-App.'
+                ? (isLinux
+                  ? 'System Default: Hands the file to the desktop (xdg-open) and launches the default app registered for this RAW type.'
+                  : 'System Default: Hands the file to the OS and launches the default app registered for this RAW type in Finder / Explorer.')
+                : (isLinux
+                  ? 'System-Standard: Übergibt die Datei an die Desktop-Umgebung (xdg-open) und startet die für diesen RAW-Typ hinterlegte Standard-App.'
+                  : 'System-Standard: Übergibt die Datei an das Betriebssystem und startet die im Finder / Explorer für diesen RAW-Typ hinterlegte Standard-App.')
             )}
             {rawDeveloper === 'custom' && (
               isEn

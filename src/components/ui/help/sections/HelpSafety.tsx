@@ -63,7 +63,7 @@ export function HelpSafety() {
 
         <FeatureCard
           icon={<FolderSearch className="w-4 h-4" />}
-          title={isEn ? 'Show in Explorer / Finder' : 'Im Explorer / Finder anzeigen'}
+          title={isEn ? 'Show in Explorer / Finder / File Manager' : 'Im Explorer / Finder / Dateimanager anzeigen'}
         >
           {isEn ? (
             <>

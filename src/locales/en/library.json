@@ -29,6 +29,8 @@
     "showInFinderTooltip": "Show in macOS Finder (⌘⇧F)",
     "showInExplorer": "Open in Explorer",
     "showInExplorerTooltip": "Show in File Explorer (Ctrl+Shift+F)",
+    "showInFileManager": "Open in File Manager",
+    "showInFileManagerTooltip": "Show in File Manager (Ctrl+Shift+F)",
     "openInRapidRaw": "Open in RapidRAW",
     "openInRapidRawTooltip": "Edit in RapidRAW (R)",
     "viewGrid": "Grid",
@@ -405,6 +407,7 @@
   "folderMenu": {
     "showInFinder": "Reveal in Finder",
     "showInExplorer": "Show in Explorer",
+    "showInFileManager": "Show in File Manager",
     "refreshFolder": "Refresh Folder",
     "selectAllImages": "Select All Images in Folder",
     "expandSubfolders": "Expand All Subfolders",

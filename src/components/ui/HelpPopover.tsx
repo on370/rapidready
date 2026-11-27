@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Info } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { isMac, modSymbol, shiftSymbol } from '../../utils/platform';
+import { modSymbol, shiftSymbol, revealLabel } from '../../utils/platform';
 import { useSettingsStore, getRawDeveloperDisplayName } from '../../stores/settingsStore';
 
 interface HelpPopoverProps {
@@ -159,7 +159,7 @@ export function HelpPopover({ viewMode }: HelpPopoverProps) {
                   </span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
-                  <span className="text-txt-secondary">{isMac ? t('shortcuts.actions.showInFinder') : t('shortcuts.actions.showInExplorer')}</span>
+                  <span className="text-txt-secondary">{revealLabel({ finder: t('shortcuts.actions.showInFinder'), explorer: t('shortcuts.actions.showInExplorer'), fileManager: t('shortcuts.actions.showInFileManager') })}</span>
                   <span className="font-mono bg-app-deepest border border-app-border px-1.5 py-0.5 rounded text-txt-primary">{modSymbol}{shiftSymbol}F</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">

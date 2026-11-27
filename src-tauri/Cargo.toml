@@ -35,6 +35,11 @@ tokio = { version = "1", features = ["sync", "time"] }
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
+# Same version Tauri/tao already link on Linux (no extra build cost); used to follow the
+# GDK fullscreen state for hiding the in-window menu bar.
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"
+
 
 [workspace]
 members = ["crates/rapidready-core"]

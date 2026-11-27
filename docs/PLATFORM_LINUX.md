@@ -25,6 +25,7 @@ sudo dnf install -y \
   libappindicator-gtk3-devel librsvg2-devel
 sudo dnf group install -y "c-development"
 ```
+For HEIC/HIF and video thumbnails on Fedora, the codec packages from RPM Fusion are needed at runtime (see [Thumbnails](#4-linux-behaviour--known-limitations), item 4).
 
 **Arch / Manjaro / CachyOS**
 ```bash
@@ -33,7 +34,7 @@ sudo pacman -S --needed \
   appmenu-gtk-module libappindicator-gtk3 librsvg
 ```
 
-Then install Node.js and Rust (either via your distribution, `rustup`, or `mise install` using the repository's `mise.toml`):
+Then install Node.js and Rust (either via your distribution, `rustup`, or `mise install` using the repository's `mise.toml`). Rust 1.85 or newer is required because `rapidready-core` uses the 2024 edition; on Fedora, `sudo dnf install nodejs npm rustup && rustup-init -y` gives you a current toolchain:
 ```bash
 node -v && npm -v
 rustc --version && cargo --version
@@ -95,9 +96,18 @@ For maximum compatibility of the AppImage across distributions, build it on the 
    - **HEIC/HEIF/HIF/AVIF:** `heif-dec` (or `heif-convert` on libheif < 1.17), falling back to `ffmpeg`. `--auto-correct` is used when supported to fix washed-out Sony HIF colours.
    - **Video (MP4, MOV, MTS, MKV, ...):** `ffmpeg`, frame at 1 s (first frame for shorter clips).
 
-   Install them with your package manager, e.g. `sudo apt install libheif-examples ffmpeg`, `sudo dnf install libheif-tools ffmpeg-free`, or `sudo pacman -S libheif ffmpeg`. Without them these files simply show the placeholder tile. Decoding runs with a hard timeout (10 s stills / 15 s video), at most 2 processes in parallel, and failed files are not retried until they change. Results are stored in the normal thumbnail cache, so each file is decoded once.
+   Install them with your package manager, e.g. `sudo apt install libheif-examples ffmpeg` or `sudo pacman -S libheif ffmpeg`. Without them these files simply show the placeholder tile.
+
+   **Fedora:** Fedora's own `libheif` and `ffmpeg-free` packages cannot decode HEVC (H.265) for patent reasons, and `ffmpeg-free` has no native H.264 decoder either. Since iPhone HEIC, Sony/Canon/Fujifilm HIF and most camera videos are HEVC or H.264, installing only `libheif-tools ffmpeg-free` leaves those files as placeholder tiles. Enable [RPM Fusion](https://rpmfusion.org/Configuration) (free) and install the full codec builds:
+   ```bash
+   sudo dnf install https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm
+   sudo dnf swap ffmpeg-free ffmpeg --allowerasing
+   sudo dnf install libheif-tools libheif-freeworld
+   ```
+   Check with `ffmpeg -hide_banner -decoders | grep -E 'hevc|h264'` (both must be listed) and `heif-dec --list-decoders` (an HEVC decoder must be listed). Restart RapidReady afterwards: the installed tools are detected once per app start, and files that failed are only remembered in memory, so they are decoded again after the restart. Decoding runs with a hard timeout (10 s stills / 15 s video), at most 2 processes in parallel, and failed files are not retried until they change. Results are stored in the normal thumbnail cache, so each file is decoded once.
 
    Downscaling large embedded previews uses the `image` crate (~150 ms per 24 MP preview, same as Windows; see ROADMAP).
 5. **WebKitGTK rendering:** On some NVIDIA / Wayland setups the window can stay blank. Start with
    `WEBKIT_DISABLE_DMABUF_RENDERER=1` (or `WEBKIT_DISABLE_COMPOSITING_MODE=1`) as a workaround.
-6. **App data location:** `~/.local/share/io.github.on370.rapidready/` (catalog, collections) and `~/.cache/io.github.on370.rapidready/` (thumbnail chunk cache), following `$XDG_DATA_HOME` / `$XDG_CACHE_HOME`.
+6. **Network share (NAS) detection:** Remote mounts are recognised from `/proc/self/mountinfo` (see [`metadata_resolver/linux_mounts.rs`](../src-tauri/crates/rapidready-core/src/metadata_resolver/linux_mounts.rs)): kernel network filesystems (`cifs`/SMB2/3, `nfs`/`nfs4`, `ceph`, ...) and FUSE network mounts such as GNOME's gvfs (`/run/user/<uid>/gvfs/...`), KDE's kio-fuse, `sshfs` and `rclone`. Local FUSE filesystems (e.g. ntfs-3g external drives) stay local. Symlinks into a share are resolved first. Remote paths get the permanent-deletion warning (a share has no usable desktop trash), fewer parallel thumbnail workers and header-only date discovery. If `/proc` is unavailable, `statfs` magic numbers are used as a fallback. To see how a path is classified, run `findmnt -T /path/to/folder`.
+7. **App data location:** `~/.local/share/io.github.on370.rapidready/` (catalog, collections) and `~/.cache/io.github.on370.rapidready/` (thumbnail chunk cache), following `$XDG_DATA_HOME` / `$XDG_CACHE_HOME`.

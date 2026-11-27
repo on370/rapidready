@@ -50,6 +50,7 @@
       "openRapidRaw": "Edit in RapidRAW",
       "showInFinder": "Show in Finder",
       "showInExplorer": "Show in Explorer",
+      "showInFileManager": "Show in File Manager",
       "settings": "Open Settings",
       "help": "Show this Help",
       "quit": "Quit Application"

@@ -29,3 +29,12 @@ Thumbs.db:encryptable
 ehthumbs.db
 Desktop.ini
 /dev.bat
+
+# Compiled ad-hoc test binaries (built from the test_*.rs / test_*.swift sources)
+/test_extract
+/src-tauri/test_thumb
+/src-tauri/test_thumb_scales
+/src-tauri/test_icon_alpha
+/src-tauri/test_cgimage
+/src-tauri/test_jpg
+/src-tauri/test_rawler

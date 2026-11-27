@@ -36,13 +36,9 @@ mod tests {
     #[test]
     fn test_is_system_critical_path() {
         assert!(is_system_critical_path(Path::new("/")));
-        assert!(is_system_critical_path(Path::new("/Users")));
-        assert!(is_system_critical_path(Path::new("/System")));
-        assert!(is_system_critical_path(Path::new("/Applications")));
         assert!(is_system_critical_path(Path::new("/bin")));
         assert!(is_system_critical_path(Path::new("/usr/bin")));
         assert!(is_system_critical_path(Path::new("C:\\")));
-        assert!(is_system_critical_path(Path::new("C:\\Windows")));
         assert!(is_system_critical_path(Path::new("c:/windows/system32")));
         assert!(is_system_critical_path(Path::new("D:")));
         assert!(is_system_critical_path(Path::new("")));
@@ -51,6 +47,44 @@ mod tests {
         assert!(!is_system_critical_path(Path::new("/Volumes/Storage/Photos/2024/09_Iceland")));
         assert!(!is_system_critical_path(Path::new("/Users/john/Pictures/Archive/2025")));
         assert!(!is_system_critical_path(Path::new("D:\\Photos\\ClientShoots\\2025-01-10")));
+    }
+
+    /// macOS and Windows compare paths case-insensitively, so mixed-case spellings must match too.
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[test]
+    fn test_is_system_critical_path_case_insensitive() {
+        assert!(is_system_critical_path(Path::new("/Users")));
+        assert!(is_system_critical_path(Path::new("/System")));
+        assert!(is_system_critical_path(Path::new("/Applications")));
+        assert!(is_system_critical_path(Path::new("C:\\Windows")));
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    #[test]
+    fn test_is_system_critical_path_linux() {
+        for p in ["/home", "/var/home", "/opt", "/boot", "/mnt", "/media", "/run/media", "/usr/share"] {
+            assert!(is_system_critical_path(Path::new(p)), "{} must be critical", p);
+        }
+        // Per-user removable media roots hold every mounted card / drive
+        assert!(is_system_critical_path(Path::new("/run/media/alice")));
+        assert!(is_system_critical_path(Path::new("/media/alice/")));
+
+        // Linux paths are case-sensitive: "/Home" is an ordinary folder name
+        assert!(!is_system_critical_path(Path::new("/Home/alice/Photos")));
+        // Folders on a card / drive and below mount roots stay deletable
+        assert!(!is_system_critical_path(Path::new("/run/media/alice/EOS_DIGITAL/DCIM/100CANON")));
+        assert!(!is_system_critical_path(Path::new("/mnt/nas/Photos/2024")));
+        assert!(!is_system_critical_path(Path::new("/var/home/alice/Pictures/2025")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_home_directory_is_critical() {
+        if let Some(home) = std::env::var_os("HOME").filter(|h| !h.is_empty()) {
+            let home = Path::new(&home);
+            assert!(is_system_critical_path(home));
+            assert!(!is_system_critical_path(&home.join("Pictures").join("Archive")));
+        }
     }
 
     #[test]

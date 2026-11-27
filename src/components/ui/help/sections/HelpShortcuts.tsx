@@ -71,7 +71,7 @@ export function HelpShortcuts() {
           title: 'System & Workflow Integration',
           items: [
             { desc: `Edit in ${devName}`, keys: isDarktable ? ['Shift', 'R'] : ['R'] },
-            { desc: 'Show in Explorer / Finder', keys: ['Cmd', 'Shift', 'F'] },
+            { desc: 'Show in Explorer / Finder / File Manager', keys: ['Cmd', 'Shift', 'F'] },
             { desc: 'Open Settings', keys: ['Cmd', ','] },
             { desc: 'Show Help & Manual', keys: ['F1', '|', 'Cmd', '/'] },
             { desc: 'Quit RapidReady', keys: ['Cmd', 'Q'] },
@@ -128,7 +128,7 @@ export function HelpShortcuts() {
           title: 'System & Workflow-Integration',
           items: [
             { desc: `In ${devName} bearbeiten`, keys: isDarktable ? ['Shift', 'R'] : ['R'] },
-            { desc: 'Im Explorer / Finder anzeigen', keys: ['Cmd', 'Shift', 'F'] },
+            { desc: 'Im Explorer / Finder / Dateimanager anzeigen', keys: ['Cmd', 'Shift', 'F'] },
             { desc: 'Einstellungen öffnen', keys: ['Cmd', ','] },
             { desc: 'Hilfe & Handbuch anzeigen', keys: ['F1', '|', 'Cmd', '/'] },
             { desc: 'RapidReady beenden', keys: ['Cmd', 'Q'] },

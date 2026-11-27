@@ -55,6 +55,21 @@ pub fn is_system_critical_path(path: &Path) -> bool {
         "/dev",
         "/proc",
         "/sys",
+        // Linux
+        "/boot",
+        "/lib",
+        "/lib64",
+        "/opt",
+        "/srv",
+        "/run",
+        "/run/media",
+        "/media",
+        "/mnt",
+        "/usr/lib",
+        "/usr/share",
+        "/var/home", // Fedora Silverblue / Kinoite: /home -> /var/home
+        "/snap",
+        "/nix",
         "c:",
         "c:/windows",
         "c:/windows/system32",
@@ -72,6 +87,23 @@ pub fn is_system_critical_path(path: &Path) -> bool {
 
     if forbidden.contains(&lower.as_str()) {
         return true;
+    }
+
+    // The user's home directory itself must never be deleted (but its subfolders may be).
+    #[cfg(unix)]
+    if let Some(home) = std::env::var_os("HOME").filter(|h| !h.is_empty()) {
+        if trimmed == normalize_path_str(Path::new(&home)) {
+            return true;
+        }
+    }
+
+    // Linux per-user removable-media roots (/run/media/<user>, /media/<user>) hold the
+    // mount points of all SD cards and USB drives; deleting one would hit every card at once.
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    if let Some(parent) = Path::new(trimmed).parent().map(|p| normalize_path_str(p)) {
+        if parent == "/run/media" || parent == "/media" {
+            return true;
+        }
     }
 
     // Windows root drive check (e.g. "c:" or "c:/")
