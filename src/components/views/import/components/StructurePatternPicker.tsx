@@ -88,7 +88,8 @@ export const StructurePatternPicker = React.memo(function StructurePatternPicker
       p = p.replace(/{month}/g, (d.getMonth() + 1).toString().padStart(2, '0'));
       p = p.replace(/{day}/g, d.getDate().toString().padStart(2, '0'));
       p = p.replace(/{camera}/g, "EOS_R5");
-      p = p.replace(/{ext}/g, "RAW");
+      p = p.replace(/{type}/g, "RAW");
+      p = p.replace(/{ext}/g, "CR3");
       return p.replace(/\\/g, '/');
     });
 
@@ -166,7 +167,7 @@ export const StructurePatternPicker = React.memo(function StructurePatternPicker
               />
               <div className="flex flex-wrap items-center gap-1 text-[10px]">
                 <span className="text-txt-tertiary mr-1">{t('destination.tokensHint')}</span>
-                {['{year}', '{month}', '{day}', '{camera}', '{ext}'].map((tok) => (
+                {['{year}', '{month}', '{day}', '{camera}', '{type}', '{ext}'].map((tok) => (
                   <button
                     key={tok}
                     type="button"

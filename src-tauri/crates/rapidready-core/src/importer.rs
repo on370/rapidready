@@ -4,7 +4,7 @@ use tokio::fs;
 use serde::{Serialize, Deserialize};
 
 use crate::scanner::ScannedFile;
-use crate::path_builder::build_target_path;
+use crate::path_builder::build_target_path_for_file;
 use crate::import_index::ImportIndex;
 use chrono::DateTime;
 
@@ -41,10 +41,18 @@ where
         .as_deref()
         .and_then(crate::date_resolver::parse_flexible_datetime);
 
+    let needs_camera = template.contains("{camera}");
+
     for file in files {
         let date = override_dt.or(file.date).unwrap_or(DateTime::UNIX_EPOCH.naive_utc());
-        
-        let relative_dir = build_target_path(template, &date);
+
+        let src_path = Path::new(&file.path);
+        let camera = if needs_camera {
+            crate::metadata_resolver::get_image_metadata(src_path).camera
+        } else {
+            None
+        };
+        let relative_dir = build_target_path_for_file(template, &date, Some(src_path), camera.as_deref());
         // Strip leading slashes to prevent join from replacing the base path
         let relative_dir_clean = relative_dir.trim_start_matches('/');
         let target_dir = dest_base.join(relative_dir_clean);

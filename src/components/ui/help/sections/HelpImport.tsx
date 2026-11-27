@@ -94,6 +94,38 @@ export function HelpImport() {
           : 'Wenn Deine Kamera RAW und JPEG gleichzeitig aufnimmt, oder bereits XMP-Sidecar-Dateien existieren, behandelt RapidReady diese zusammengehörigen Dateien immer als logische Einheit. Beim Importieren und Kopieren geht keine Metadaten-Datei verloren.'}
       </TipBox>
 
+      <div className="bg-app-deepest border border-app-border rounded-xl p-4 flex flex-col gap-2.5">
+        <h3 className="text-xs font-bold text-txt-secondary uppercase tracking-wider">
+          {isEn ? 'Folder Pattern Tokens (Custom Pattern)' : 'Ordner-Muster-Tokens (Eigenes Muster)'}
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+          <div className="flex items-start gap-2">
+            <code className="px-1.5 py-0.5 rounded bg-app-card border border-app-border text-accent font-mono text-[11px] shrink-0">{'{year}'} {'{month}'} {'{day}'}</code>
+            <span className="text-txt-secondary">
+              {isEn ? 'Shooting date (e.g. 2026 / 07 / 14)' : 'Aufnahmedatum (z. B. 2026 / 07 / 14)'}
+            </span>
+          </div>
+          <div className="flex items-start gap-2">
+            <code className="px-1.5 py-0.5 rounded bg-app-card border border-app-border text-accent font-mono text-[11px] shrink-0">{'{camera}'}</code>
+            <span className="text-txt-secondary">
+              {isEn ? 'Camera model from EXIF (e.g. Canon_EOS_R8)' : 'Kameramodell aus EXIF (z. B. Canon_EOS_R8)'}
+            </span>
+          </div>
+          <div className="flex items-start gap-2">
+            <code className="px-1.5 py-0.5 rounded bg-app-card border border-app-border text-accent font-mono text-[11px] shrink-0">{'{type}'}</code>
+            <span className="text-txt-secondary">
+              {isEn ? 'Media group: RAW, JPG, VID, or extension' : 'Mediengruppe: RAW, JPG, VID, sonst Endung'}
+            </span>
+          </div>
+          <div className="flex items-start gap-2">
+            <code className="px-1.5 py-0.5 rounded bg-app-card border border-app-border text-accent font-mono text-[11px] shrink-0">{'{ext}'}</code>
+            <span className="text-txt-secondary">
+              {isEn ? 'Uppercase file extension (e.g. CR3, ARW, JPG, MP4)' : 'Dateiendung in Großbuchstaben (z. B. CR3, ARW, JPG, MP4)'}
+            </span>
+          </div>
+        </div>
+      </div>
+
       <InfoBox
         title={
           isEn
