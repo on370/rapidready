@@ -350,7 +350,7 @@ where
                         Some(item.size),
                         Some(item.mtime),
                     ) {
-                        if !chunk_cache.has_thumbnail(&key, scale) {
+                        if !get_use_developer_previews() && !chunk_cache.has_thumbnail(&key, scale) {
                             let _ = chunk_cache.write_thumbnail(&key, scale, &bytes);
                         }
                     }

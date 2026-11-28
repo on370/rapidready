@@ -291,24 +291,34 @@ fn downscale_grid_preview_if_large(
     }
 }
 
+fn resolve_fast_metadata_with_base(
+    path: &Path,
+    target_orient: Option<u32>,
+    hint_size: Option<u64>,
+    hint_mtime: Option<i64>,
+) -> Option<(u64, i64, i64, u32)> {
+    if let Some((cat_sz, cat_mt, cat_orient, cat_sc_mt)) = crate::archive_catalog::get_catalog_metadata_hint(path) {
+        let sz = hint_size.unwrap_or(cat_sz);
+        let eff_mt = apply_developer_mtime_offset(path, cat_mt, cat_sc_mt);
+        let orient = target_orient.or(cat_orient).unwrap_or(1);
+        Some((sz, cat_mt, eff_mt, orient))
+    } else if let (Some(sz), Some(mt)) = (hint_size, hint_mtime) {
+        let eff_mt = resolve_effective_mtime_for_cache(path, mt);
+        let orient = target_orient.unwrap_or(1);
+        Some((sz, mt, eff_mt, orient))
+    } else {
+        None
+    }
+}
+
 fn resolve_fast_metadata(
     path: &Path,
     target_orient: Option<u32>,
     hint_size: Option<u64>,
     hint_mtime: Option<i64>,
 ) -> Option<(u64, i64, u32)> {
-    if let Some((cat_sz, cat_mt, cat_orient, cat_sc_mt)) = crate::archive_catalog::get_catalog_metadata_hint(path) {
-        let sz = hint_size.unwrap_or(cat_sz);
-        let eff_mt = apply_developer_mtime_offset(path, cat_mt, cat_sc_mt);
-        let orient = target_orient.or(cat_orient).unwrap_or(1);
-        Some((sz, eff_mt, orient))
-    } else if let (Some(sz), Some(mt)) = (hint_size, hint_mtime) {
-        let eff_mt = resolve_effective_mtime_for_cache(path, mt);
-        let orient = target_orient.unwrap_or(1);
-        Some((sz, eff_mt, orient))
-    } else {
-        None
-    }
+    resolve_fast_metadata_with_base(path, target_orient, hint_size, hint_mtime)
+        .map(|(sz, _base_mt, eff_mt, orient)| (sz, eff_mt, orient))
 }
 
 #[inline]
@@ -467,7 +477,7 @@ pub fn get_preview_jpeg_with_orient_and_hints(
     hint_size: Option<u64>,
     hint_mtime: Option<i64>,
 ) -> Result<Vec<u8>> {
-    let fast_metadata = resolve_fast_metadata(path, target_orient, hint_size, hint_mtime);
+    let fast_metadata = resolve_fast_metadata_with_base(path, target_orient, hint_size, hint_mtime);
 
     // Fast path: Try resolving size, mtime, and orientation via hints or local catalog without touching NAS!
     if let Some(bytes) = get_cached_preview_jpeg_fast(path, scale, target_orient, hint_size, hint_mtime) {
@@ -476,10 +486,10 @@ pub fn get_preview_jpeg_with_orient_and_hints(
 
     // Slow fallback path: File was not yet cached in L2, or metadata was not known.
     // If metadata hints were provided, avoid touching the filesystem/NAS for metadata!
-    let (_file_size, _mtime_sec, _key_orient, blake3_key, cache_key) = if let Some((fast_sz, fast_mt, fast_orient)) = fast_metadata {
+    let (_file_size, _raw_mtime_sec, _mtime_sec, _key_orient, mut blake3_key, cache_key) = if let Some((fast_sz, fast_base_mt, fast_mt, fast_orient)) = fast_metadata {
         let key = crate::chunk_cache::compute_cache_key(path, fast_sz, fast_mt, scale, fast_orient);
         let c_key = make_l1_cache_key(path, scale, fast_orient, fast_mt);
-        (fast_sz, fast_mt, fast_orient, Some(key), c_key)
+        (fast_sz, fast_base_mt, fast_mt, fast_orient, Some(key), c_key)
     } else {
         let resolved_orient = target_orient.or_else(|| get_effective_orientation(path)).unwrap_or(1);
         let meta_res = std::fs::metadata(path);
@@ -532,7 +542,7 @@ pub fn get_preview_jpeg_with_orient_and_hints(
                 }
             }
         }
-        (sz, mt, resolved_orient, key, c_key)
+        (sz, raw_mt, mt, resolved_orient, key, c_key)
     };
 
     let target_px = match scale {
@@ -545,13 +555,32 @@ pub fn get_preview_jpeg_with_orient_and_hints(
     // Fast-path 0: External RAW Developer Previews (RapidRAW, darktable, Lightroom .dng)
     if let Some(dev_bytes) = try_get_developer_preview(path, scale, target_orient) {
         let final_bytes = downscale_grid_preview_if_large(path, dev_bytes, scale, target_px, target_orient);
-        let l2_key = if hint_mtime.map(|hm| hm == _mtime_sec).unwrap_or(false) {
+        let l2_key = if _mtime_sec == _raw_mtime_sec {
             None
         } else {
             blake3_key.as_deref()
         };
         record_thumbnail_cache(&cache_key, l2_key, scale, &final_bytes);
         return Ok(final_bytes);
+    }
+
+    // Developer preview missed (e.g. unedited sidecar or RapidRAW/darktable hasn't rendered this image yet):
+    // Never poison the developer-preview L2 slot (`_mtime_sec`) with an unedited camera fallback!
+    // Instead, reuse or populate the base (`_raw_mtime_sec`) L2 slot so newly generated developer previews
+    // are picked up automatically without requiring an archive cache rebuild.
+    if _mtime_sec != _raw_mtime_sec && _file_size > 0 {
+        let raw_key = crate::chunk_cache::compute_cache_key(path, _file_size, _raw_mtime_sec, scale, _key_orient);
+        if let Some(chunk_cache) = crate::chunk_cache::get_global_chunk_cache() {
+            if let Ok(Some(bytes)) = chunk_cache.read_thumbnail(&raw_key, scale) {
+                if !is_legacy_black_raw_chunk(path, &bytes) {
+                    if let Ok(mut cache) = THUMBNAIL_CACHE.lock() {
+                        cache.put(cache_key.clone(), bytes.clone());
+                    }
+                    return Ok(bytes);
+                }
+            }
+        }
+        blake3_key = Some(raw_key);
     }
 
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
